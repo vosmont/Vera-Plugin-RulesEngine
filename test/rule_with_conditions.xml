@@ -1,0 +1,72 @@
+<xml xmlns="http://www.w3.org/1999/xhtml">
+  <block type="rule" x="-8" y="-12">
+    <field name="isEnabled">TRUE</field>
+    <value name="name">
+      <block type="text">
+        <field name="TEXT">Rule_With_Condition</field>
+      </block>
+    </value>
+    <value name="conditions">
+      <block type="list_with_operator_condition">
+        <mutation items="2"></mutation>
+        <field name="operator">OR</field>
+        <value name="ADD0">
+          <block type="list_with_operator_condition">
+            <mutation items="2"></mutation>
+            <field name="operator">AND</field>
+            <value name="ADD0">
+              <block type="condition_value">
+                <mutation room_id="" device_name="Device1" device_id="1" service="urn:micasaverde-com:serviceId:SecuritySensor1" variable="Tripped"></mutation>
+                <field name="roomId"></field>
+                <field name="deviceId">1</field>
+                <field name="service">urn:micasaverde-com:serviceId:SecuritySensor1</field>
+                <field name="variable">Tripped</field>
+                <field name="operator">EQ</field>
+                <field name="value">1</field>
+              </block>
+            </value>
+            <value name="ADD1">
+              <block type="condition_value">
+                <mutation room_id="" device_name="Device1" device_id="1" service="urn:micasaverde-com:serviceId:SecuritySensor1" variable="Armed"></mutation>
+                <field name="roomId"></field>
+                <field name="deviceId">1</field>
+                <field name="service">urn:micasaverde-com:serviceId:SecuritySensor1</field>
+                <field name="variable">Armed</field>
+                <field name="operator">EQ</field>
+                <field name="value">1</field>
+              </block>
+            </value>
+          </block>
+        </value>
+        <value name="ADD1">
+          <block type="list_with_operator_condition">
+            <mutation items="2"></mutation>
+            <field name="operator">AND</field>
+            <value name="ADD0">
+              <block type="condition_value">
+                <mutation room_id="" device_name="Device2" device_id="2" service="urn:micasaverde-com:serviceId:SecuritySensor1" variable="Tripped"></mutation>
+                <field name="roomId"></field>
+                <field name="deviceId">2</field>
+                <field name="service">urn:micasaverde-com:serviceId:SecuritySensor1</field>
+                <field name="variable">Tripped</field>
+                <field name="operator">EQ</field>
+                <field name="value">1</field>
+              </block>
+            </value>
+            <value name="ADD1">
+              <block type="condition_value">
+                <mutation room_id="" device_name="Device2" device_id="2" service="urn:micasaverde-com:serviceId:SecuritySensor1" variable="Armed"></mutation>
+                <field name="roomId"></field>
+                <field name="deviceId">2</field>
+                <field name="service">urn:micasaverde-com:serviceId:SecuritySensor1</field>
+                <field name="variable">Armed</field>
+                <field name="operator">EQ</field>
+                <field name="value">1</field>
+              </block>
+            </value>
+          </block>
+        </value>
+      </block>
+    </value>
+  </block>
+</xml>

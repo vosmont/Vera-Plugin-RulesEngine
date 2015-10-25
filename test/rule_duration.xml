@@ -1,0 +1,130 @@
+<xml xmlns="http://www.w3.org/1999/xhtml">
+  <block type="rule" x="1" y="-5">
+    <field name="isEnabled">TRUE</field>
+    <value name="name">
+      <block type="text">
+        <field name="TEXT">Rule_Duration</field>
+      </block>
+    </value>
+    <value name="conditions">
+      <block type="list_with_operator_condition">
+        <mutation items="2"></mutation>
+        <field name="operator">OR</field>
+        <value name="ADD0">
+          <block type="condition_value">
+            <mutation room_id="" device_name="1" device_id="1" service="urn:upnp-org:serviceId:TemperatureSensor1" variable="CurrentTemperature"></mutation>
+            <field name="roomId"></field>
+            <field name="deviceId">1</field>
+            <field name="service">urn:upnp-org:serviceId:TemperatureSensor1</field>
+            <field name="variable">CurrentTemperature</field>
+            <field name="operator">LTE</field>
+            <field name="value">10</field>
+            <value name="params">
+              <block type="condition_param_level">
+                <field name="level">1</field>
+              </block>
+            </value>
+          </block>
+        </value>
+        <value name="ADD1">
+          <block type="condition_value">
+            <mutation room_id="" device_name="1" device_id="1" service="urn:upnp-org:serviceId:TemperatureSensor1" variable="CurrentTemperature"></mutation>
+            <field name="roomId"></field>
+            <field name="deviceId">1</field>
+            <field name="service">urn:upnp-org:serviceId:TemperatureSensor1</field>
+            <field name="variable">CurrentTemperature</field>
+            <field name="operator">GTE</field>
+            <field name="value">20</field>
+            <value name="params">
+              <block type="condition_param_level">
+                <field name="level">2</field>
+              </block>
+            </value>
+          </block>
+        </value>
+      </block>
+    </value>
+    <statement name="actions">
+      <block type="action_group">
+        <mutation recurrent_interval_input="false"></mutation>
+        <field name="event">start</field>
+        <statement name="do">
+          <block type="action_function">
+            <field name="functionContent">traceCall("Rule_Duration", "event_start")</field>
+          </block>
+        </statement>
+        <next>
+          <block type="action_group">
+            <mutation recurrent_interval_input="false"></mutation>
+            <field name="event">start</field>
+            <value name="params">
+              <block type="action_param_level">
+                <field name="level">1</field>
+              </block>
+            </value>
+            <statement name="do">
+              <block type="action_function">
+                <field name="functionContent">traceCall("Rule_Duration", "event_start_event_1")</field>
+                <next>
+                  <block type="action_vocal">
+                    <field name="message">Attention, température trop basse. La température est de #value# degrés</field>
+                  </block>
+                </next>
+              </block>
+            </statement>
+            <next>
+              <block type="action_group">
+                <mutation recurrent_interval_input="false"></mutation>
+                <field name="event">start</field>
+                <value name="params">
+                  <block type="action_param_level">
+                    <field name="level">2</field>
+                  </block>
+                </value>
+                <statement name="do">
+                  <block type="action_function">
+                    <field name="functionContent">traceCall("Rule_Duration", "event_start_event_2")</field>
+                    <next>
+                      <block type="action_vocal">
+                        <field name="message">Attention, température trop haute. La température est de #value# degrés</field>
+                      </block>
+                    </next>
+                  </block>
+                </statement>
+                <next>
+                  <block type="action_group">
+                    <mutation recurrent_interval_input="true"></mutation>
+                    <field name="event">reminder</field>
+                    <field name="recurrentInterval">1</field>
+                    <field name="unit">S</field>
+                    <statement name="do">
+                      <block type="action_function">
+                        <field name="functionContent">traceCall("Rule_Duration", "event_start_reminder")</field>
+                        <next>
+                          <block type="action_vocal">
+                            <field name="message">Attention, température anormale depuis #leveldurationfull#. Alarme active depuis #durationfull#. La température est de #value# degrés</field>
+                          </block>
+                        </next>
+                      </block>
+                    </statement>
+                    <next>
+                      <block type="action_group">
+                        <mutation recurrent_interval_input="false"></mutation>
+                        <field name="event">end</field>
+                        <statement name="do">
+                          <block type="action_function">
+                            <field name="functionContent">traceCall("Rule_Duration", "event_end")</field>
+                          </block>
+                        </statement>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+  </block>
+</xml>

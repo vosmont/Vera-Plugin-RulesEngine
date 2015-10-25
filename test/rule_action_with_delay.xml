@@ -1,0 +1,79 @@
+<xml xmlns="http://www.w3.org/1999/xhtml">
+  <block type="rule" x="6" y="-350">
+    <field name="isEnabled">TRUE</field>
+    <value name="name">
+      <block type="text">
+        <field name="TEXT">Rule_Action_With_Delay</field>
+      </block>
+    </value>
+    <value name="conditions">
+      <block type="condition_value">
+        <mutation room_id="" device_name="Device 1" device_id="1" service="urn:upnp-org:serviceId:SwitchPower1" variable="Status"></mutation>
+        <field name="roomId"></field>
+        <field name="deviceId">1</field>
+        <field name="service">urn:upnp-org:serviceId:SwitchPower1</field>
+        <field name="variable">Status</field>
+        <field name="operator">EQ</field>
+        <field name="value">1</field>
+      </block>
+    </value>
+    <statement name="actions">
+      <block type="action_group">
+        <mutation recurrent_interval_input="false"></mutation>
+        <field name="event">start</field>
+        <value name="params">
+          <block type="list_action_param">
+            <mutation items="1"></mutation>
+            <value name="ADD0">
+              <block type="action_param_delay">
+                <field name="delayInterval">1</field>
+                <field name="unit">S</field>
+              </block>
+            </value>
+          </block>
+        </value>
+        <statement name="do">
+          <block type="action_function">
+            <field name="functionContent">traceCall("Rule_Action_With_Delay", "event_start")</field>
+          </block>
+        </statement>
+        <next>
+          <block type="action_group">
+            <mutation recurrent_interval_input="true"></mutation>
+            <field name="event">reminder</field>
+            <field name="recurrentInterval">1</field>
+            <field name="unit">S</field>
+            <value name="params">
+              <block type="action_param_delay">
+                <field name="delayInterval">2</field>
+                <field name="unit">S</field>
+              </block>
+            </value>
+            <statement name="do">
+              <block type="action_function">
+                <field name="functionContent">traceCall("Rule_Action_With_Delay", "event_reminder")</field>
+              </block>
+            </statement>
+            <next>
+              <block type="action_group">
+                <mutation recurrent_interval_input="false"></mutation>
+                <field name="event">end</field>
+                <value name="params">
+                  <block type="action_param_delay">
+                    <field name="delayInterval">1</field>
+                    <field name="unit">S</field>
+                  </block>
+                </value>
+                <statement name="do">
+                  <block type="action_function">
+                    <field name="functionContent">traceCall("Rule_Action_With_Delay", "event_end")</field>
+                  </block>
+                </statement>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+  </block>
+</xml>

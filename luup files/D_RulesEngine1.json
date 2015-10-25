@@ -1,0 +1,101 @@
+{
+	"default_icon": "http://vosmont.github.io/icons/virtual_alarm_panel.png",
+	"state_icons": [],
+	"inScene": "1",
+	"doc_url":{
+		"doc_forced_url":{
+			"text":"http://forum.micasaverde.com/"
+		}
+	},
+	"Tabs": [
+		{
+			"Label": {
+				"lang_tag": "ui7_tabname_control",
+				"text": "Control"
+			},
+			"Position": 0,
+			"TabType": "flash",
+			"TopNavigationTab": 1,
+			"SceneGroup": [
+				{
+					"id": 1
+				}
+			],
+			"ControlGroup": [
+				{
+					"id": 1,
+					"scenegroup": 1
+				}
+			],
+			"Control": [
+				{
+					"ControlGroup": 1,
+					"ControlType": "multi_state_button",
+					"states": [
+						{
+							"ControlCode": "RulesEngine_off",
+							"Label": {
+								"lang_tag": "ui7_off",
+								"text": "OFF"
+							},
+							"Display": {
+								"Service": "urn:upnp-org:serviceId:RulesEngine1",
+								"Variable": "Status",
+								"Value": "0"
+							},
+							"Command": {
+								"Service": "urn:upnp-org:serviceId:SwitchPower1",
+								"Action": "SetTarget",
+								"Parameters": [
+									{
+										"Name": "newTargetValue",
+										"Value": "0"
+									}
+								]
+							}
+						},
+						{
+							"ControlCode": "RulesEngine_on",
+							"Label": {
+								"lang_tag": "ui7_on",
+								"text": "ON"
+							},
+							"Display": {
+								"Service": "urn:upnp-org:serviceId:RulesEngine1",
+								"Variable": "Status",
+								"Value": "1"
+							},
+							"Command": {
+								"Service": "urn:upnp-org:serviceId:RulesEngine1",
+								"Action": "SetTarget",
+								"Parameters": [
+									{
+										"Name": "newTargetValue",
+										"Value": "1"
+									}
+								]
+							}
+						}
+					],
+					"Display": {
+						"Top": 0,
+						"Left": 10
+					}
+				}
+			]
+		},
+		{
+			"Label": {
+				"lang_tag": "advanced",
+				"text": "Advanced"
+			},
+			"Position": 1,
+			"TabType": "javascript",
+			"ScriptName": "shared.js",
+			"Function": "advanced_device"
+		}
+	],
+	"eventList2":[
+	],
+	"DeviceType":"urn:schemas-upnp-org:device:RulesEngine:1"
+}

@@ -1,0 +1,82 @@
+<xml xmlns="http://www.w3.org/1999/xhtml">
+  <block type="rule" x="10" y="35">
+    <field name="isEnabled">TRUE</field>
+    <value name="name">
+      <block type="text">
+        <field name="TEXT">Rule_Condition_Time</field>
+      </block>
+    </value>
+    <value name="conditions">
+      <block type="list_with_operator_condition">
+        <mutation items="4"></mutation>
+        <field name="operator">OR</field>
+        <value name="ADD0">
+          <block type="condition_time">
+            <mutation operator="EQ" timer_type="WEEK"></mutation>
+            <field name="operator">EQ</field>
+            <field name="time">08:30:00</field>
+            <field name="timerType">WEEK</field>
+            <field name="daysOfWeek">1,3,5</field>
+          </block>
+        </value>
+        <value name="ADD1">
+          <block type="condition_time">
+            <mutation operator="EQ" timer_type="MONTH"></mutation>
+            <field name="operator">EQ</field>
+            <field name="time">09:30:00</field>
+            <field name="timerType">MONTH</field>
+            <field name="daysOfMonth">1,15,30</field>
+          </block>
+        </value>
+        <value name="ADD2">
+          <block type="condition_time">
+            <mutation operator="BW" timer_type="WEEK"></mutation>
+            <field name="operator">BW</field>
+            <field name="time1">10:00:00</field>
+            <field name="time2">22:00:00</field>
+            <field name="timerType">WEEK</field>
+            <field name="daysOfWeek">2,4</field>
+          </block>
+        </value>
+        <value name="ADD3">
+          <block type="condition_time">
+            <mutation operator="BW" timer_type="MONTH"></mutation>
+            <field name="operator">BW</field>
+            <field name="time1">23:00:00</field>
+            <field name="time2">02:00:00</field>
+            <field name="timerType">MONTH</field>
+            <field name="daysOfMonth">2,11</field>
+          </block>
+        </value>
+      </block>
+    </value>
+    <statement name="actions">
+      <block type="action_group">
+        <mutation recurrent_interval_input="false"></mutation>
+        <field name="event">start</field>
+        <statement name="do">
+          <block type="action_function">
+            <field name="functionContent">traceCall("Rule_Condition_Time", "event_start")</field>
+            <next>
+              <block type="action_email">
+                <field name="subject"></field>
+                <field name="message"></field>
+              </block>
+            </next>
+          </block>
+        </statement>
+        <next>
+          <block type="action_group">
+            <mutation recurrent_interval_input="false"></mutation>
+            <field name="event">end</field>
+            <statement name="do">
+              <block type="action_function">
+                <field name="functionContent">traceCall("Rule_Condition_Time", "event_end")</field>
+              </block>
+            </statement>
+          </block>
+        </next>
+      </block>
+    </statement>
+  </block>
+</xml>

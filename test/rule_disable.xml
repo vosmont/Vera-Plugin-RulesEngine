@@ -1,0 +1,112 @@
+<xml xmlns="http://www.w3.org/1999/xhtml">
+  <block type="rule" x="8" y="-1">
+    <field name="isEnabled">TRUE</field>
+    <value name="name">
+      <block type="text">
+        <field name="TEXT">Rule_To_Disable</field>
+      </block>
+    </value>
+    <value name="conditions">
+      <block type="condition_group1">
+        <field name="operator">OR</field>
+        <statement name="conditions">
+          <block type="condition_value">
+            <field name="device">Device1</field>
+            <field name="service">urn:upnp-org:serviceId:SwitchPower1</field>
+            <field name="variable">Status</field>
+            <field name="operator">EQ</field>
+            <field name="value">1</field>
+          </block>
+        </statement>
+      </block>
+    </value>
+    <statement name="actions">
+      <block type="action_group">
+        <mutation recurrentintervalinput="false"></mutation>
+        <field name="event">start</field>
+        <statement name="do">
+          <block type="action_function">
+            <field name="functionContent">traceCall("Rule_To_Disable", "event_start")</field>
+          </block>
+        </statement>
+        <next>
+          <block type="action_group">
+            <mutation recurrentintervalinput="true"></mutation>
+            <field name="event">reminder</field>
+            <statement name="do">
+              <block type="action_function">
+                <field name="functionContent">traceCall("Rule_To_Disable", "event_reminder")</field>
+              </block>
+            </statement>
+            <next>
+              <block type="action_group">
+                <mutation recurrentintervalinput="false"></mutation>
+                <field name="event">end</field>
+                <statement name="do">
+                  <block type="action_function">
+                    <field name="functionContent">traceCall("Rule_To_Disable", "event_end")</field>
+                  </block>
+                </statement>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+  </block>
+  <block type="rule" disabled="true" x="9" y="557">
+    <field name="isEnabled">FALSE</field>
+    <value name="name">
+      <block type="text">
+        <field name="TEXT">Rule_Disabled</field>
+      </block>
+    </value>
+    <value name="conditions">
+      <block type="condition_group1">
+        <field name="operator">OR</field>
+        <statement name="conditions">
+          <block type="condition_value">
+            <field name="device">Device1</field>
+            <field name="service">urn:upnp-org:serviceId:SwitchPower1</field>
+            <field name="variable">Status</field>
+            <field name="operator">EQ</field>
+            <field name="value">1</field>
+          </block>
+        </statement>
+      </block>
+    </value>
+    <statement name="actions">
+      <block type="action_group">
+        <mutation recurrentintervalinput="false"></mutation>
+        <field name="event">start</field>
+        <statement name="do">
+          <block type="action_function">
+            <field name="functionContent">traceCall("Rule_Disabled", "event_start")</field>
+          </block>
+        </statement>
+        <next>
+          <block type="action_group">
+            <mutation recurrentintervalinput="true"></mutation>
+            <field name="event">reminder</field>
+            <statement name="do">
+              <block type="action_function">
+                <field name="functionContent">traceCall("Rule_Disabled", "event_reminder")</field>
+              </block>
+            </statement>
+            <next>
+              <block type="action_group">
+                <mutation recurrentintervalinput="false"></mutation>
+                <field name="event">end</field>
+                <statement name="do">
+                  <block type="action_function">
+                    <field name="functionContent">traceCall("Rule_Disabled", "event_end")</field>
+                  </block>
+                </statement>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+  </block>
+</xml>

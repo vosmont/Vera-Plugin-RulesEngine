@@ -1,0 +1,39 @@
+<?xml version="1.0"?>
+<implementation>
+	<functions>
+		RulesEngine = {}
+
+		function RulesEngine_startup (lul_device)
+			luup.log("RGBController startup")
+			RulesEngine = require("L_RulesEngine1")
+			if (RulesEngine ~= nil) then
+				return RulesEngine.startup(lul_device)
+			else
+				return false, "Can't load library"
+			end
+		end
+	</functions>
+	<startup>RulesEngine_startup</startup>
+	<actionList>
+		<action>
+			<serviceId>urn:upnp-org:serviceId:SwitchPower1</serviceId>
+			<name>SetTarget</name>
+			<job>
+				if (RulesEngine ~= nil) then
+					RulesEngine.setTarget(lul_device, lul_settings.newTargetValue)
+				end
+				return 4, nil
+			</job>
+		</action>
+		<action>
+			<serviceId>urn:upnp-org:serviceId:RulesEngine1</serviceId>
+			<name>LoadRules</name>
+			<job>
+				if (RulesEngine ~= nil) then
+					RulesEngine.loadRules(lul_settings.fileName)
+				end
+				return 4, nil
+			</job>
+		</action>
+	</actionList>
+</implementation>
