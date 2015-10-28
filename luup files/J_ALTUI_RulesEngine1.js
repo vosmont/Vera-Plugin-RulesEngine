@@ -11,8 +11,14 @@
 
 var ALTUI_RulesEngine = ( function( window, undefined ) {  
 
+	var _location = window.location.pathname.replace( "/data_request", "" ) + "/";
+
 	var htmlControlPanel = '\
 <table style="width:100%;">\
+	<tr style="height:20px;">\
+		<td id ="ruleFiles" colspan="2">\
+		</td>\
+	</tr>\
 	<tr style="height:20px;">\
 		<td align="center">\
 			<a href="javascript:ALTUI_RulesEngine.loadXml()">Load XML</a>\
@@ -48,12 +54,11 @@ var ALTUI_RulesEngine = ( function( window, undefined ) {
 			</block>\
 		</value>\
 	</block>\
-	<category name="Properties">\
-		<block type="list_property"></block>\
-		<!-- à générer dynamiquement (HOOK) -->\
-		<block type="alarm_panel"></block>\
-	</category>\
 </category>\
+<category name="Properties">\
+	<block type="list_property"></block>\
+</category>\
+<sep></sep>\
 <category name="Conditions">\
 	<block type="list_with_operator_condition"></block>\
 	<category name="Types">\
@@ -78,9 +83,6 @@ var ALTUI_RulesEngine = ( function( window, undefined ) {
 	<category name="Types">\
 		<block type="action_function"></block>\
 		<block type="action_device"></block>\
-		<!-- à générer dynamiquement (custom action types) -->\
-		<block type="action_email"></block>\
-		<block type="action_vocal"></block>\
 	</category>\
 	<category name="Params">\
 		<block type="list_action_param"></block>\
@@ -88,6 +90,7 @@ var ALTUI_RulesEngine = ( function( window, undefined ) {
 		<block type="action_param_delay"></block>\
 	</category>\
 </category>\
+<sep></sep>\
 <category name="Values">\
 	<block type="text"></block>\
 	<block type="text_area"></block>\
@@ -167,69 +170,53 @@ var ALTUI_RulesEngine = ( function( window, undefined ) {
 	};
 	*/
 
-	function _loadResources() {
+	function _loadResources( fileNames ) {
 		var d = $.Deferred();
-		if (window.ALTUI_RulesEngineResourcesAreLoaded === true) {
+		if ( window.ALTUI_RulesEngineResourcesAreLoaded === true ) {
 			d.resolve();
 		} else {
-			var location = window.location.pathname.replace("/data_request", "");
-			$.when(
-				$.getScript(location + "/J_RulesEngine1_Blockly.js"),
-				$.getScript(location + "/J_RulesEngine1_Blockly_AlarmPanel.js")
-			)
-				.done(function( script, textStatus ) {
+			var resourceLoaders = [];
+			$.each( fileNames, function( index, fileName ) {
+				resourceLoaders.push( $.getScript( _location + fileName ) );
+			} );
+			$.when.apply( $, resourceLoaders )
+				.done( function( script, textStatus ) {
 					d.resolve();
 				})
-				.fail(function( jqxhr, settings, exception ) {
-					$("#blocklyDiv" ).text( "Triggered ajaxError handler." );
+				.fail( function( jqxhr, settings, exception ) {
+					$( "#blocklyDiv" ).text( "Triggered ajaxError handler." );
 					d.fail();
 				});
 		}
 		return d.promise();
 	};
 
-	function _loadResources2() {
-		var d = $.Deferred();
-		if (window.ALTUI_RulesEngineResourcesAreLoaded === true) {
-			d.resolve();
-		} else {
-			var location = window.location.pathname.replace("/data_request", "");
-			$.when(
-				$.getScript(location + "/J_RulesEngine1_Blockly.js"),
-				$.getScript(location + "/J_RulesEngine1_Blockly_AlarmPanel.js")
-			)
-				.done(function( script, textStatus ) {
-					d.resolve();
-				})
-				.fail(function( jqxhr, settings, exception ) {
-					$("#blocklyDiv" ).text( "Triggered ajaxError handler." );
-					d.fail();
-				});
-		}
-		return d.promise();
-	};
-
-	function _loadRules() {
-		var location = window.location.pathname.replace("/data_request", "");
-		$.when(
-			$.ajax({
-				url: location + "/C_RulesEngine_Rules.xml",
-				dataType: "text"
-			})
-		)
-			.done(function( xmlText ) {
+	function _loadRules( fileName ) {
+		$.when( $.ajax( { url: _location + fileName, dataType: "text" } ) )
+			.done( function( xmlText ) {
+				// Update the Blockly workspace
 				var workspace = Blockly.getMainWorkspace();
 				var xml = Blockly.Xml.textToDom(xmlText);
 				Blockly.Xml.domToWorkspace(workspace, xml);
-			})
-			.fail(function( jqxhr, settings, exception ) {
+			} )
+			.fail( function( jqxhr, settings, exception ) {
 				$("#blocklyDiv" ).text( "Triggered ajaxError handler." );
-			});
+			} );
 	};
 
-	function _drawControlPanel (device, domparent) {
+	function _drawControlPanel ( device, domparent, toolboxConfig ) {
 		// Blockly toolbox
 		$( "#toolbox ").html( xmlToolbox );
+		// Add custom config
+		$.each( toolboxConfig, function( index, config ) {
+			var path = "";
+			var categories = config.category.split( "," );
+			$.each( categories, function( index, category ) {
+				path += ( index > 0 ? " " : "" ) + "category[name=\"" + category + "\"]";
+			} );
+			$("#toolbox").find( path )
+				.append( "<block type=\"" + config.type + "\"></block>" );
+		} );
 
 		// Blockly workspace
 		var blocklyDiv = document.getElementById('blocklyDiv');
@@ -255,19 +242,38 @@ var ALTUI_RulesEngine = ( function( window, undefined ) {
 		//---------------------------------------------------------
 		// PUBLIC  functions
 		//---------------------------------------------------------
+
 		getStyle: _getStyle,
+
 		drawDevice: _drawDevice,
+
 		drawControlPanel: function( device, domparent ) {
+			var ruleFileNames = MultiBox.getStatus( device, "urn:upnp-org:serviceId:RulesEngine1", "RuleFiles" ).split( "," );
+			var resourceFileNames = [ "J_RulesEngine1_Blockly.js" ];
+			var toolboxConfig = MultiBox.getStatus( device, "urn:upnp-org:serviceId:RulesEngine1", "ToolboxConfig" );
+			if ( ( toolboxConfig !== undefined ) && ( toolboxConfig !== "" ) ) {
+				toolboxConfig = $.parseJSON( toolboxConfig );
+				$.each( toolboxConfig, function( index, config ) {
+					if ( $.inArray( config.resource, resourceFileNames ) === -1 ) {
+						resourceFileNames.push( config.resource );
+					}
+				} );
+			} else {
+				toolboxConfig = [];
+			}
 			$( domparent ).append( htmlControlPanel );
 			$.when(
-				_loadResources()
+				_loadResources( resourceFileNames )
 			).done( function() {
-				_drawControlPanel( device, domparent );
-				_loadRules();
+				_drawControlPanel( device, domparent, toolboxConfig );
+				if ( ruleFileNames.length > 0 ) {
+					_loadRules( ruleFileNames[ 0 ] );
+				}
 			} );
 		},
+
 		onDeviceStatusChanged: _onDeviceStatusChanged,
-		
+
 		loadXml: function () {
 			var workspace = Blockly.getMainWorkspace();
 			var xml_text = $( "#xmlRules" ).val();

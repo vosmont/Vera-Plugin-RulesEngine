@@ -8,7 +8,6 @@
   <script src="./js/blocks_compressed.js"></script>
   <script src="./msg/js/fr.js"></script>
   <script src="../../luup files/J_RulesEngine1_Blockly.js"></script>
-  <script src="../../luup files/J_RulesEngine1_Blockly_AlarmPanel.js"></script>
   <style>
     html, body {
       height: 100%;
@@ -72,12 +71,12 @@
 					</block>
 				</value>
 			</block>
-			<category name="Properties">
-				<block type="list_property"></block>
-				<!-- à générer dynamiquement (HOOK) -->
-				<block type="alarm_panel"></block>
-			</category>
 		</category>
+		<category name="Properties">
+			<block type="list_property"></block>
+			<block type="property_auto_untrip"></block>
+		</category>
+		<sep></sep>
 		<category name="Conditions">
 			<block type="list_with_operator_condition"></block>
 			<category name="Types">
@@ -96,9 +95,6 @@
 					</value>
 				</block>
 				<block type="condition_rule"></block>
-				<!--
-				<block type="condition_value_templates"></block>
-				-->
 			</category>
 			<category name="Params">
 				<block type="list_condition_param"></block>
@@ -117,9 +113,6 @@
 			<category name="Types">
 				<block type="action_function"></block>
 				<block type="action_device"></block>
-				<!-- à générer dynamiquement (custom action types) -->
-				<block type="action_email"></block>
-				<block type="action_vocal"></block>
 			</category>
 			<category name="Params">
 				<block type="list_action_param"></block>
@@ -127,6 +120,7 @@
 				<block type="action_param_delay"></block>
 			</category>
 		</category>
+		<sep></sep>
 		<category name="Values">
 			<block type="text"></block>
 			<block type="text_area"></block>
@@ -173,7 +167,13 @@ devices = [
 		],"name":"Device5","room":"3","altuiid":"0-5"
 	}
 ];
-services = [{"ServiceId":"urn:upnp-org:serviceId:SwitchPower1","SFilename":"S_SwitchPower1.xml","Actions":[{"name":"SetTarget","input":["newTargetValue"],"output":[]},{"name":"GetTarget","input":[],"output":["RetTargetValue"]},{"name":"GetStatus","input":[],"output":["ResultStatus"]}]},{"ServiceId":"urn:upnp-org:serviceId:Dimming1","SFilename":"S_Dimming1.xml","Actions":[{"name":"SetLoadLevelTarget","input":["newLoadlevelTarget"],"output":[]},{"name":"GetLoadLevelTarget","input":[],"output":["GetLoadlevelTarget"]},{"name":"GetLoadLevelStatus","input":[],"output":["retLoadlevelStatus"]},{"name":"SetOnEffectLevel","input":["newOnEffectLevel"],"output":[]},{"name":"SetOnEffect","input":["newOnEffect"],"output":[]},{"name":"GetOnEffectParameters","input":[],"output":["retOnEffect","retOnEffectLevel"]},{"name":"StepUp","input":[],"output":[]},{"name":"StepDown","input":[],"output":[]},{"name":"StartRampUp","input":[],"output":[]},{"name":"StartRampDown","input":[],"output":[]},{"name":"StopRamp","input":[],"output":[]},{"name":"StartRampToLevel","input":["newLoadLevelTarget","newRampTime"],"output":[]},{"name":"SetStepDelta","input":["newStepDelta"],"output":[]},{"name":"GetStepDelta","input":[],"output":["retStepDelta"]},{"name":"SetRampRate","input":["newRampRate"],"output":[]},{"name":"GetRampRate","input":[],"output":["retRampRate"]},{"name":"PauseRamp","input":[],"output":[]},{"name":"ResumeRamp","input":[],"output":[]},{"name":"GetIsRamping","input":[],"output":["retIsRamping"]},{"name":"GetRampPaused","input":[],"output":["retRampPaused"]},{"name":"GetRampTime","input":[],"output":["retRampTime"]}]},{"ServiceId":"urn:micasaverde-com:serviceId:EnergyMetering1","SFilename":"S_EnergyMetering1.xml","Actions":[{"name":"ResetKWH","input":[],"output":[]}]},{"ServiceId":"urn:micasaverde-com:serviceId:HaDevice1","SFilename":"S_HaDevice1.xml","Actions":[{"name":"Reconfigure","input":[],"output":[]},{"name":"StressTest","input":[],"output":[]},{"name":"Remove","input":[],"output":[]},{"name":"Poll","input":[],"output":[]},{"name":"ToggleState","input":[],"output":[]},{"name":"SetPollFrequency","input":["PollingEnabled","PollMinDelay"],"output":[]},{"name":"AllowPairing","input":["Seconds"],"output":[]}]},{"ServiceId":"urn:micasaverde-com:serviceId:Color1","SFilename":"S_Color1.xml","Actions":[{"name":"SetColor","input":["newColorTarget"],"output":[]},{"name":"SetColorRGB","input":["newColorRGBTarget"],"output":[]},{"name":"SetColorTemp","input":["newColorTempTarget"],"output":[]}]}];
+services = [
+	{"ServiceId":"urn:upnp-org:serviceId:SwitchPower1","SFilename":"S_SwitchPower1.xml","Actions":[{"name":"SetTarget","input":["newTargetValue"],"output":[]},{"name":"GetTarget","input":[],"output":["RetTargetValue"]},{"name":"GetStatus","input":[],"output":["ResultStatus"]}]},
+	{"ServiceId":"urn:upnp-org:serviceId:Dimming1","SFilename":"S_Dimming1.xml","Actions":[{"name":"SetLoadLevelTarget","input":["newLoadlevelTarget"],"output":[]},{"name":"GetLoadLevelTarget","input":[],"output":["GetLoadlevelTarget"]},{"name":"GetLoadLevelStatus","input":[],"output":["retLoadlevelStatus"]},{"name":"SetOnEffectLevel","input":["newOnEffectLevel"],"output":[]},{"name":"SetOnEffect","input":["newOnEffect"],"output":[]},{"name":"GetOnEffectParameters","input":[],"output":["retOnEffect","retOnEffectLevel"]},{"name":"StepUp","input":[],"output":[]},{"name":"StepDown","input":[],"output":[]},{"name":"StartRampUp","input":[],"output":[]},{"name":"StartRampDown","input":[],"output":[]},{"name":"StopRamp","input":[],"output":[]},{"name":"StartRampToLevel","input":["newLoadLevelTarget","newRampTime"],"output":[]},{"name":"SetStepDelta","input":["newStepDelta"],"output":[]},{"name":"GetStepDelta","input":[],"output":["retStepDelta"]},{"name":"SetRampRate","input":["newRampRate"],"output":[]},{"name":"GetRampRate","input":[],"output":["retRampRate"]},{"name":"PauseRamp","input":[],"output":[]},{"name":"ResumeRamp","input":[],"output":[]},{"name":"GetIsRamping","input":[],"output":["retIsRamping"]},{"name":"GetRampPaused","input":[],"output":["retRampPaused"]},{"name":"GetRampTime","input":[],"output":["retRampTime"]}]},
+	{"ServiceId":"urn:micasaverde-com:serviceId:EnergyMetering1","SFilename":"S_EnergyMetering1.xml","Actions":[{"name":"ResetKWH","input":[],"output":[]}]},
+	{"ServiceId":"urn:micasaverde-com:serviceId:HaDevice1","SFilename":"S_HaDevice1.xml","Actions":[{"name":"Reconfigure","input":[],"output":[]},{"name":"StressTest","input":[],"output":[]},{"name":"Remove","input":[],"output":[]},{"name":"Poll","input":[],"output":[]},{"name":"ToggleState","input":[],"output":[]},{"name":"SetPollFrequency","input":["PollingEnabled","PollMinDelay"],"output":[]},{"name":"AllowPairing","input":["Seconds"],"output":[]}]},
+	{"ServiceId":"urn:micasaverde-com:serviceId:Color1","SFilename":"S_Color1.xml","Actions":[{"name":"SetColor","input":["newColorTarget"],"output":[]},{"name":"SetColorRGB","input":["newColorRGBTarget"],"output":[]},{"name":"SetColorTemp","input":["newColorTempTarget"],"output":[]}]}
+];
 
 Blockly.Blocks[ "rule" ].hasToCheckDevice = true;
 

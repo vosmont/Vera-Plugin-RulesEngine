@@ -547,6 +547,20 @@ TestRulesEngine = {}
 		}, "The number of event call is correct")
 	end
 
+	function TestRulesEngine:test_rule_with_properties()
+		VeraMock:addDevice(1, { description = "Device1" })
+		RulesEngine.loadRuleFile("./test/rule_with_properties.xml")
+		assertNotNil(RulesEngine.getRule("Rule_With_Properties"), "Rule is loaded")
+
+		local rule = RulesEngine.getRule("Rule_With_Properties")
+		assertEquals(rule.properties, {
+			property1 = { param = "My param 1" },
+			property2 = { param = "My param 2" },
+			property3 = { param = "My param 3" },
+			property4 = { param = "My param 4" }
+		}, "The properties are correct")
+	end
+
 	function TestRulesEngine:test_action_action()
 		VeraMock:addDevice(1, { description = "Device1" })
 		VeraMock:addDevice(2, { description = "Device2" })
@@ -1075,7 +1089,7 @@ TestRulesEngine = {}
 -- run all tests
 print("")
 --LuaUnit:run()
-
+--[[
 -- Tests OK
 LuaUnit:run("TestRulesEngine:test_condition_value")
 LuaUnit:run("TestRulesEngine:test_condition_rule")
@@ -1091,7 +1105,8 @@ LuaUnit:run("TestRulesEngine:test_action_with_delay")
 LuaUnit:run("TestRulesEngine:test_action_with_delay_cancel")
 LuaUnit:run("TestRulesEngine:test_rule_duration")
 LuaUnit:run("TestRulesEngine:test_enhanced_message")
-
+--]]
+LuaUnit:run("TestRulesEngine:test_rule_with_properties")
 --[[
 -- Tests KO
 

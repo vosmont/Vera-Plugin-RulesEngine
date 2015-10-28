@@ -7,6 +7,7 @@ License: MIT License, see LICENSE
 
 module("L_RulesEngine1", package.seeall)
 if (package.path:find ("./lib/?.lua;", 1, true) == nil) then
+	-- For Unit Tests
 	package.path = package.path .. ";./lib/?.lua"
 end
 
@@ -789,6 +790,33 @@ local function _addParams (item, params)
 end
 
 -- **************************************************
+-- Rule properties
+-- **************************************************
+
+local function _initProperties (ruleName, properties)
+	local result = {}
+	if ((properties == nil) or (type(properties) ~= "table")) then
+		properties = {}
+	end
+	if (properties.type ~= nil) then
+		-- Single property
+		properties = { properties }
+	end
+	for i, property in ipairs(properties) do
+		if (property.type == nil) then
+			-- Group of properties
+			table.extend(result, _initProperties(ruleName, property))
+		else
+			local propertyName = property.type
+			property.type = nil
+			result[propertyName] = property
+			log("Add property '" .. tostring(propertyName) .. "': " .. tostring(json.encode(property)), "initProperties", 2)
+		end
+	end
+	return result
+end
+
+-- **************************************************
 -- Condition (rule condition, action condition)
 -- **************************************************
 
@@ -1061,15 +1089,15 @@ setmetatable(ConditionTypes, {
 				msg = msg .. " - The condition has no value condition"
 			end
 
-			-- Check since interval is exists
-			if (status == "1") then
-				if (condition._sinceInterval ~= nil) then
+			-- Check since interval if exists
+			if (condition._sinceInterval ~= nil) then
+				-- Remove scheduled actions for this condition
+				_removeScheduledTask(getRule(condition._ruleName), nil, condition)
+				if (status == "1") then
 					local currentInterval = os.difftime(os.time(), (context.lastUpdateTime or os.time()))
 					if (currentInterval < tonumber(condition._sinceInterval)) then
 						status = "0"
-						-- Remove scheduled actions
-						_removeScheduledTask(getRule(condition._ruleName), nil, condition)
-						-- Have to check again the status of the condition later
+						-- Have to check later again the status of the condition
 						local remainingSeconds = tonumber(condition._sinceInterval) - currentInterval
 						msg = msg .. " but not since " .. tostring(condition._sinceInterval) .. " seconds - Check condition status in " .. tostring(remainingSeconds) .. " seconds"
 						_addScheduledTask(getRule(condition._ruleName), "RulesEngine.updateConditionStatus", condition, nil, nil, remainingSeconds)
@@ -1292,19 +1320,12 @@ local function _initConditions (ruleName, conditions, parentId)
 	if ((conditions == nil) or (type(conditions) ~= "table")) then
 		conditions = {}
 	end
-	--if ((type(conditions.type) == "string") and (string.match(conditions.type, "condition_group") ~= nil)) then
 	if (conditions.type == "list_with_operator_condition") then
 		-- Group of conditions
 		conditions.items = _initConditions(ruleName, conditions.items, parentId)
-		--conditions._context = conditions.items._context
 	else
-		--[[
-		conditions._context = {
-			lastUpdateTime = 0
-		}
-		--]]
 		if ((conditions.type ~= nil) and (string.match(conditions.type, "condition_.*") ~= nil)) then
-			-- single condition
+			-- Single condition
 			conditions = { conditions }
 		end
 		local idx = 1
@@ -1316,7 +1337,6 @@ local function _initConditions (ruleName, conditions, parentId)
 				else
 					id = parentId .. "." .. tostring(idx)
 				end
-				--if (string.match(condition.type, "condition_group") ~= nil) then
 				if (condition.type == "list_with_operator_condition") then
 					-- Group of conditions
 					conditions[i].items = _initConditions(ruleName, condition.items, id)
@@ -1900,6 +1920,7 @@ local function _initRule (rule)
 		lastStatusUpdateTime = 0,
 		lastLevelUpdateTime = 0
 	}
+	rule.properties = _initProperties(rule.name, rule.properties)
 	rule.conditions = _initConditions(rule.name, rule.conditions)
 	rule.actions    = _initRuleActions(rule.name, rule.actions)
 end
@@ -2190,8 +2211,8 @@ function loadRuleFile (fileName)
 		for _, xmlRule in ipairs(xmltable) do
 			if ((type(xmlRule) == "table") and (xmlRule.tag == "block") and (xmlRule.attr.type == "rule")) then
 				local rule = parseXmlItem(xmlRule, 0)
-				--print("")
-				--print("rule", json.encode(rule))
+--print("")
+--print("rule", json.encode(rule))
 				addRule(rule)
 			end
 		end
@@ -2540,6 +2561,7 @@ local function _initPluginInstance (lul_device)
 	_getVariableOrInit(lul_device, SID.RulesEngine, "Message", "")
 	pluginParams = {
 		modules = _getVariableOrInit(lul_device, SID.RulesEngine, "Modules", "") or "",
+		toolboxConfig = _getVariableOrInit(lul_device, SID.RulesEngine, "ToolboxConfig", "") or "",
 		startupFiles = _getVariableOrInit(lul_device, SID.RulesEngine, "StartupFiles", "C_RulesEngine_Startup.lua") or "",
 		ruleFiles = _getVariableOrInit(lul_device, SID.RulesEngine, "RuleFiles", "C_RulesEngine_Rules.xml") or ""
 	}
@@ -2555,10 +2577,10 @@ local function _initPluginInstance (lul_device)
 end
 
 local function _deferredStartup (lul_device)
-	-- Load modules
+	-- Load custom modules
 	loadModules()
 
-	-- Load Lua Startup
+	-- Load custom Lua Startup
 	loadStartupFiles()
 
 	-- Load rules
@@ -2573,8 +2595,7 @@ function startup (lul_device)
 
 	-- Init
 	_initPluginInstance(lul_device)
--- TODO : variable hook pour charger module
-	-- initHooks(lul_device)
+
 	-- Watch setting changes
 	--luup.variable_watch("RulesEngine.initPluginInstance", SID.RulesEngine, "Options", lul_device)
 	luup.variable_watch("RulesEngine.onDebugValueIsUpdated", SID.RulesEngine, "Debug", lul_device)

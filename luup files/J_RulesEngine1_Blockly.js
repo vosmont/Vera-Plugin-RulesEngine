@@ -259,10 +259,6 @@ Blockly.Blocks[ "rule" ] = {
 			.setCheck( "String" )
 			.appendField( "Rule" );
 
-		/*this.appendDummyInput()
-			.appendField('is enabled')
-			.appendField(new Blockly.FieldCheckbox("TRUE"), "isEnabled");
-			*/
 		//var image = new Blockly.FieldImage('http://www.gstatic.com/codesite/ph/images/star_on.gif', 15, 15, '*');
 		//input.appendField(image);
 
@@ -272,7 +268,7 @@ Blockly.Blocks[ "rule" ] = {
 
 		// Properties (hooks)
 		this.appendValueInput( "properties" )
-			.setCheck( "Properties" )
+			.setCheck( "Property" )
 			.appendField( "properties" );
 
 		// Conditions
@@ -292,6 +288,7 @@ Blockly.Blocks[ "rule" ] = {
 	},
 
 	onchange: function() {
+		// Check if is enabled
 		if ( this.getFieldValue( "isEnabled" ) === "TRUE" ) {
 			if ( this.disabled ) {
 				this.setDisabled( false );
@@ -304,10 +301,18 @@ Blockly.Blocks[ "rule" ] = {
 	}
 };
 
+// ****************************************************************************
+// Blockly - Rule properties
+// ****************************************************************************
+
+goog.provide( "Blockly.Blocks.properties" );
+
+Blockly.Blocks.properties.HUE = 0;
+
 Blockly.Blocks[ "list_property" ] = function() {}
 goog.mixin( Blockly.Blocks[ "list_property" ], Blockly.Blocks[ "lists_create_with" ] );
 Blockly.Blocks[ "list_property" ].updateShape_ = function() {
-	this.setColour( 160 );
+	this.setColour( Blockly.Blocks.properties.HUE );
 	// Delete everything.
 	if ( this.getInput( "EMPTY" ) ) {
 		this.removeInput( "EMPTY" );
@@ -331,14 +336,28 @@ Blockly.Blocks[ "list_property" ].updateShape_ = function() {
 	}
 	this.setInputsInline( false );
 	if ( !this.outputConnection ) {
-		this.setOutput( true, "Properties" );
+		this.setOutput( true, "Property" );
 	} else {
-		this.outputConnection.setCheck( "Properties" )
+		this.outputConnection.setCheck( "Property" )
+	}
+};
+
+Blockly.Blocks[ "property_auto_untrip" ] = {
+	init: function() {
+		this.setColour( Blockly.Blocks.properties.HUE );
+
+		this.appendDummyInput( "since" )
+			.appendField( "auto untrip in" )
+			.appendField (new Blockly.FieldTextInput( "0", Blockly.FieldTextInput.numberValidator ), "autoUntripInterval" )
+			.appendField( new Blockly.FieldDropdown( [ [ "seconds", "S"], [ "minutes", "M" ], [ "hours", "H" ] ] ), "unit" );
+
+		this.setInputsInline( true );
+		this.setOutput( true, "Property" );
 	}
 };
 
 // ****************************************************************************
-// Blockly - Conditions
+// Blockly - Rule conditions
 // ****************************************************************************
 
 goog.provide( "Blockly.Blocks.conditions" );
@@ -386,7 +405,7 @@ Blockly.Blocks[ "list_with_operator_condition" ].updateShape_ = function() {
 };
 
 // ****************************************************************************
-// Blockly - Conditions - Types
+// Blockly - Rule conditions - Types
 // ****************************************************************************
 
 function _isEmpty(str) {
@@ -1016,7 +1035,7 @@ Blockly.Blocks[ "condition_value_templates" ] = {
 */
 
 // ****************************************************************************
-// Blockly - Conditions - Params
+// Blockly - Rule conditions - Params
 // ****************************************************************************
 
 Blockly.Blocks[ "list_condition_param" ] = function() {}
@@ -1084,7 +1103,7 @@ Blockly.Blocks[ "condition_param_since" ] = {
 };
 
 // ****************************************************************************
-// Blockly - Actions
+// Blockly - Rule actions
 // ****************************************************************************
 
 goog.provide( "Blockly.Blocks.actions" );
@@ -1154,45 +1173,8 @@ Blockly.Blocks[ "action_group" ] = {
 };
 
 // ****************************************************************************
-// Blockly - Actions - Types
+// Blockly - Rule actions - Types
 // ****************************************************************************
-
-Blockly.Blocks['action_email'] = {
-	init: function () {
-		this.setColour( Blockly.Blocks.actions.HUE2 );
-
-		this.appendDummyInput()
-			.appendField( "Email" );
-		this.appendDummyInput()
-			.appendField( "subject :" )
-			.appendField( new Blockly.FieldTextInput( "" ), "subject" );
-		this.appendDummyInput()
-			.appendField( "message :" )
-			.appendField( new Blockly.FieldTextArea( "" ), "message" );
-
-		this.setInputsInline( false );
-		this.setPreviousStatement( true, "ActionType" );
-		this.setNextStatement( true, "ActionType" );
-		//this.setTooltip('Returns number of letters in the provided text.');
-	}
-};
-
-Blockly.Blocks['action_vocal'] = {
-	init: function () {
-		this.setColour(Blockly.Blocks.actions.HUE2);
-
-		this.appendDummyInput()
-			.appendField('Vocal');
-		this.appendDummyInput()
-			.appendField('message :')
-			.appendField(new Blockly.FieldTextArea(''), 'message');
-
-		this.setInputsInline(false);
-		this.setPreviousStatement(true, 'ActionType');
-		this.setNextStatement(true, 'ActionType');
-		//this.setTooltip('Returns number of letters in the provided text.');
-	}
-};
 
 Blockly.Blocks['action_function'] = {
 	init: function () {
@@ -1297,7 +1279,7 @@ Blockly.Blocks['action_device'] = {
 };
 
 // ****************************************************************************
-// Blockly - Actions - Params
+// Blockly - Rule actions - Params
 // ****************************************************************************
 
 Blockly.Blocks['list_action_param'] = function() {}
