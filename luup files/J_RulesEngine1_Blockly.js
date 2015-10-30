@@ -799,10 +799,10 @@ Blockly.Blocks[ "condition_value" ] = {
 					_updateVariableDropdownOptions.call( this.sourceBlock_, { deviceId: newDeviceId } );
 				} ),
 				'deviceId'
-			)//;
+			);
 
 		// Service
-		//this.appendDummyInput()
+		this.appendDummyInput()
 			.appendField( "service" )
 			.appendField(
 				new Blockly.FieldDropdown( [ [ "...", "" ] ], function( newService ) {

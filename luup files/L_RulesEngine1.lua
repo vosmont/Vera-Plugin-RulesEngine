@@ -11,25 +11,17 @@ if (package.path:find ("./lib/?.lua;", 1, true) == nil) then
 	package.path = package.path .. ";./lib/?.lua"
 end
 
--- ALTUI
---"urn:schemas-upnp-org:device:RulesEngine:1":{"StyleFunc":"ALTUI_RulesEngine.getStyle","DeviceDrawFunc":"ALTUI_RulesEngine.drawDevice","ControlPanelFunc":"ALTUI_RulesEngine.drawControlPanel","ScriptFile":"J_ALTUI_RulesEngine1.js"},"urn:schemas-upnp-org:device:VirtualAlarmPanel:1":{"DeviceDrawFunc":"ALTUI_VirtualAlarmPanel.drawDevice","ScriptFile":"J_ALTUI_VirtualAlarmPanel1.js"},
---[[
-	tbl["urn:schemas-upnp-org:device:RulesEngine:1"]= {
-		["ScriptFile"]="J_ALTUI_RulesEngine1.js",
-		["DeviceDrawFunc"]="ALTUI_RulesEngine.drawDevice",
-		["ControlPanelFunc"]="ALTUI_RulesEngine.drawControlPanel"
-	}
-	tbl["urn:schemas-upnp-org:device:VirtualAlarmPanel:1"]= {
-		["ScriptFile"]="J_ALTUI_VirtualAlarmPanel1.js",
-		["DeviceDrawFunc"]="ALTUI_VirtualAlarmPanel.drawDevice"
-	}
---]]
-
 local json = require("dkjson")
 if (type(json) == "string") then
 	-- UI5
 	json = require("json")
 end
+
+-- Devices ids
+local DID = {
+	RulesEngine = "urn:schemas-upnp-org:device:RulesEngine:1",
+	ALTUI = "urn:schemas-upnp-org:device:altui:1"
+}
 
 -- Services ids
 local SID = {
@@ -41,7 +33,8 @@ local SID = {
 	TemperatureSensor = "urn:upnp-org:serviceId:TemperatureSensor1",
 	HumiditySensor = "urn:micasaverde-com:serviceId:HumiditySensor1",
 	EnergyMetering = "urn:micasaverde-com:serviceId:EnergyMetering1",
-	RulesEngine = "urn:upnp-org:serviceId:RulesEngine1"
+	RulesEngine = "urn:upnp-org:serviceId:RulesEngine1",
+	ALTUI = "urn:upnp-org:serviceId:altui1"
 }
 
 -------------------------------------------
@@ -460,14 +453,17 @@ function getEnhancedMessage (message, context)
 		-- Most recent value from conditions
 		message = string.gsub(message, "#value#", tostring(context.value))
 	end
-	if (string.find(message, "#deviceName#")) then
+	if (string.find(message, "#devicename#")) then
 		local deviceId = tonumber(context.deviceId or "0") or 0
 		if (deviceId > 0) then
-			message = string.gsub(message, "#deviceName#", luup.devices[deviceId].description)
+			message = string.gsub(message, "#devicename#", luup.devices[deviceId].description)
 		end
 	end
-	if (string.find(message, "#lastUpdate#")) then
-		message = string.gsub(message, "#lastUpdate#", _getTimeAgo(context.lastUpdateTime))
+	if (string.find(message, "#lastupdate#")) then
+		message = string.gsub(message, "#lastupdate#", _getTimeAgo(context.lastUpdateTime))
+	end
+	if (string.find(message, "#lastupdatefull#")) then
+		message = string.gsub(message, "#lastupdatefull#", _getTimeAgoFull(context.lastUpdateTime))
 	end
 	return message
 end
@@ -1743,7 +1739,6 @@ end
 
 -- Execute one action from a rule
 local function _doRuleAction (action, params, level)
-	--local action = rule.actions[actionId]
 	if (action == nil) then
 		-- TODO : msg
 		return
@@ -1764,20 +1759,15 @@ local function _doRuleAction (action, params, level)
 		message = message .. "(level " .. json.encode(action._levels) .. ")"
 	end
 
-	-- Check if hook prevents to do action
+	-- Check if a hook prevents to do action
 	if not doHook("beforeDoingAction", rule, action._id) then
 		log(message .. " - A hook prevent from doing these actions", "doRuleAction", 3)
-		return
-	end
-
-	-- Check if rule is disabled
-	if (rule._isDisabled) then
+	-- Check if the rule is disabled
+	elseif (rule._isDisabled) then
 		log(message .. " - Don't do actions - Rule is disabled", "doRuleAction")
-		return false
-	end
 
 	--[[
-	-- TODO faire maj pour condition externe
+	-- TODO faire maj pour condition externe de la règle
 	-- Check if the rule main conditions are still respected
 	if not isMatchingAllConditions(rule.conditions, rule._context.deviceId) then
 		log(message .. " - Don't do action - Rule conditions are not respected", "doRuleAction", 2)
@@ -1787,8 +1777,9 @@ local function _doRuleAction (action, params, level)
 	--]]
 
 	-- Check if the rule action conditions are still respected
-	if ((table.getn(action.conditions) > 0) and (_getConditionsStatus(action.conditions) == "0")) then
+	elseif ((table.getn(action.conditions) > 0) and (_getConditionsStatus(action.conditions) == "0")) then
 		log(message .. " - Don't do anything - Rule is still active but action conditions are not respected", "doRuleAction", 3)
+	-- Check if the level is respected
 	elseif not _isRuleGroupActionMatchingLevel(action, level) then
 		log(message .. " - Don't do anything - Level doesn't match the requested level " .. tostring(level), "doRuleAction", 3)
 	else
@@ -2274,7 +2265,7 @@ function getRuleLevel (ruleName)
 	end
 end
 
--- Mise à jour du statut de la règle et exécution des actions liées
+-- Set the status of the rule and start linked actions
 function setRuleStatus (ruleName, status, level)
 	local rule = getRule(ruleName)
 	if (rule == nil) then
@@ -2576,6 +2567,7 @@ local function _initPluginInstance (lul_device)
 	end
 end
 
+-- Deferred startup
 local function _deferredStartup (lul_device)
 	-- Load custom modules
 	loadModules()
@@ -2590,6 +2582,35 @@ local function _deferredStartup (lul_device)
 	start()
 end
 
+-- Register with ALTUI once it is ready
+local function _registerWithALTUI ()
+	for deviceId, device in pairs(luup.devices) do
+		if (device.device_type == DID.ALTUI) then
+			if luup.is_ready(deviceId) then
+				log("Register with ALTUI main device #" .. tostring(deviceId), "registerWithALTUI")
+				luup.call_action(
+					SID.ALTUI,
+					"RegisterPlugin",
+					{
+						newDeviceType = DID.RulesEngine,
+						newScriptFile = "J_ALTUI_RulesEngine1.js",
+						newDeviceDrawFunc = "ALTUI_RulesEngine.drawDevice",
+						newStyleFunc = "",
+						newDeviceIconFunc = "",
+						newControlPanelFunc = "ALTUI_RulesEngine.drawControlPanel"
+					},
+					deviceId
+				)
+			else
+				log("ALTUI main device #" .. tostring(deviceId) .. " is not yet ready, retry to register in 10 seconds...", "registerWithALTUI")
+				luup.call_delay("RulesEngine.registerWithALTUI", 10)
+			end
+			break
+		end
+	end
+end
+
+-- Startup
 function startup (lul_device)
 	log("Start plugin '" .. _NAME .. "' (v" .. _VERSION .. ")", "startup")
 
@@ -2612,7 +2633,11 @@ function startup (lul_device)
 	-- Handlers
 	luup.register_handler("RulesEngine.handleCommand", "RulesEngine")
 
+	-- Deferred startup
 	luup.call_delay("RulesEngine.deferredStartup", 1)
+
+	-- Register with ALTUI
+	luup.call_delay("RulesEngine.registerWithALTUI", 10)
 
 	luup.set_failure(0, lul_device)
 	return true
@@ -2626,6 +2651,7 @@ _G["RulesEngine.initPluginInstance"] = _initPluginInstance
 _G["RulesEngine.onDebugValueIsUpdated"] = _onDebugValueIsUpdated
 _G["RulesEngine.deferredStartup"] = _deferredStartup
 _G["RulesEngine.handleCommand"] = _handleCommand
+_G["RulesEngine.registerWithALTUI"] = _registerWithALTUI
 
 _G["RulesEngine.doScheduledTasks"] = _doScheduledTasks
 _G["RulesEngine.doRuleAction"] = _doRuleAction
