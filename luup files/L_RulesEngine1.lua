@@ -2059,8 +2059,8 @@ function loadStartupFiles ()
 	for _, fileName in ipairs(fileNames) do
 		-- Load and execute startup LUA file
 		local path = ""
-		if lfs.attributes(fileName .. ".lzo", "mode") then
-			log("Decompress LUA startup file '" .. tostring(fileName) .. ".lzo'", "loadStartupFiles")
+		if lfs.attributes("/etc/cmh-ludl/" .. fileName .. ".lzo", "mode") then
+			log("Decompress LUA startup file '/etc/cmh-ludl/" .. tostring(fileName) .. ".lzo'", "loadStartupFiles")
 			path = "/tmp/"
 			os.execute(decompressScript .. "decompress_lzo_file " .. fileName)
 		end
@@ -2083,8 +2083,8 @@ function loadRuleFiles ()
 	local fileNames = string.split(pluginParams.ruleFiles, ",")
 	for _, fileName in ipairs(fileNames) do
 		local path = ""
-		if lfs.attributes(fileName .. ".lzo", "mode") then
-			log("Decompress rule file '" .. tostring(fileName) .. ".lzo'", "loadRuleFiles")
+		if lfs.attributes("/etc/cmh-ludl/" .. fileName .. ".lzo", "mode") then
+			log("Decompress rule file '/etc/cmh-ludl/" .. tostring(fileName) .. ".lzo'", "loadRuleFiles")
 			path = "/tmp/"
 			os.execute(decompressScript .. "decompress_lzo_file " .. fileName)
 		end

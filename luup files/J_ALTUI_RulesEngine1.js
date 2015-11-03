@@ -226,7 +226,7 @@ var ALTUI_RulesEngine = ( function( window, undefined ) {
 		$( "#blocklyDiv" ).data( "controller_id", MultiBox.controllerOf( device.altuiid ).controller );
 	};
 
-  // explicitly return public methods when this object is instantiated
+	// explicitly return public methods when this object is instantiated
 	return {
 		//---------------------------------------------------------
 		// PUBLIC  functions
