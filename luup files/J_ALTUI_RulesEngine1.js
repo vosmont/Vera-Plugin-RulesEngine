@@ -12,6 +12,7 @@
 var ALTUI_RulesEngine = ( function( window, undefined ) {  
 
 	var _location = window.location.pathname.replace( "/data_request", "" ) + "/";
+	var _resourceLoaded = {};
 
 	var htmlControlPanel = '\
 <table style="width:100%;">\
@@ -30,6 +31,10 @@ var ALTUI_RulesEngine = ( function( window, undefined ) {
 	<tr style="height:80px;">\
 		<td colspan="2">\
 			<textarea id="xmlRules" style="width:100%; height:100%;"></textarea>\
+		</td>\
+	</tr>\
+	<tr style="height:80px;">\
+		<td colspan="2" id="RulesEngine_Message">\
 		</td>\
 	</tr>\
 </table>\
@@ -137,8 +142,8 @@ var ALTUI_RulesEngine = ( function( window, undefined ) {
 					});
 				});
 			})
-			.fail(function( jqxhr, settings, exception ) {
-				$("#blocklyDiv" ).text( "Triggered ajaxError handler." );
+			.fail(function( jqxhr, textStatus, errorThrown ) {
+				$("#RulesEngine_Message" ).text( "Update device : " + textStatus + " - " + errorThrown );
 			});
 	};
 
@@ -147,47 +152,31 @@ var ALTUI_RulesEngine = ( function( window, undefined ) {
 		return '<div class="panel-content"></div>';
 	};
 
-	/*
-	function _loadResources() {
-		var d = $.Deferred();
-		if (window.ALTUI_RulesEngineResourcesAreLoaded === true) {
-			d.resolve();
-		} else {
-			var location = window.location.pathname.replace("/port_3480/data_request", "") + "/cgi-bin/cmh/download_upnp_file.sh";
-			$.when(
-				$.getScript(location + "?file=J_RulesEngine1_Blockly.js.lzo"),
-				$.getScript(location + "?file=J_RulesEngine1_Blockly_AlarmPanel.js.lzo")
-			)
-				.done(function( script, textStatus ) {
-					d.resolve();
-				})
-				.fail(function( jqxhr, settings, exception ) {
-					$("#blocklyDiv" ).text( "Triggered ajaxError handler." );
-					d.fail();
-				});
-		}
-		return d.promise();
-	};
-	*/
-
 	function _loadResources( fileNames ) {
 		var d = $.Deferred();
-		if ( window.ALTUI_RulesEngineResourcesAreLoaded === true ) {
-			d.resolve();
-		} else {
-			var resourceLoaders = [];
-			$.each( fileNames, function( index, fileName ) {
-				resourceLoaders.push( $.getScript( _location + fileName ) );
+		var resourceLoaders = [];
+		$.each( fileNames, function( index, fileName ) {
+			if ( !_resourceLoaded[ fileName ] ) {
+				resourceLoaders.push(
+					$.ajax( {
+						url: _location + fileName,
+						dataType: "script",
+						beforeSend: function( jqXHR, settings ) {
+							jqXHR.fileName = fileName;
+						}
+					} )
+				);
+			}
+		} );
+		$.when.apply( $, resourceLoaders )
+			.done( function( script, textStatus, jqxhr ) {
+				_resourceLoaded[ jqxhr.fileName ] = true;
+				d.resolve();
+			} )
+			.fail( function( jqxhr, textStatus, errorThrown  ) {
+				$( "#RulesEngine_Message" ).text( "Load \"" + jqxhr.fileName + "\" : " + textStatus + " - " + errorThrown  );
+				d.fail();
 			} );
-			$.when.apply( $, resourceLoaders )
-				.done( function( script, textStatus ) {
-					d.resolve();
-				})
-				.fail( function( jqxhr, settings, exception ) {
-					$( "#blocklyDiv" ).text( "Triggered ajaxError handler." );
-					d.fail();
-				});
-		}
 		return d.promise();
 	};
 
@@ -199,8 +188,8 @@ var ALTUI_RulesEngine = ( function( window, undefined ) {
 				var xml = Blockly.Xml.textToDom(xmlText);
 				Blockly.Xml.domToWorkspace(workspace, xml);
 			} )
-			.fail( function( jqxhr, settings, exception ) {
-				$("#blocklyDiv" ).text( "Triggered ajaxError handler." );
+			.fail( function( jqxhr, textStatus, errorThrown ) {
+				$("#RulesEngine_Message" ).text( "Load rules : " + textStatus + " - " + errorThrown );
 			} );
 	};
 

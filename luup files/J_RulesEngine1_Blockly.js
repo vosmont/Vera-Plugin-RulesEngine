@@ -529,7 +529,7 @@ function _updateDeviceDropdownOptions( params ) {
 		},
 		function( devices ) {
 			$.each( devices, function( i, device ) {
-				options.push( [ device.name, device.id ] );
+				options.push( [ device.name, device.id.toString() ] );
 				indexDevices[ device.id.toString() ] = device.name;
 			} );
 		}
@@ -864,7 +864,7 @@ Blockly.Blocks[ "condition_value" ] = {
 		_updateRoomDropdownOptions.call( this );
 		//if (!_updateDeviceDropdownOptions.call( this, { roomId: roomId, deviceId: deviceId, deviceName: deviceName, service: service, variable: variable } )) {
 		if (!_updateDeviceDropdownOptions.call( this, { deviceId: deviceId, deviceName: deviceName, service: service, variable: variable } )) {
-			deviceId = 0;
+			deviceId = "0";
 		}
 		_updateServiceDropdownOptions.call( this, { deviceId: deviceId, variable: variable } );
 		_updateVariableDropdownOptions.call( this, { deviceId: deviceId, service: service } );

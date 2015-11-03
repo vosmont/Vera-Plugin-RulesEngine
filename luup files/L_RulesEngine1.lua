@@ -1936,7 +1936,7 @@ local function _computeRuleStatus (rule)
 	local msg = "Rule '" .. rule.name .. "'"
 	log(msg .. " - Compute rule status", "computeRuleStatus", 3)
 	local status, level = _getConditionsStatus(rule.conditions)
-print("rule.conditions context", json.encode(rule.conditions._context))
+--print("rule.conditions context", json.encode(rule.conditions._context))
 	log(msg .. " - Rule status:'" .. tostring(status) .. "' - Rule level: '" .. tostring(level) .. "'", "computeRuleStatus")
 	return status, level
 end
@@ -2043,7 +2043,10 @@ function loadModules ()
 	for _, moduleName in ipairs(moduleNames) do
 		-- Load module
 		log("Load module '" .. tostring(moduleName) .. "'", "loadModules")
-		local myModule = require(moduleName)
+		local status, myModule = pcall(require, moduleName)
+		if not status then
+			error(myModule, "loadModules")
+		end
 		if (type(myModule) == "string") then
 			error("Can not load module: " .. tostring(myModule), "loadModules")
 		end
@@ -2051,12 +2054,18 @@ function loadModules ()
 end
 
 function loadStartupFiles ()
+	local lfs = require("lfs")
 	local fileNames = string.split(pluginParams.startupFiles, ",")
 	for _, fileName in ipairs(fileNames) do
 		-- Load and execute startup LUA file
-		log("Load LUA startup from file '" .. tostring(fileName) .. "'", "loadStartupFiles")
-		os.execute(decompressScript .. "decompress_lzo_file " .. fileName)
-		local startup, errorMessage = loadfile("/tmp/" .. fileName)
+		local path = ""
+		if lfs.attributes(fileName .. ".lzo", "mode") then
+			log("Decompress LUA startup file '" .. tostring(fileName) .. ".lzo'", "loadStartupFiles")
+			path = "/tmp/"
+			os.execute(decompressScript .. "decompress_lzo_file " .. fileName)
+		end
+		log("Load LUA startup from file '" .. path .. tostring(fileName) .. "'", "loadStartupFiles")
+		local startup, errorMessage = loadfile(path .. fileName)
 		if (startup ~= nil) then
 			log("Execute startup LUA code", "startup")
 			local status, result = pcall(startup)
@@ -2070,10 +2079,16 @@ function loadStartupFiles ()
 end
 
 function loadRuleFiles ()
+	local lfs = require("lfs")
 	local fileNames = string.split(pluginParams.ruleFiles, ",")
 	for _, fileName in ipairs(fileNames) do
-		os.execute(decompressScript .. "decompress_lzo_file " .. fileName)
-		loadRuleFile("/tmp/" .. fileName)
+		local path = ""
+		if lfs.attributes(fileName .. ".lzo", "mode") then
+			log("Decompress rule file '" .. tostring(fileName) .. ".lzo'", "loadRuleFiles")
+			path = "/tmp/"
+			os.execute(decompressScript .. "decompress_lzo_file " .. fileName)
+		end
+		loadRuleFile(path .. fileName)
 	end
 end
 
@@ -2510,7 +2525,7 @@ local _handlerCommands = {
 
 		timeline = timeline .. "History:\n"
 		for _, event in ipairs(_history) do
-			timeline = timeline .. os.date("%X", event[1]) .. " - " .. tostring(event[2]) .. "\n"
+			timeline = timeline .. os.date("%X", event[1]) .. " - " .. tostring(event[2]) .. " - " .. tostring(event[3]) .. "\n"
 		end
 		
 		timeline = timeline .. "\n\nComming next:\n"
