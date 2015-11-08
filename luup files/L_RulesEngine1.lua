@@ -43,7 +43,7 @@ local SID = {
 
 _NAME = "RulesEngine"
 _DESCRIPTION = "Rules Engine for the Vera"
-_VERSION = "0.01"
+_VERSION = "0.02"
 local settings = {}
 local _isStarted = false
 local pluginParams = {}
@@ -156,7 +156,7 @@ end
 -------------------------------------------
 
 local decompressScript = [[
-decompress_lzo_file() {
+decompress_lzo_file_in_tmp() {
 	SRC_FILE=/etc/cmh-ludl/$1.lzo
 	DEST_FILE=/tmp/$1
 	if [ ! -e $DEST_FILE -o $SRC_FILE -nt $DEST_FILE ]
@@ -525,7 +525,7 @@ local function _getTaskInfo (task)
 end
 
 local function _purgeExpiredWakeUp ()
-print("_nextWakeUps", json.encode(_nextWakeUps))
+--print("_nextWakeUps", json.encode(_nextWakeUps))
 	local now = os.time()
 	for i = #_nextWakeUps, 1, -1 do
 		if (_nextWakeUps[i] <= now) then
@@ -535,19 +535,19 @@ print("_nextWakeUps", json.encode(_nextWakeUps))
 			table.remove(_nextWakeUps, i)
 		end
 	end
-print("_nextWakeUps", json.encode(_nextWakeUps))
+--print("_nextWakeUps", json.encode(_nextWakeUps))
 end
 
 local function _prepareNextWakeUp ()
 	if (table.getn(_scheduledTasks) == 0) then
 		log("No more scheduled task", "prepareNextWakeUp", 2)
+		notifyTimelineUpdate()
 		return false
 	end
 	local now = os.time()
 
-	--if ((_nextScheduledTimeout < 0) or (_scheduledTasks[1].timeout < _nextScheduledTimeout)) then
-print("_nextWakeUps", json.encode(_nextWakeUps))
-print("os.time", now, _scheduledTasks[1].timeout)
+--print("_nextWakeUps", json.encode(_nextWakeUps))
+--print("os.time", now, _scheduledTasks[1].timeout)
 	if ((#_nextWakeUps == 0) or (_scheduledTasks[1].timeout < _nextWakeUps[1])) then
 		-- No scheduled wake-up yet or more recent task to scheduled
 		table.insert(_nextWakeUps, 1, _scheduledTasks[1].timeout)
@@ -566,6 +566,7 @@ print("os.time", now, _scheduledTasks[1].timeout)
 				"prepareNextWakeUp", 4
 			)
 		end
+		notifyTimelineUpdate()
 		luup.call_delay("RulesEngine.doScheduledTasks", remainingSeconds, nil)
 	else
 		log("Doesn't change next wakeup : no scheduled task before current timeout", "prepareNextWakeUp", 2)
@@ -616,18 +617,23 @@ local function _removeScheduledTask (rule, level, item)
 		msg = msg .. " and item " .. _getItemSummary(item)
 	end
 	log(msg, "removeScheduledTask", 3)
+	local ruleScheduledTasks = {}
 	for i = #_scheduledTasks, 1, -1 do
-		if (
-			(_scheduledTasks[i].ruleName == rule.name)
-			and ((level == nil) or (_scheduledTasks[i].level == level))
-			and ((item == nil) or (_scheduledTasks[i].item == item))
-		) then
-			if _isLogLevel(4) then
-				log("Remove task #" .. tostring(i) .. "/" .. tostring(#_scheduledTasks) .. ": " .. _getTaskInfo(_scheduledTasks[i]), "removeScheduledTask", 4)
+		if (_scheduledTasks[i].ruleName == rule.name) then
+			if (((level == nil) or (_scheduledTasks[i].level == level))
+				and ((item == nil) or (_scheduledTasks[i].item == item))
+			) then
+				if _isLogLevel(4) then
+					log("Remove task #" .. tostring(i) .. "/" .. tostring(#_scheduledTasks) .. ": " .. _getTaskInfo(_scheduledTasks[i]), "removeScheduledTask", 4)
+				end
+				table.remove(_scheduledTasks, i)
+			else
+				table.insert(ruleScheduledTasks, 1, _scheduledTasks[i])
 			end
-			table.remove(_scheduledTasks, i)
 		end
 	end
+	pluginParams.rules[rule._id].scheduledTasks = ruleScheduledTasks
+	updateRules()
 	_prepareNextWakeUp()
 end
 
@@ -656,11 +662,26 @@ local function _doScheduledTasks ()
 			_prepareNextWakeUp()
 		else
 			log("There's no more sheduled task to do", "doScheduledTasks", 2)
+			notifyTimelineUpdate()
 		end
 	else
-		--_nextScheduledTimeout = -1
 		log("There's no sheduled task to do", "doScheduledTasks", 2)
+		notifyTimelineUpdate()
 	end
+end
+
+local function _getScheduledTasks (rule)
+	local _rule = getRule(rule)
+	if (_rule == nil) then
+		return
+	end
+	local scheduledTasks = {}
+	for _, scheduledTask in ipairs(_scheduledTasks) do
+		if (scheduledTask.ruleName == rule.name) then
+			table.insert(scheduledTasks, scheduledTask)
+		end
+	end
+	return scheduledTasks
 end
 
 -- **************************************************
@@ -1485,9 +1506,21 @@ end
 local _history = {}
 
 local function _addToHistory (timestamp, eventType, event)
-	-- TODO : à améliorer
+	-- TODO : à améliorer (sauvegarder)
 	log("Add entry : " .. tostring(timestamp) .. " - " .. tostring(eventType) .. " - " .. tostring(event), "addToHistory", 2)
-	table.insert(_history, {timestamp, eventType, event})
+	table.insert(_history, {
+		timestamp = timestamp,
+		eventType = eventType,
+		event = event
+	})
+	notifyTimelineUpdate()
+end
+
+function notifyTimelineUpdate ()
+	if (pluginParams.deviceId == nil) then
+		return false
+	end
+	luup.variable_set(SID.RulesEngine, "LastUpdate", os.time(), pluginParams.deviceId)
 end
 
 -- **************************************************
@@ -1522,6 +1555,7 @@ local function _onDeviceVariableIsUpdated (lul_device, lul_service, lul_variable
 		updateRuleContext(ruleName, context)
 		-- Update status of the linked rule (asynchronously)
 		if hasAtLeastOneConditionStatusChanged then
+			log("Update rule status", "onDeviceVariableIsUpdated", 4)
 			luup.call_delay("RulesEngine.updateRuleStatus", 0, ruleName)
 		end
 	end
@@ -1946,7 +1980,12 @@ local function _startRule (rule)
 	-- Initialisation du statut de la règle
 	log("Rule '" .. rule.name .. "' - Init rule status", "startRule", 2)
 	doHook("onRuleStatusInit", rule)
-	if (rule._status == nil) then
+	if (rule._status ~= nil) then
+		-- Status of the has been initialized by a hook
+		-- Update statuses of the conditions
+		-- TODO: problème avec les délais
+		_computeRuleStatus(rule)
+	else
 		-- Calcul du statut de la règle car non initialisée par un hook
 		rule._status, rule._level = _computeRuleStatus(rule)
 		--rule._lastStatusUpdateTime = os.time()
@@ -1981,9 +2020,20 @@ local function _startRule (rule)
 		end
 	end
 
+	pluginParams.rules[rule._id] = {
+		status = rule._status,
+		lastStatusUpdate = rule._lastStatusUpdateTime,
+		level = rule._level,
+		lastLevelUpdate = rule._lastLevelUpdateTime
+	}
+
 	-- Update rule status
 	-- Start actions won't be done again if status is still activated (no change)
 	_onRuleStatusIsUpdated(rule.name, rule._status)
+end
+
+function updateRules ()
+	luup.variable_set(SID.RulesEngine, "Rules", tostring(json.encode(pluginParams.rules)), pluginParams.deviceId)
 end
 
 -- Update rule context
@@ -1992,6 +2042,7 @@ function updateRuleContext (ruleName, context)
 	if (rule == nil) then
 		return
 	end
+	log("Update rule context", "updateRuleContext", 4)
 	rule._context.lastStatusUpdateTime = rule._lastStatusUpdateTime
 	rule._context.lastLevelUpdateTime = rule._lastLevelUpdateTime
 	if (context ~= nil) then
@@ -2027,6 +2078,7 @@ function addRule (rule)
 		end
 	else
 		log("Can not add rule '" .. rule.name .. "' : there is at least one error in settings", "addRule")
+		pluginParams.rules[rule._id].error = "error in settings"
 	end
 end
 
@@ -2062,7 +2114,7 @@ function loadStartupFiles ()
 		if lfs.attributes("/etc/cmh-ludl/" .. fileName .. ".lzo", "mode") then
 			log("Decompress LUA startup file '/etc/cmh-ludl/" .. tostring(fileName) .. ".lzo'", "loadStartupFiles")
 			path = "/tmp/"
-			os.execute(decompressScript .. "decompress_lzo_file " .. fileName)
+			os.execute(decompressScript .. "decompress_lzo_file_in_tmp " .. fileName)
 		end
 		log("Load LUA startup from file '" .. path .. tostring(fileName) .. "'", "loadStartupFiles")
 		local startup, errorMessage = loadfile(path .. fileName)
@@ -2081,21 +2133,21 @@ end
 function loadRuleFiles ()
 	local lfs = require("lfs")
 	local fileNames = string.split(pluginParams.ruleFiles, ",")
-	for _, fileName in ipairs(fileNames) do
+	for idx, fileName in ipairs(fileNames) do
 		local path = ""
 		if lfs.attributes("/etc/cmh-ludl/" .. fileName .. ".lzo", "mode") then
 			log("Decompress rule file '/etc/cmh-ludl/" .. tostring(fileName) .. ".lzo'", "loadRuleFiles")
 			path = "/tmp/"
-			os.execute(decompressScript .. "decompress_lzo_file " .. fileName)
+			os.execute(decompressScript .. "decompress_lzo_file_in_tmp " .. fileName)
 		end
-		loadRuleFile(path .. fileName)
+		loadRuleFile(path .. fileName, idx)
 	end
 end
 
-function loadRuleFile (fileName)
+function loadRuleFile (fileName, idx)
 	-- Load rules (xml from Blockly)
 	log("Load rules from file '" .. fileName .. "'", "loadRuleFile")
-	file = io.open(fileName)
+	local file = io.open(fileName)
 	if (file == nil) then
 		log("File '" .. fileName .. "' does not exist", "loadRuleFile")
 		return
@@ -2213,13 +2265,20 @@ function loadRuleFile (fileName)
 	xmltable = lom.parse(xmlRules)
 	--print(json.encode(xmltable))
 	--print("")
+
+	local i = 1
 	if ((type(xmltable) == "table") and (xmltable.tag == "xml")) then
 		for _, xmlRule in ipairs(xmltable) do
 			if ((type(xmlRule) == "table") and (xmlRule.tag == "block") and (xmlRule.attr.type == "rule")) then
 				local rule = parseXmlItem(xmlRule, 0)
+				rule._id = tostring(idx) .. "-" .. tostring(i)
+				pluginParams.rules[rule._id] = {
+					status = -1
+				}
 --print("")
 --print("rule", json.encode(rule))
 				addRule(rule)
+				i = i + 1
 			end
 		end
 	else
@@ -2375,6 +2434,13 @@ function setRuleStatus (ruleName, status, level)
 
 	end
 
+	if ((hasRuleStatusChanged) or (hasRuleLevelChanged)) then
+		pluginParams.rules[rule._id].status = rule._status
+		pluginParams.rules[rule._id].lastStatusUpdate = rule._lastStatusUpdateTime
+		pluginParams.rules[rule._id].level = rule._level
+		pluginParams.rules[rule._id].lastLevelUpdate = rule._lastLevelUpdateTime
+		updateRules()
+	end
 	if (hasRuleStatusChanged) then
 		-- Notify that rule status has changed
 		_onRuleStatusIsUpdated(rule.name, rule._status)
@@ -2447,6 +2513,7 @@ function start ()
 	for ruleName, rule in pairs(_rules) do
 		_startRule(rule)
 	end
+	updateRules()
 	_isStarted = true
 	--RulesEngine.dump()
 end
@@ -2516,29 +2583,54 @@ end
 -------------------------------------------
 
 local _handlerCommands = {
-	["default"] = function (params)
+	["default"] = function (params, outputFormat)
 		return "Unknown command", "text/plain"
 	end,
 
-	["getTimeline"] = function (params)
-		local timeline = ""
+	["getTimeline"] = function (params, outputFormat)
+		local outputFormat = outputFormat or "html"
 
-		timeline = timeline .. "History:\n"
-		for _, event in ipairs(_history) do
-			timeline = timeline .. os.date("%X", event[1]) .. " - " .. tostring(event[2]) .. " - " .. tostring(event[3]) .. "\n"
+		if (outputFormat == "html") then
+			local timeline = "<div><h2>History:</h2>"
+			for _, entry in ipairs(_history) do
+				timeline = timeline .. "<p>" .. os.date("%X", entry.timestamp) .. " - " .. tostring(entry.eventType) .. " - " .. tostring(entry.event) .. "</p>"
+			end
+			timeline = timeline .. "</div>"
+
+			timeline = timeline .. "<div><h2>Comming next:</h2>"
+			for _, scheduledTask in ipairs(_scheduledTasks) do
+				timeline = timeline .. "<p>" .. os.date("%X", scheduledTask.timeout) .. " - " .. _getItemSummary(scheduledTask.item) .. "</p>"
+			end
+			timeline = timeline .. "</div>"
+log("timeline: " .. tostring(timeline), "handleCommand.getTimeline")
+			return timeline, "text/plain"
+
+		elseif (outputFormat == "json") then
+			local timeline = {
+				history = _history,
+				scheduled = {}
+			}
+			for _, scheduledTask in ipairs(_scheduledTasks) do
+				table.insert(timeline.scheduled, {
+					timestamp = scheduledTask.timeout,
+					eventType = "Schedule",
+					event = _getItemSummary(scheduledTask.item)
+				})
+			end
+log("timeline: " .. tostring(json.encode(timeline)), "handleCommand.getTimeline")
+			return tostring(json.encode(timeline)), "application/json"
+
 		end
-		
-		timeline = timeline .. "\n\nComming next:\n"
-		for _, scheduledTask in ipairs(_scheduledTasks) do
-			timeline = timeline .. os.date("%X", scheduledTask.timeout) .. " - " .. _getItemSummary(scheduledTask.item) .. "\n"
-		end
-		
-		--return timeline, "application/json"
-		return timeline, "text/plain"
+
+		return false
+	end,
+
+	["testPost"] = function (params, outputFormat)
+		return params["myData"], "text/plain"
 	end
 }
 setmetatable(_handlerCommands,{
-	__index = function(t, command)
+	__index = function(t, command, outputFormat)
 		log("No handler for command '" ..  tostring(command) .. "'", "handlerRulesEngine")
 		return _handlerCommands["default"]
 	end
@@ -2551,7 +2643,7 @@ local function _handleCommand (lul_request, lul_parameters, lul_outputformat)
 
 	local command = lul_parameters["command"] or "default"
 	log("Get handler for command '" .. tostring(command) .."'", "handleCommand")
-	return _handlerCommands[command](lul_parameters)
+	return _handlerCommands[command](lul_parameters, lul_outputformat)
 end
 
 -------------------------------------------
@@ -2565,11 +2657,15 @@ local function _initPluginInstance (lul_device)
 	-- Get plugin params for this device
 	_getVariableOrInit(lul_device, SID.RulesEngine, "Status", "0")
 	_getVariableOrInit(lul_device, SID.RulesEngine, "Message", "")
+	_getVariableOrInit(lul_device, SID.RulesEngine, "LastUpdate", "")
+	_getVariableOrInit(lul_device, SID.RulesEngine, "Rules", "")
 	pluginParams = {
+		deviceId = lul_device,
 		modules = _getVariableOrInit(lul_device, SID.RulesEngine, "Modules", "") or "",
 		toolboxConfig = _getVariableOrInit(lul_device, SID.RulesEngine, "ToolboxConfig", "") or "",
 		startupFiles = _getVariableOrInit(lul_device, SID.RulesEngine, "StartupFiles", "C_RulesEngine_Startup.lua") or "",
-		ruleFiles = _getVariableOrInit(lul_device, SID.RulesEngine, "RuleFiles", "C_RulesEngine_Rules.xml") or ""
+		ruleFiles = _getVariableOrInit(lul_device, SID.RulesEngine, "RuleFiles", "C_RulesEngine_Rules.xml") or "",
+		rules = {}
 	}
 
 	-- Get debug mode
@@ -2610,7 +2706,7 @@ local function _registerWithALTUI ()
 						newDeviceType = DID.RulesEngine,
 						newScriptFile = "J_ALTUI_RulesEngine1.js",
 						newDeviceDrawFunc = "ALTUI_RulesEngine.drawDevice",
-						newStyleFunc = "",
+						newStyleFunc = "ALTUI_RulesEngine.getStyle",
 						newDeviceIconFunc = "",
 						newControlPanelFunc = "ALTUI_RulesEngine.drawControlPanel"
 					},

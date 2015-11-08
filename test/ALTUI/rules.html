@@ -245,8 +245,9 @@ MultiBox = {
 
 	function loadXml() {
 		var xml_text = $("#xmlRules").val();
+		var $xml = $.parseXML( xml_text );
 		var xml = Blockly.Xml.textToDom(xml_text);
-		Blockly.Xml.domToWorkspace(workspace, xml);
+		Blockly.Xml.domToWorkspace(workspace, $xml.childNodes[0]);
 	}
 	function dumpXml() {
 		var xml = Blockly.Xml.workspaceToDom(workspace);
