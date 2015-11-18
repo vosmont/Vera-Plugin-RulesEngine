@@ -316,9 +316,15 @@ var ALTUI_RulesEngine = ( function( window, undefined ) {
 		} );
 		// Execute loaders
 		$.when.apply( $, loaders )
-			.done( function() {
-				for (var i = 0; i < arguments.length; i++) {
-					_resourceLoaded[ arguments[ i ][ 2 ].fileName ] = true;
+			.done( function( xml, textStatus, jqxhr ) {
+				if (loaders.length === 1) {
+					_resourceLoaded[ jqxhr.fileName ] = true;
+				} else if (loaders.length > 1) {
+					// arguments : [ [ xml, textStatus, jqxhr ], ... ]
+					for (var i = 0; i < arguments.length; i++) {
+						var jqxhr = arguments[ i ][ 2 ];
+						_resourceLoaded[ jqxhr.fileName ] = true;
+					}
 				}
 				d.resolve();
 			} )
