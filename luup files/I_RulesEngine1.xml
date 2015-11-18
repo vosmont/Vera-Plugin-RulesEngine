@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <implementation>
 	<functions>
-		RulesEngine = {}
+		local RulesEngine
 
 		function RulesEngine_startup (lul_device)
 			luup.log("RulesEngine startup")
@@ -30,7 +30,47 @@
 			<name>LoadRules</name>
 			<job>
 				if (RulesEngine ~= nil) then
-					RulesEngine.loadRules(lul_settings.fileName)
+					RulesEngine.loadRuleFile(lul_settings.fileName, false)
+				end
+				return 4, nil
+			</job>
+		</action>
+		<action>
+			<serviceId>urn:upnp-org:serviceId:RulesEngine1</serviceId>
+			<name>EnableRule</name>
+			<job>
+				if (RulesEngine ~= nil) then
+					RulesEngine.enableRule(lul_settings.ruleId)
+				end
+				return 4, nil
+			</job>
+		</action>
+		<action>
+			<serviceId>urn:upnp-org:serviceId:RulesEngine1</serviceId>
+			<name>DisableRule</name>
+			<job>
+				if (RulesEngine ~= nil) then
+					RulesEngine.disableRule(lul_settings.ruleId)
+				end
+				return 4, nil
+			</job>
+		</action>
+		<action>
+			<serviceId>urn:upnp-org:serviceId:RulesEngine1</serviceId>
+			<name>SetRuleArming</name>
+			<job>
+				if (RulesEngine ~= nil) then
+					RulesEngine.setRuleArming(lul_settings.ruleId, lul_settings.arming)
+				end
+				return 4, nil
+			</job>
+		</action>
+		<action>
+			<serviceId>urn:upnp-org:serviceId:RulesEngine1</serviceId>
+			<name>SetRuleAcknowledgement</name>
+			<job>
+				if (RulesEngine ~= nil) then
+					RulesEngine.setRuleAcknowledgement(lul_settings.ruleId, lul_settings.acknowledgement)
 				end
 				return 4, nil
 			</job>

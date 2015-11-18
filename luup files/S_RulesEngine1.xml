@@ -26,12 +26,17 @@
 			<dataType>string</dataType>
 		</stateVariable>
 		<stateVariable>
+			<name>A_ARG_TYPE_RuleId</name>
+			<sendEventsAttribute>no</sendEventsAttribute>
+			<dataType>string</dataType>
+		</stateVariable>
+		<stateVariable>
 			<name>A_ARG_TYPE_RuleName</name>
 			<sendEventsAttribute>no</sendEventsAttribute>
 			<dataType>string</dataType>
 		</stateVariable>
 		<stateVariable>
-			<name>A_ARG_TYPE_RuleContent</name>
+			<name>A_ARG_TYPE_Acknowledgement</name>
 			<sendEventsAttribute>no</sendEventsAttribute>
 			<dataType>string</dataType>
 		</stateVariable>
@@ -48,17 +53,37 @@
 			</argumentList>
 		</action>
 		<action>
-			<name>SetRule</name>
+			<name>EnableRule</name>
 			<argumentList>
 				<argument>
-					<name>ruleName</name>
+					<name>ruleId</name>
 					<direction>in</direction>
-					<relatedStateVariable>A_ARG_TYPE_RuleName</relatedStateVariable>
+					<relatedStateVariable>A_ARG_TYPE_RuleId</relatedStateVariable>
+				</argument>
+			</argumentList>
+		</action>
+		<action>
+			<name>DisableRule</name>
+			<argumentList>
+				<argument>
+					<name>ruleId</name>
+					<direction>in</direction>
+					<relatedStateVariable>A_ARG_TYPE_RuleId</relatedStateVariable>
+				</argument>
+			</argumentList>
+		</action>
+		<action>
+			<name>SetRuleAcknowledgement</name>
+			<argumentList>
+				<argument>
+					<name>ruleId</name>
+					<direction>in</direction>
+					<relatedStateVariable>A_ARG_TYPE_RuleId</relatedStateVariable>
 				</argument>
 				<argument>
-					<name>newContent</name>
+					<name>acknowledgement</name>
 					<direction>in</direction>
-					<relatedStateVariable>A_ARG_TYPE_RuleContent</relatedStateVariable>
+					<relatedStateVariable>A_ARG_TYPE_Acknowledgement</relatedStateVariable>
 				</argument>
 			</argumentList>
 		</action>

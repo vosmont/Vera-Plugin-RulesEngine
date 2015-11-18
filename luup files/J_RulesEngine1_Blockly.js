@@ -254,10 +254,15 @@ Blockly.Blocks[ "rule" ] = {
 	init: function() {
 		this.setColour(160);
 
+		var thatBlock = this;
 		this.appendValueInput( "name" )
-			.appendField( new Blockly.FieldCheckbox( "TRUE" ), "isEnabled" )
+			//.appendField( new Blockly.FieldCheckbox( "TRUE" ), "isEnabled" )
 			.setCheck( "String" )
-			.appendField( "Rule" );
+			.appendField( "Rule #" )
+			.appendField( new Blockly.FieldTextInput( "", function ( text ) {
+				thatBlock.setWarningText( "You should not modify the id of a rule,\nunless you know exactly what you are doing.\nIf it's a new rule, let the id empty,\nthe engine will calculate it." );
+				return text;
+			} ), "id" );
 
 		//var image = new Blockly.FieldImage('http://www.gstatic.com/codesite/ph/images/star_on.gif', 15, 15, '*');
 		//input.appendField(image);
@@ -289,6 +294,7 @@ Blockly.Blocks[ "rule" ] = {
 
 	onchange: function() {
 		// Check if is enabled
+		/*
 		if ( this.getFieldValue( "isEnabled" ) === "TRUE" ) {
 			if ( this.disabled ) {
 				this.setDisabled( false );
@@ -298,6 +304,7 @@ Blockly.Blocks[ "rule" ] = {
 				this.setDisabled( true );
 			}
 		}
+		*/
 	}
 };
 
@@ -346,10 +353,23 @@ Blockly.Blocks[ "property_auto_untrip" ] = {
 	init: function() {
 		this.setColour( Blockly.Blocks.properties.HUE );
 
-		this.appendDummyInput( "since" )
+		this.appendDummyInput()
 			.appendField( "auto untrip in" )
-			.appendField (new Blockly.FieldTextInput( "0", Blockly.FieldTextInput.numberValidator ), "autoUntripInterval" )
+			.appendField( new Blockly.FieldTextInput( "0", Blockly.FieldTextInput.numberValidator ), "autoUntripInterval" )
 			.appendField( new Blockly.FieldDropdown( [ [ "seconds", "S"], [ "minutes", "M" ], [ "hours", "H" ] ] ), "unit" );
+
+		this.setInputsInline( true );
+		this.setOutput( true, "Property" );
+	}
+};
+
+Blockly.Blocks[ "property_is_acknowledgeable" ] = {
+	init: function() {
+		this.setColour( Blockly.Blocks.properties.HUE );
+
+		this.appendDummyInput()
+			.appendField( "is" )
+			.appendField( new Blockly.FieldDropdown( [ [ "acknowledgeable", "TRUE" ], [ "not acknowledgeable", "FALSE" ] ] ), "isAcknowledgeable" );
 
 		this.setInputsInline( true );
 		this.setOutput( true, "Property" );
