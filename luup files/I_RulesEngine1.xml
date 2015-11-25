@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <implementation>
 	<functions>
-		local RulesEngine
+		--local RulesEngine
 
 		function RulesEngine_startup (lul_device)
 			luup.log("RulesEngine startup")
@@ -31,26 +31,6 @@
 			<job>
 				if (RulesEngine ~= nil) then
 					RulesEngine.loadRuleFile(lul_settings.fileName, false)
-				end
-				return 4, nil
-			</job>
-		</action>
-		<action>
-			<serviceId>urn:upnp-org:serviceId:RulesEngine1</serviceId>
-			<name>EnableRule</name>
-			<job>
-				if (RulesEngine ~= nil) then
-					RulesEngine.enableRule(lul_settings.ruleId)
-				end
-				return 4, nil
-			</job>
-		</action>
-		<action>
-			<serviceId>urn:upnp-org:serviceId:RulesEngine1</serviceId>
-			<name>DisableRule</name>
-			<job>
-				if (RulesEngine ~= nil) then
-					RulesEngine.disableRule(lul_settings.ruleId)
 				end
 				return 4, nil
 			</job>

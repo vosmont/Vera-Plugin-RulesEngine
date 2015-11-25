@@ -754,6 +754,7 @@ function _updateActionShape( actionName ) {
 	if ( this.getInput( "params" ) ) {
 		this.removeInput( "params" );
 	}
+console.log("_updateActionShape", actionName)
 	if ( _isEmpty( actionName ) ) {
 		return;
 	}
@@ -767,7 +768,7 @@ function _updateActionShape( actionName ) {
 				}
 				input
 					.appendField( inputName + " :" )
-					.appendField( new Blockly.FieldTextInput( "" ), inputName );
+					.appendField( new Blockly.FieldTextInput( "" ), "param_" + inputName );
 			} );
 			input.appendField( "}" );
 		}

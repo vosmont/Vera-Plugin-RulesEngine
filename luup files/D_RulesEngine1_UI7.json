@@ -1,17 +1,41 @@
 {
-	"flashicon": "http://vosmont.github.io/icons/rules_engine.png",
+	"default_icon": "http://vosmont.github.io/icons/virtual_alarm_panel.png",
 	"state_icons": [
-		"rules_engine_0.png",
-		"rules_engine_50.png",
-		"rules_engine_100.png"
+		{
+			"img": "http://vosmont.github.io/icons/rules_engine_off.png",
+			"conditions": [
+				{
+					"service": "urn:upnp-org:serviceId:RulesEngine1",
+					"variable": "Status",
+					"operator": "==",
+					"value": 0
+				}
+			]
+		},
+		{
+			"img": "http://vosmont.github.io/icons/rules_engine_on.png",
+			"conditions": [
+				{
+					"service": "urn:upnp-org:serviceId:RulesEngine1",
+					"variable": "Status",
+					"operator": "==",
+					"value": 1
+				}
+			]
+		},
+		{
+			"img": "http://vosmont.github.io/icons/rules_engine_on_acknoledge.png",
+			"conditions": [
+				{
+					"service": "urn:upnp-org:serviceId:RulesEngine1",
+					"variable": "Status",
+					"operator": "==",
+					"value": 2
+				}
+			]
+		}
 	],
 	"inScene": "1",
-	"DisplayStatus": {
-		"Service": "urn:upnp-org:serviceId:RulesEngine1",
-		"Variable": "Status",
-		"MinValue": "0",
-		"MaxValue": "2"
-	},
 	"doc_url":{
 		"doc_forced_url":{
 			"text":"http://forum.micasaverde.com/"
@@ -107,5 +131,5 @@
 	],
 	"eventList2":[
 	],
-	"DeviceType":"urn:schemas-upnp-org:device:RulesEngine:1"
+	"device_type":"urn:schemas-upnp-org:device:RulesEngine:1"
 }
