@@ -725,6 +725,17 @@ end
 -- Params (rule condition, action condition)
 -- **************************************************
 
+local function _getIntervalInSeconds (interval, unit)
+	local interval = tonumber(interval) or 0
+	local unit = unit or "S"
+	if (unit == "M") then
+		interval = interval * 60
+	elseif (unit == "H") then
+		interval = interval * 3600
+	end
+	return interval
+end
+
 local _addParam = {}
 setmetatable(_addParam, {
 	__index = function(t, item, conditionParamName)
@@ -734,14 +745,14 @@ setmetatable(_addParam, {
 	end
 })
 
+	_addParam["property_auto_untrip"] = function (item, param)
+		local autoUntripInterval = _getIntervalInSeconds(param.autoUntripInterval, param.unit)
+		log(_getItemSummary(item) .. " - Add 'autoUntripInterval' : '" .. tostring(autoUntripInterval) .. "'", "addParams", 4)
+		item["_autoUntripInterval"] = autoUntripInterval
+	end
+
 	_addParam["condition_param_since"] = function (item, param)
-		local unit = param.unit or "S"
-		local sinceInterval = tonumber(param.sinceInterval) or 0
-		if (unit == "M") then
-			sinceInterval = sinceInterval * 60
-		elseif (unit == "H") then
-			sinceInterval = sinceInterval * 3600
-		end
+		local sinceInterval = _getIntervalInSeconds(param.sinceInterval, param.unit)
 		log(_getItemSummary(item) .. " - Add 'sinceInterval' : '" .. tostring(sinceInterval) .. "'", "addParams", 4)
 		item["_sinceInterval"] = sinceInterval
 	end
@@ -770,13 +781,7 @@ setmetatable(_addParam, {
 	end
 
 	_addParam["action_param_delay"] = function (item, param)
-		local unit = param.unit or "S"
-		local delayInterval = tonumber(param.delayInterval) or 0
-		if (unit == "M") then
-			delayInterval = delayInterval * 60
-		elseif (unit == "H") then
-			delayInterval = delayInterval * 3600
-		end
+		local delayInterval = _getIntervalInSeconds(param.delayInterval, param.unit)
 		log(_getItemSummary(item) .. " - Add 'delayInterval' : '" .. tostring(delayInterval) .. "'", "addParams", 4)
 		item["_delayInterval"] = delayInterval
 	end
@@ -1200,7 +1205,7 @@ setmetatable(ConditionTypes, {
 		end,
 
 		check = function (condition)
-			if not _checkParameters(condition, {{"time", "time1", "time2"}, {"daysOfWeek", "daysOfMonth"}}) then
+			if not _checkParameters(condition, {{"time", "time1", "time2"}, "timerType", "days"}) then
 				return false
 			end
 			return true
@@ -1306,11 +1311,15 @@ setmetatable(ConditionTypes, {
 
 			log(msg, "ConditionTime.updateStatus", 3)
 
-			_setConditionStatus(condition, status)
+			if _setConditionStatus(condition, status) then
+				luup.call_delay("RulesEngine.updateRuleStatus", 0, condition._ruleId)
+			end
 
 			-- TODO temps de remise à zéro (comme détecteur mouvement)
 			if (hasToTriggerOff and (status == "1")) then
-				_setConditionStatus(condition, "0")
+				if _setConditionStatus(condition, "0") then
+					luup.call_delay("RulesEngine.updateRuleStatus", 0, condition._ruleId)
+				end
 			end
 
 			return true
@@ -2291,7 +2300,6 @@ function addRule (rule, keepFormerRuleWithSameId)
 
 	-- Init
 	_initRule(rule)
-	--local ruleInfos = _initRuleInfos(rule)
 
 	-- Check settings
 	if _checkRuleSettings(rule) then
@@ -3065,7 +3073,11 @@ local _handlerCommands = {
 						},
 						{
 							key = "Tripped",
-							value = ((((rule._status == "1") and (rule._isAcknowledged == "0")) and "1") or "0")
+							value = ((((rule._status == "1") and not rule._isAcknowledged) and "1") or "0")
+						},
+						{
+							key = "Ack",
+							value = ((rule._isAcknowledged and "1") or "0")
 						},
 						{
 							key = "lasttrip",
@@ -3083,7 +3095,9 @@ local _handlerCommands = {
 				local success, msg = setRuleArming(deviceId, actionParam)
 				result = { success = success, errormsg = msg }
 			elseif (actionName == "setAck") then
-				local success, msg = setRuleAcknowledgement(deviceId, actionParam)
+				--local success, msg = setRuleAcknowledgement(deviceId, actionParam)
+				-- TODO : acknoledgement in ImperiHome can not be canceled
+				local success, msg = setRuleAcknowledgement(deviceId, "1")
 				result = { success = success, errormsg = msg }
 			else
 				result = {
