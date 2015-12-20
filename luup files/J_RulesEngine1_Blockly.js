@@ -219,7 +219,7 @@ Blockly.FieldTextArea.prototype.resizeEditor_ = function() {
 };
 
 // ****************************************************************************
-// Blockly - Test Area
+// Blockly - Text Area
 // ****************************************************************************
 
 Blockly.Msg.TEXT_TEXTAREA_HELPURL = "https://en.wikipedia.org/wiki/Text_box";
@@ -235,6 +235,232 @@ Blockly.Blocks[ "text_area" ] = {
 		this.setColour( Blockly.Blocks.texts.HUE );
 		this.appendDummyInput()    
 			.appendField( new Blockly.FieldTextArea( "" ), "TEXT" );
+		this.setOutput( true, "String" );
+		this.setTooltip( Blockly.Msg.TEXT_TEXTAREA_TOOLTIP );
+	}
+};
+
+// ****************************************************************************
+// Blockly - Field CodeArea
+// ****************************************************************************
+ 
+goog.provide('Blockly.FieldCodeArea');
+
+goog.require('Blockly.FieldTextInput');
+goog.require('Blockly.Msg');
+goog.require('goog.asserts');
+goog.require('goog.dom');
+goog.require('goog.userAgent');
+
+/**
+ * Class for an editable code field.
+ * @param {string} text The initial content of the field.
+ * @param {Function} opt_changeHandler An optional function that is called
+ *     to validate any constraints on what the user entered.  Takes the new
+ *     text as an argument and returns either the accepted text, a replacement
+ *     text, or null to abort the change.
+ * @extends {Blockly.Field}
+ * @constructor
+ */
+Blockly.FieldCodeArea = function(text, opt_changeHandler) {
+  Blockly.FieldCodeArea.superClass_.constructor.call(this, text, opt_changeHandler);
+};
+goog.inherits(Blockly.FieldCodeArea, Blockly.FieldTextInput);
+
+/**
+ * Update the text node of this field to display the current text.
+ * @private
+ */
+Blockly.FieldCodeArea.prototype.updateTextNode_ = function() {
+  if (!this.textElement_) {
+    // Not rendered yet.
+    return;
+  }
+  var text = this.text_;
+
+  // Empty the text element.
+  goog.dom.removeChildren(/** @type {!Element} */ (this.textElement_));
+
+  // Replace whitespace with non-breaking spaces so the text doesn't collapse.
+  text = text.replace(/ /g, Blockly.Field.NBSP);
+  if (this.sourceBlock_.RTL && text) {
+    // The SVG is LTR, force text to be RTL.
+    text += '\u200F';
+  }
+  if (!text) {
+    // Prevent the field from disappearing if empty.
+    text = Blockly.Field.NBSP;
+  }
+
+  var lines = text.split('\n');
+  var dy = '0em';
+  for (var i = 0; i < lines.length; i++) {
+    var tspanElement = Blockly.createSvgElement('tspan',
+        {'dy': dy, 'x': 0}, this.textElement_);
+    dy = '1em';
+    var textNode = document.createTextNode(lines[i]);
+    tspanElement.appendChild(textNode);
+  }
+
+  // Cached width is obsolete.  Clear it.
+  this.size_.width = 0;
+};
+
+/**
+ * Draws the border with the correct width.
+ * Saves the computed width in a property.
+ * @private
+ */
+Blockly.FieldCodeArea.prototype.render_ = function() {
+	this.size_.width = this.textElement_.getBBox().width + 5;
+	//this.size_.height = ( this.text_.split( /\n/ ).length || 1 ) * 20 + ( Blockly.BlockSvg.SEP_SPACE_Y + 5 );
+	this.size_.height = ( this.text_.split( /\n/ ).length || 1 ) * 18 + ( Blockly.BlockSvg.SEP_SPACE_Y + 5 );
+	if ( this.borderRect_ ) {
+		this.borderRect_.setAttribute( "width", this.size_.width + Blockly.BlockSvg.SEP_SPACE_X );
+		this.borderRect_.setAttribute( "height", this.size_.height - ( Blockly.BlockSvg.SEP_SPACE_Y + 5 ) );
+	}
+};
+
+/**
+ * Show the inline free-text editor on top of the text.
+ * @param {boolean=} opt_quietInput True if editor should be created without
+ *     focus.  Defaults to false.
+ * @private
+ */
+Blockly.FieldCodeArea.prototype.showEditor_ = function(opt_quietInput) {
+	var quietInput = opt_quietInput || false;
+	var self = this;
+	/*
+	if (!quietInput && (goog.userAgent.MOBILE || goog.userAgent.ANDROID || goog.userAgent.IPAD)) {
+		// Mobile browsers have issues with in-line textareas (focus & keyboards).
+		var newValue = window.prompt(Blockly.Msg.CHANGE_VALUE_TITLE, this.text_);
+		if (this.changeHandler_) {
+			var override = this.changeHandler_(newValue);
+			if (override !== undefined) {
+				newValue = override;
+			}
+		}
+		if (newValue !== null) {
+			this.setText(newValue);
+		}
+		return;
+	}
+	*/
+	ALTUI_RulesEngine.showLuaEditor( this.text_, function( newValue) {
+		self.setText.call( self, newValue );
+	} );
+
+	/*
+	Blockly.WidgetDiv.show(this, this.sourceBlock_.RTL, this.widgetDispose_());
+	var div = Blockly.WidgetDiv.DIV;
+	// Create the input.
+	var htmlInput = goog.dom.createDom('textarea', 'blocklyHtmlInput');
+  Blockly.FieldTextInput.htmlInput_ = htmlInput;
+  htmlInput.style.resize = 'none';
+  htmlInput.style['line-height'] = '20px';
+  htmlInput.style.height = '100%';
+  div.appendChild(htmlInput);
+
+  htmlInput.value = htmlInput.defaultValue = this.text_;
+  htmlInput.oldValue_ = null;
+  this.validate_();
+  this.resizeEditor_();
+  if (!quietInput) {
+    htmlInput.focus();
+    htmlInput.select();
+  }
+
+  // Bind to keydown -- trap Enter without IME and Esc to hide.
+  htmlInput.onKeyDownWrapper_ =
+      Blockly.bindEvent_(htmlInput, 'keydown', this, this.onHtmlInputKeyDown_);
+  // Bind to keyup -- trap Enter; resize after every keystroke.
+  htmlInput.onKeyUpWrapper_ =
+      Blockly.bindEvent_(htmlInput, 'keyup', this, this.onHtmlInputChange_);
+  // Bind to keyPress -- repeatedly resize when holding down a key.
+  htmlInput.onKeyPressWrapper_ =
+      Blockly.bindEvent_(htmlInput, 'keypress', this, this.onHtmlInputChange_);
+  var workspaceSvg = this.sourceBlock_.workspace.getCanvas();
+  htmlInput.onWorkspaceChangeWrapper_ =
+      Blockly.bindEvent_(workspaceSvg, 'blocklyWorkspaceChange', this,
+      this.resizeEditor_);*/
+};
+
+/**
+ * Handle key down to the editor.
+ * @param {!Event} e Keyboard event.
+ * @private
+ */
+/*
+Blockly.FieldCodeArea.prototype.onHtmlInputKeyDown_ = function(e) {
+  var htmlInput = Blockly.FieldCodeArea.htmlInput_;
+  var escKey = 27;
+  if (e.keyCode == escKey) {
+    this.setText(htmlInput.defaultValue);
+    Blockly.WidgetDiv.hide();
+  }
+};
+*/
+/**
+ * Handle a change to the editor.
+ * @param {!Event} e Keyboard event.
+ * @private
+ */
+/*
+Blockly.FieldCodeArea.prototype.onHtmlInputChange_ = function(e) {
+  Blockly.FieldCodeArea.prototype.onHtmlInputChange_.call(this, e);
+
+  var htmlInput = Blockly.FieldCodeArea.htmlInput_;
+  if (e.keyCode == 27) {
+    // Esc
+    this.setText(htmlInput.defaultValue);
+    Blockly.WidgetDiv.hide();
+  } else {
+    Blockly.FieldCodeArea.prototype.onHtmlInputChange_.call(this, e);
+	this.resizeEditor_();
+  }
+};
+*/
+/**
+ * Resize the editor and the underlying block to fit the text.
+ * @private
+ */
+/*
+Blockly.FieldCodeArea.prototype.resizeEditor_ = function() {
+  var div = Blockly.WidgetDiv.DIV;
+  var bBox = this.fieldGroup_.getBBox();
+  div.style.width = bBox.width + 'px';
+  div.style.height = bBox.height + 'px';
+  var xy = this.getAbsoluteXY_();
+  // In RTL mode block fields and LTR input fields the left edge moves,
+  // whereas the right edge is fixed.  Reposition the editor.
+  if (this.RTL) {
+    var borderBBox = this.borderRect_.getBBox();
+    xy.x += borderBBox.width;
+    xy.x -= div.offsetWidth;
+  }
+  // Shift by a few pixels to line up exactly.
+  xy.y += 1;
+  if (goog.userAgent.WEBKIT) {
+    xy.y -= 3;
+  }
+  div.style.left = xy.x + 'px';
+  div.style.top = xy.y + 'px';
+};
+*/
+// ****************************************************************************
+// Blockly - Field Lua code
+// ****************************************************************************
+ 
+Blockly.Blocks[ "lua_code" ] = {
+	/**
+	 * Block for multi-lines text value.
+	 * @this Blockly.Block
+	 */
+	init: function() {
+		this.setHelpUrl( Blockly.Msg.TEXT_TEXTAREA_HELPURL );
+		this.setColour( Blockly.Blocks.texts.HUE );
+		this.appendDummyInput()    
+			.appendField( new Blockly.FieldCodeArea( "" ), "TEXT" );
 		this.setOutput( true, "String" );
 		this.setTooltip( Blockly.Msg.TEXT_TEXTAREA_TOOLTIP );
 	}
@@ -412,7 +638,12 @@ Blockly.Blocks[ "list_with_operator_condition" ].updateShape_ = function() {
 			var input = this.appendValueInput( "ADD" + i )
 				.setCheck( "Boolean" );
 			if ( i === 0 ) {
-				input.appendField( new Blockly.FieldDropdown( [ [ "one is true", "OR" ], [ "all are true", "AND" ] ] ), "operator" );
+				input.appendField( new Blockly.FieldDropdown( [
+						[ "one is true", "OR" ],
+						[ "all are true", "AND" ]
+					] ),
+					"operator"
+				);
 			}
 		}
 	}
@@ -892,7 +1123,7 @@ Blockly.Blocks[ "condition_value" ] = {
 	}
 };
 
-Blockly.Blocks['condition_time'] = {
+Blockly.Blocks[ "condition_time" ] = {
 	init: function() {
 		this.setColour( Blockly.Blocks.conditions.HUE1 );
 
@@ -909,7 +1140,7 @@ Blockly.Blocks['condition_time'] = {
 		// Type of timer
 		this.appendDummyInput( "timerType" )
 			.appendField(
-				new Blockly.FieldDropdown( [ [ "on days of week", "WEEK" ], [ "on days of month", "MONTH" ] ], function( option ) {
+				new Blockly.FieldDropdown( [ [ "on days of week", "2" ], [ "on days of month", "3" ] ], function( option ) {
 					this.sourceBlock_.updateShape_( "timerType", option );
 				} ),
 				"timerType"
@@ -918,72 +1149,72 @@ Blockly.Blocks['condition_time'] = {
 		this.appendValueInput( "params" )
 			//.appendField( "with" )
 			.appendField( " " )
-			.setCheck( "ConditionParams", "ConditionParam" );
+			.setCheck( "ConditionParam" );
 
 		this.setInputsInline( true );
 		this.setOutput( true, "Boolean" );
 	},
 
 	onchange: function() {
-		if ((this.getFieldValue('time') != null) && (this.getFieldValue('time').match(/^\d\d:\d\d$/) == null)) {
-			this.setWarningText("Time format must be 'hh:mm:ss'");
-		} else if ((this.getFieldValue('time1') != null) && (this.getFieldValue('time1').match(/^\d\d:\d\d$/) == null)) {
+		if ( ( this.getFieldValue( "time" ) != null ) && ( this.getFieldValue( "time" ).match( /^\d\d:\d\d:\d\d$/ ) == null ) ) {
+			this.setWarningText( "Time format must be 'hh:mm:ss'" );
+		} else if ( ( this.getFieldValue( "time1" ) != null ) && ( this.getFieldValue( "time1" ).match( /^\d\d:\d\d:\d\d$/ ) == null ) ) {
 			this.setWarningText("First time format must be 'hh:mm:ss'");
-		} else if ((this.getFieldValue('time2') != null) && (this.getFieldValue('time2').match(/^\d\d:\d\d$/) == null)) {
-			this.setWarningText("Second time format must be 'hh:mm:ss'");
+		} else if ( ( this.getFieldValue( "time2" ) != null ) && ( this.getFieldValue( "time2" ).match( /^\d\d:\d\d:\d\d$/ ) == null ) ) {
+			this.setWarningText( "Second time format must be 'hh:mm:ss'" );
 		} else {
-			this.setWarningText(null);
+			this.setWarningText( null );
 		}
 	},
 
-	mutationToDom: function () {
-		var container = document.createElement('mutation');
-		container.setAttribute('operator', this.getFieldValue('operator'));
-		container.setAttribute('timer_type', this.getFieldValue('timerType'));
+	mutationToDom: function() {
+		var container = document.createElement( "mutation" );
+		container.setAttribute( "operator", this.getFieldValue( "operator" ) );
+		container.setAttribute( "timer_type", this.getFieldValue( "timerType" ) );
 		return container;
 	},
 
-	domToMutation: function (xmlElement) {
-		var operator = xmlElement.getAttribute('operator');
-		this.updateShape_('operator', operator);
-		var timerType = xmlElement.getAttribute('timer_type');
-		this.updateShape_('timerType', timerType);
+	domToMutation: function( xmlElement ) {
+		var operator = xmlElement.getAttribute( "operator" );
+		this.updateShape_( "operator", operator );
+		var timerType = xmlElement.getAttribute( "timer_type" );
+		this.updateShape_( "timerType", timerType );
 	},
 
-	updateShape_: function (type, option) {
-		if (type === 'operator') {
-			var inputTime = this.getInput('time');
-			if (this.getField('time') != null) {
+	updateShape_: function( type, option ) {
+		if ( type === "operator" ) {
+			var inputTime = this.getInput( "time" );
+			if ( this.getField( "time" ) != null ) {
 				inputTime.removeField('time');
 			}
-			if (this.getField('time1') != null) {
-				inputTime.removeField('time1');
-				inputTime.removeField('between_and');
-				inputTime.removeField('time2');
+			if ( this.getField( "time1" ) != null ) {
+				inputTime.removeField( "time1" );
+				inputTime.removeField( "between_and" );
+				inputTime.removeField( "time2" );
 			}
-			if (option === 'EQ') {
+			if ( option === "EQ" ) {
 				inputTime
-					.appendField(new Blockly.FieldTextInput('hh:mm:ss'), 'time');
+					.appendField( new Blockly.FieldTextInput( "hh:mm:ss" ), "time" );
 			} else {
 				inputTime
-					.appendField(new Blockly.FieldTextInput('hh:mm:ss'), 'time1')
-					.appendField('and', 'between_and')
-					.appendField(new Blockly.FieldTextInput('hh:mm:ss'), 'time2');
+					.appendField( new Blockly.FieldTextInput( "hh:mm:ss" ), "time1" )
+					.appendField( "and", "between_and" )
+					.appendField( new Blockly.FieldTextInput( "hh:mm:ss" ), "time2" );
 			}
-		} else if (type === 'timerType') {
-			var inputTimerType = this.getInput('timerType');
-			if (this.getField('daysOfWeek') != null) {
-				inputTimerType.removeField('daysOfWeek');
+		} else if ( type === "timerType" ) {
+			var inputTimerType = this.getInput( "timerType" );
+			if ( this.getField( "daysOfWeek" ) != null ) {
+				inputTimerType.removeField( "daysOfWeek" );
 			}
-			if (this.getField('daysOfMonth') != null) {
-				inputTimerType.removeField('daysOfMonth');
+			if ( this.getField( "daysOfMonth" ) != null ) {
+				inputTimerType.removeField( "daysOfMonth" );
 			}
-			if (option === 'WEEK') {
+			if ( option === "2" ) {
 				inputTimerType
-					.appendField(new Blockly.FieldTextInput(''), 'daysOfWeek');
+					.appendField( new Blockly.FieldTextInput( "" ), "daysOfWeek" );
 			} else {
 				inputTimerType
-					.appendField(new Blockly.FieldTextInput(''), 'daysOfMonth');
+					.appendField( new Blockly.FieldTextInput( "" ), "daysOfMonth" );
 			}
 		}
 	}
@@ -1004,7 +1235,7 @@ Blockly.Blocks[ "condition_rule" ] = {
 		this.appendValueInput( "params" )
 			//.appendField( "with" )
 			.appendField( " " )
-			.setCheck( "ConditionParams", "ConditionParam" );
+			.setCheck( "ConditionParam" );
 
 		this.setInputsInline( true );
 		this.setOutput( true, "Boolean" );
@@ -1154,6 +1385,11 @@ Blockly.Blocks[ "action_group" ] = {
 			.appendField( "" )
 			.setCheck( "ActionParam" );
 
+		// Conditions
+		this.appendValueInput( "conditions" )
+			.setCheck( "Boolean" )
+			.appendField( "if" );
+
 		this.appendStatementInput( "do" )
 			.setCheck( "ActionType" )
 			.appendField( "do" );
@@ -1197,17 +1433,33 @@ Blockly.Blocks[ "action_group" ] = {
 // Blockly - Rule actions - Types
 // ****************************************************************************
 
+Blockly.Blocks['action_wait'] = {
+	init: function () {
+		this.setColour( Blockly.Blocks.actions.HUE2 );
+
+		this.appendDummyInput('delayInterval')
+			.appendField('wait')
+			.appendField(new Blockly.FieldTextInput('0', Blockly.FieldTextInput.numberValidator), 'delayInterval')
+			.appendField(new Blockly.FieldDropdown([['seconds', 'S'], ['minutes', 'M'], ['hours', 'H']]), 'unit');
+
+		this.setPreviousStatement( true, "ActionType" );
+		this.setNextStatement( true, "ActionType" );
+		//this.setTooltip('Returns number of letters in the provided text.');
+	}
+};
+
 Blockly.Blocks['action_function'] = {
 	init: function () {
-		this.setColour(Blockly.Blocks.actions.HUE2);
+		this.setColour( Blockly.Blocks.actions.HUE2 );
 
 		this.appendDummyInput()
-			.appendField('LUA function :');
+			.appendField( "LUA function(context)" );
 		this.appendDummyInput()
-			.appendField(new Blockly.FieldTextArea(''), 'functionContent');
+			//.appendField( new Blockly.FieldTextArea( "" ), "functionContent" );
+			.appendField( new Blockly.FieldCodeArea( "" ), "functionContent" );
 
-		this.setPreviousStatement(true, 'ActionType');
-		this.setNextStatement(true, 'ActionType');
+		this.setPreviousStatement( true, "ActionType" );
+		this.setNextStatement( true, "ActionType" );
 		//this.setTooltip('Returns number of letters in the provided text.');
 	}
 };

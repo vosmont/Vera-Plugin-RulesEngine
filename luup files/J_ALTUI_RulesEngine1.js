@@ -66,6 +66,7 @@ var ALTUI_RulesEngine = ( function( window, undefined ) {
 		</value>\
 	</block>\
 	<category name="Types">\
+		<block type="action_wait"></block>\
 		<block type="action_function"></block>\
 		<block type="action_device"></block>\
 	</category>\
@@ -103,6 +104,7 @@ div.altui-rule-acknowledged { cursor: pointer; background: url("http://vosmont.g
 .altui-rule-xml .panel-body { padding: 0px; }\
 .altui-rule-xml-content { width: 100%; height: 200px; }\
 #blocklyArea { height: 100%; }\
+#luaEditor { height: 600px; }\
 		';
 		return style;
 	};
@@ -272,7 +274,10 @@ console.log("rulesInfos", rulesInfos);
 	function _loadBlocklyResourcesAsync( device ) {
 		var d = $.Deferred();
 		// Get the names of the resource files
-		var fileNames = [ "J_RulesEngine1_Blockly.js" ];
+		var fileNames = [
+			"https://cdnjs.cloudflare.com/ajax/libs/ace/1.2.2/ace.js",
+			"J_RulesEngine1_Blockly.js"
+		];
 		var toolboxConfig = MultiBox.getStatus( device, "urn:upnp-org:serviceId:RulesEngine1", "ToolboxConfig" );
 		if ( ( toolboxConfig !== undefined ) && ( toolboxConfig !== "" ) ) {
 			toolboxConfig = $.parseJSON( toolboxConfig );
@@ -288,7 +293,7 @@ console.log("rulesInfos", rulesInfos);
 			if ( !_resourceLoaded[ fileName ] ) {
 				loaders.push(
 					$.ajax( {
-						url: _location + fileName,
+						url: (fileName.indexOf( "http" ) === 0 ? fileName: _location + fileName),
 						dataType: "script",
 						beforeSend: function( jqXHR, settings ) {
 							jqXHR.fileName = fileName;
@@ -535,6 +540,37 @@ console.log("rulesInfos", rulesInfos);
 		return "";
 	}
 
+	function _showLuaEditor( code, callback ) {
+		var dialog =  DialogManager.registerDialog(
+			"dialogModal",
+			defaultDialogModalTemplate.format( 
+				_T( "Lua Editor" ),
+				"",				// body
+				"modal-lg"		// size
+			)
+		);
+		DialogManager.dlgAddDialogButton( dialog, true, _T( "Save Changes" ), "altui-luacode-save", { "data-dismiss": "modal" } );
+
+		var html = '<div id="luaEditor">' + code + '</div>'; // TODO : escape
+		$(dialog).find( ".row-fluid" ).append( html );
+
+		var editor = ace.edit( "luaEditor" );
+		//editor.setTheme( "ace/theme/monokai" );
+		editor.setTheme( "ace/theme/github" );
+		editor.getSession().setMode( "ace/mode/lua" );
+
+		dialog
+			.on( "click touchend", ".altui-luacode-save", function() {
+				var code = editor.getValue();
+				if ( $.isFunction( callback ) ) {
+					callback( code );
+				}
+			} );
+		dialog.modal();
+
+		//editor.resize();
+	}
+	
 	function _pageRules( altuiid ) {
 		var device = MultiBox.getDeviceByAltuiID( altuiid );
 		UIManager.clearPage( _T( "Control Panel" ), "Rules - {0} <small>#{1}</small>".format( device.name , altuiid ), UIManager.oneColumnLayout );
@@ -592,29 +628,31 @@ console.log("rulesInfos", rulesInfos);
 				var $rule = $( this ).parents( ".altui-rule" );
 				var ruleId = $rule.data( "ruleid" );
 				var ruleName = $rule.find( ".altui-rule-title-name" ).text();
-				var dialog =  DialogManager.registerDialog('dialogModal',
-					defaultDialogModalTemplate.format( 
-							_T("Rule #" + ruleId + "(" + ruleName + ")"),
-							"",				// body
-							"modal-lg"		// size
-							));
-					$.when( _getRulesInfosAsync( device, ruleId ) )
-						.done( function( rulesInfos ) {
-							var html = '<div class="panel panel-default">'
-								+			'<small><table class="table">'
-								+				'<thead>'
-								+					('<tr><th>{0}</th><th>{1}</th><th>{2}</th></tr>'.format( _T( "Date" ), _T( "Event" ), _T( "Error" ) ) )
-								+				'</thead>'
-								+				'<tbody>';
-							$.each(rulesInfos[0].errors, function( i, e ) {
-								html +=				'<tr><td>{0}</td><td>{1}</td><td>{2}</td></tr>'.format( _convertTimestampToLocaleString( e.timestamp ), e.event, e.message);
-							});
-							html +=				'</tbody>'
-								+			'</table></small>';
-								+		'</div>';
-							$(dialog).find( ".row-fluid" ).append(html);
-							$( 'div#dialogModal' ).modal();
-						} );
+				var dialog =  DialogManager.registerDialog(
+					"dialogModal",
+					defaultDialogModalTemplate.format(
+						_T( "Rule #" + ruleId + "(" + ruleName + ")" ),
+						"",				// body
+						"modal-lg"		// size
+					)
+				);
+				$.when( _getRulesInfosAsync( device, ruleId ) )
+					.done( function( rulesInfos ) {
+						var html = '<div class="panel panel-default">'
+							+			'<small><table class="table">'
+							+				'<thead>'
+							+					('<tr><th>{0}</th><th>{1}</th><th>{2}</th></tr>'.format( _T( "Date" ), _T( "Event" ), _T( "Error" ) ) )
+							+				'</thead>'
+							+				'<tbody>';
+						$.each(rulesInfos[0].errors, function( i, e ) {
+							html +=				'<tr><td>{0}</td><td>{1}</td><td>{2}</td></tr>'.format( _convertTimestampToLocaleString( e.timestamp ), e.event, e.message);
+						});
+						html +=				'</tbody>'
+							+			'</table></small>';
+							+		'</div>';
+						$(dialog).find( ".row-fluid" ).append(html);
+						$( 'div#dialogModal' ).modal();
+					} );
 			} );
 
 		// Draw the rules
@@ -918,6 +956,8 @@ console.log("rulesInfos", rulesInfos);
 		onDeviceStatusChanged: _onDeviceStatusChanged,
 
 		pageRules: _pageRules,
-		pageTimeline: _pageTimeline
+		pageTimeline: _pageTimeline,
+
+		showLuaEditor: _showLuaEditor
 	};
 })( window );
