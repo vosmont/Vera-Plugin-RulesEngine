@@ -17,12 +17,13 @@ var ALTUI_RulesEngine = ( function( window, undefined ) {
 	var _registerIsDone = false;
 
 	var htmlControlPanel = '\
-<xml id="toolbox" style="display: none"></xml>\
-<div id="blocklyDiv" style="width: 100%; height: 800px;"></div>\
-	';
+<div id="rulesengine-blockly-panel">\
+	<xml id="rulesengine-blockly-toolbox" style="display: none"></xml>\
+	<div id="rulesengine-blockly-workspace" style="width: 100%; height: 800px;"></div>\
+</div>';
 
 	var xmlToolbox = '\
-<category name="Rules">\
+<category name="Rules" colour="140">\
 	<block type="rule">\
 		<value name="name">\
 			<block type="text"><field name="TEXT"></field></block>\
@@ -38,37 +39,42 @@ var ALTUI_RulesEngine = ( function( window, undefined ) {
 		</value>\
 	</block>\
 </category>\
-<category name="Properties">\
+<category name="Properties" colour="160">\
 	<block type="list_property"></block>\
 	<block type="property_auto_untrip"></block>\
 	<block type="property_is_acknowledgeable"></block>\
 </category>\
 <sep></sep>\
-<category name="Conditions">\
+<category name="Device" colour="320">\
+	<block type="list_device"></block>\
+	<block type="device"><mutation inputs="device_id,device_room"></mutation><field name="roomId"></field></block>\
+</category>\
+<sep></sep>\
+<category name="Conditions" colour="40">\
 	<block type="list_with_operator_condition"></block>\
-	<category name="Types">\
-		<block type="condition_value"></block>\
-		<block type="condition_time"></block>\
-		<block type="condition_rule"></block>\
+	<block type="condition_value"></block>\
+	<category name="Device Value">\
+		<block type="condition_value"><mutation condition_type="sensor_armed"></mutation></block>\
+		<block type="condition_value"><mutation condition_type="sensor_tripped"></mutation></block>\
+		<block type="condition_value"><mutation condition_type="sensor_temperature"></mutation></block>\
+		<block type="condition_value"><mutation condition_type="switch"></mutation></block>\
 	</category>\
+	<block type="condition_time"></block>\
+	<block type="condition_rule"></block>\
 	<category name="Params">\
 		<block type="list_condition_param"></block>\
 		<block type="condition_param_level"></block>\
 		<block type="condition_param_since"></block>\
 	</category>\
 </category>\
-<category name="Actions">\
-	<block type="action_group">\
-		<value name="params">\
-			<block type="list_action_param" inline="true">\
-				<mutation items="1"></mutation>\
-			</block>\
-		</value>\
-	</block>\
-	<category name="Types">\
-		<block type="action_wait"></block>\
-		<block type="action_function"></block>\
-		<block type="action_device"></block>\
+<category name="Actions" colour="240">\
+	<block type="action_group"></block>\
+	<block type="action_wait"></block>\
+	<block type="action_function"></block>\
+	<block type="action_device"></block>\
+	<category name="Action Device">\
+		<block type="action_device"><mutation action_type="switch"></mutation></block>\
+		<block type="action_device"><mutation action_type="dim"></mutation></block>\
 	</category>\
 	<category name="Params">\
 		<block type="list_action_param"></block>\
@@ -81,9 +87,8 @@ var ALTUI_RulesEngine = ( function( window, undefined ) {
 	<block type="text"></block>\
 	<block type="text_area"></block>\
 	<block type="math_number"></block>\
-	<block type="lists_create_with"></block>\
 </category>\
-	';
+';
 
 	// return styles needed by this plugin module
 	function _getStyle() {
@@ -103,11 +108,12 @@ div.altui-rule-acknowledged { cursor: pointer; background: url("http://vosmont.g
 .altui-rule-body .altui-rule-errors { color:red; font-size:0.8em; }\
 .altui-rule-xml .panel-body { padding: 0px; }\
 .altui-rule-xml-content { width: 100%; height: 200px; }\
+#rulesengine-blockly-panel { position: relative; }\
 #blocklyArea { height: 100%; }\
 #luaEditor { height: 600px; }\
 		';
 		return style;
-	};
+	}
 
 	function _convertTimestampToLocaleString( timestamp ) {
 		if ( typeof( timestamp ) === "undefined" ) {
@@ -116,16 +122,24 @@ div.altui-rule-acknowledged { cursor: pointer; background: url("http://vosmont.g
 		var t = new Date( parseInt( timestamp, 10 ) * 1000 );
 		var localeString = t.toLocaleString();
 		return localeString;
-	};
+	}
 
 	function _onDeviceStatusChanged( event, device ) {
 		if ( device.device_type === "urn:schemas-upnp-org:device:RulesEngine:1" ) {
+			var mySettings = _settings[ device.altuiid ];
+			if ( mySettings == null ) {
+				return;
+			}
 			// Seems to be called at each change in the system, not just our device
 			for ( var i = 0; i < device.states.length; i++ ) {
 //console.log("onDeviceStatusChanged", device.states[ i ].variable, device.states[ i ].value);
 				if ( device.states[ i ].variable === "LastUpdate" ) {
-					if ( _settings[ device.altuiid ].lastUpdate !== device.states[ i ].value ) {
-						_settings[ device.altuiid ].lastUpdate = device.states[ i ].value;
+					if ( mySettings.lastUpdate !== device.states[ i ].value ) {
+						mySettings.lastUpdate = device.states[ i ].value;
+						$.when( _getRulesInfosAsync( device ) )
+							.done( function( rulesInfos ) {
+								_updateRules( device, rulesInfos );
+							} );
 						/*
 						$.when( _getTimelineAsync( device ) )
 							.done( function( timeline ) {
@@ -136,13 +150,13 @@ div.altui-rule-acknowledged { cursor: pointer; background: url("http://vosmont.g
 						*/
 					}
 				} else if ( device.states[ i ].variable === "RulesInfos" ) {
-					_updateRules( device, device.states[ i ].value );
+					//_updateRules( device, device.states[ i ].value );
 				} else if ( device.states[ i ].variable === "RulePanel" ) {
-					_updatePanel( device, device.states[ i ].value )
+					//_updatePanel( device, device.states[ i ].value );
 				}
 			}
 		}
-	};
+	}
 
 	function _getTimelineAsync( device ) {
 		// seul un device réponds via le handler : que se passe-t-il si plusieurs device se sont enregistrés ?
@@ -166,7 +180,7 @@ div.altui-rule-acknowledged { cursor: pointer; background: url("http://vosmont.g
 				d.reject();
 			} );
 		return d.promise();
-	};
+	}
 
 	function _getRulesInfosAsync( device, ruleId ) {
 		var d = $.Deferred();
@@ -189,7 +203,7 @@ div.altui-rule-acknowledged { cursor: pointer; background: url("http://vosmont.g
 				d.reject();
 			} );
 		return d.promise();
-	};
+	}
 
 	function _getRulesAsync( device ) {
 		var d = $.Deferred();
@@ -212,7 +226,7 @@ div.altui-rule-acknowledged { cursor: pointer; background: url("http://vosmont.g
 				d.reject();
 			} );
 		return d.promise();
-	};
+	}
 
 	function _updateDevice( device, timeline ) {
 		var nodePath = ".altui-device[data-altuiid='" + device.altuiid + "'] .panel-content .info";
@@ -222,7 +236,7 @@ div.altui-rule-acknowledged { cursor: pointer; background: url("http://vosmont.g
 		} else {
 			$( nodePath ).html( "<div>No scheduled task</div>" );
 		}
-	};
+	}
 
 	function _updatePanel( device, htmlPanel ) {
 		$( ".altui-device[data-altuiid='" + device.altuiid + "'] .panel-content .altui-rule-panel" )
@@ -231,62 +245,46 @@ div.altui-rule-acknowledged { cursor: pointer; background: url("http://vosmont.g
 			
 		$( ".altui-device[data-altuiid='" + device.altuiid + "'] div.altui-device-body" )
 			.css( "height", "auto");
-	};
+	}
 
-	function _updateRules( device, jsonRulesInfos ) {
+	function _updateRules( device, rulesInfos ) {
 		if ( $( ".altui-rules" ).length === 0 ) {
 			return;
 		}
-		var rulesInfos = $.parseJSON( jsonRulesInfos || MultiBox.getStatus( device, "urn:upnp-org:serviceId:RulesEngine1", "RulesInfos" ) );
-console.log("rulesInfos", rulesInfos);
+//console.log("rulesInfos", rulesInfos);
 		$.each( rulesInfos, function( i, ruleInfos ) {
 			var $rule = $( '.altui-mainpanel .altui-rule[data-ruleid="' + ruleInfos.id + '"][data-ruleidx="' + ruleInfos.idx + '"]' );
 			// Icon status
 			var $icon = $rule.find( ".altui-rule-icon" );
 			$icon
-				.toggleClass( "altui-rule-ko", ( ruleInfos.status === "-1" ) )
-				.toggleClass( "altui-rule-inactive", ( ruleInfos.status === "0" ) )
-				.toggleClass( "altui-rule-active", ( ( ruleInfos.status === "1" ) && !ruleInfos.isAcknowledged ) )
-				.toggleClass( "altui-rule-acknowledged", ( ( ruleInfos.status === "1" ) && ruleInfos.isAcknowledged ) );
+				.toggleClass( "altui-rule-ko", ( ruleInfos.status === -1 ) )
+				.toggleClass( "altui-rule-inactive", ( ruleInfos.status === 0 ) )
+				.toggleClass( "altui-rule-active", ( ( ruleInfos.status === 1 ) && !ruleInfos.isAcknowledged ) )
+				.toggleClass( "altui-rule-acknowledged", ( ( ruleInfos.status === 1 ) && ruleInfos.isAcknowledged ) );
 			// Enable / disable
 			$rule.find( ".altui-rule-arm" )
-				.toggleClass( "activated", ( ( ruleInfos.status !== "-1" ) && ruleInfos.isArmed ) )
-				.toggleClass( "paused",   ( ( ruleInfos.status !== "-1" ) && !ruleInfos.isArmed ) )
-				.toggleClass( "altui-rule-warning", ( ruleInfos.status === "-1" ) )
-				.attr( "title", ( ruleInfos.status === "-1" ? "Rule KO" : ( ruleInfos.isArmed ? _T( "Disarm rule" ) : _T( "Arm rule" ) ) ) );
+				.toggleClass( "activated", ( ( ruleInfos.status !== -1 ) && ruleInfos.isArmed ) )
+				.toggleClass( "paused",   ( ( ruleInfos.status !== -1 ) && !ruleInfos.isArmed ) )
+				.toggleClass( "altui-rule-warning", ( ruleInfos.status === -1 ) )
+				.attr( "title", ( ruleInfos.status === -1 ? "Rule KO" : ( ruleInfos.isArmed ? _T( "Disarm rule" ) : _T( "Arm rule" ) ) ) );
 			// Infos
-			var status = {
+			var statusText = {
 				"1": "ON",
 				"0": "OFF",
 				"-1": "KO"
 			};
 			var html = "";
-			if ( $.isArray( ruleInfos.errors ) && ( ruleInfos.errors.length > 0 ) ) {
+			if ( ( ruleInfos.errors ) && ( ruleInfos.errors.length > 0 ) ) {
 				html += '<span class="glyphicon glyphicon-alert altui-rule-errors" aria-hidden="true" title="' + _T( "See rule's errors") + '"></span> ';
 			}
-			html += ( status[ ruleInfos.status ] || "UNKNOWN" ) 
+			html += ( statusText[ ruleInfos.status.toString() ] || "UNKNOWN" ) 
 				+ ( ruleInfos.lastStatusUpdate > 0 ? _T( " since " ) + _convertTimestampToLocaleString( ruleInfos.lastStatusUpdate ) : "");
 			$rule.find( ".altui-rule-infos" ).html( html );
-			
 		} );
-	};
+	}
 
-	function _loadBlocklyResourcesAsync( device ) {
+	function _loadResourcesAsync( fileNames ) {
 		var d = $.Deferred();
-		// Get the names of the resource files
-		var fileNames = [
-			"https://cdnjs.cloudflare.com/ajax/libs/ace/1.2.2/ace.js",
-			"J_RulesEngine1_Blockly.js"
-		];
-		var toolboxConfig = MultiBox.getStatus( device, "urn:upnp-org:serviceId:RulesEngine1", "ToolboxConfig" );
-		if ( ( toolboxConfig !== undefined ) && ( toolboxConfig !== "" ) ) {
-			toolboxConfig = $.parseJSON( toolboxConfig );
-			$.each( toolboxConfig, function( index, config ) {
-				if ( $.inArray( config.resource, fileNames ) === -1 ) {
-					fileNames.push( config.resource );
-				}
-			} );
-		}
 		// Prepare loaders
 		var loaders = [];
 		$.each( fileNames, function( index, fileName ) {
@@ -310,7 +308,7 @@ console.log("rulesInfos", rulesInfos);
 				} else if (loaders.length > 1) {
 					// arguments : [ [ xml, textStatus, jqxhr ], ... ]
 					for (var i = 0; i < arguments.length; i++) {
-						var jqxhr = arguments[ i ][ 2 ];
+						jqxhr = arguments[ i ][ 2 ];
 						_resourceLoaded[ jqxhr.fileName ] = true;
 					}
 				}
@@ -321,7 +319,24 @@ console.log("rulesInfos", rulesInfos);
 				d.reject();
 			} );
 		return d.promise();
-	};
+	}
+
+	function _loadBlocklyResourcesAsync( device ) {
+		// Get the names of the resource files
+		var fileNames = [
+			"J_RulesEngine1_Blockly.js"
+		];
+		var toolboxConfig = MultiBox.getStatus( device, "urn:upnp-org:serviceId:RulesEngine1", "ToolboxConfig" );
+		if ( ( toolboxConfig !== undefined ) && ( toolboxConfig !== "" ) ) {
+			toolboxConfig = $.parseJSON( toolboxConfig );
+			$.each( toolboxConfig, function( index, config ) {
+				if ( $.inArray( config.resource, fileNames ) === -1 ) {
+					fileNames.push( config.resource );
+				}
+			} );
+		}
+		return _loadResourcesAsync( fileNames );
+	}
 
 	function _encodeCarriageReturns( xmlRules ) {
 		$( xmlRules ).find( "field" )
@@ -372,7 +387,7 @@ console.log("rulesInfos", rulesInfos);
 			d.reject();
 		} );
 		return d.promise();
-	};
+	}
 
 	function _getCgiUrl() {
 		var protocol = document.location.protocol;
@@ -380,19 +395,17 @@ console.log("rulesInfos", rulesInfos);
 		var httpPort = document.location.port;
 		var pathName = window.location.pathname;
 		var cgiUrl = protocol + "//" + host;
+		if (httpPort !== "") {
+			cgiUrl = cgiUrl + ":" + httpPort;
+		}
 
 		if ( pathName.indexOf( "/port_3480" ) !== -1 ) {
 			// Relay mode
-			pathName = pathName.replace( "/port_3480", "" )
-			if ( httpPort != "" ) {
-				cgiUrl = cgiUrl + ":" + httpPort;
-			}
-		} else {
-			//cgiUrl = cgiUrl + ( ( httpPort != 80 && httpPort != "" ) ? ":" + httpPort : "" );
+			pathName = pathName.replace( "/port_3480", "" );
 		}
 		cgiUrl = cgiUrl + pathName.replace( "/data_request", "" ) + "/cgi-bin/cmh";
 		return cgiUrl;
-	};
+	}
 
 	function _saveRulesFileAsync( fileName, xmlRules ) {
 		var d = $.Deferred();
@@ -406,7 +419,6 @@ console.log("rulesInfos", rulesInfos);
 		// Clean the XML file (domToPrettyText adds some text between nodes)
 		_cleanXML( xmlRoot );
 		var content = Blockly.Xml.domToPrettyText( xmlRoot );
-		//var content = Blockly.Xml.domToText( xmlRoot );
 		var blob = new Blob( [ content ], { type: "text/xml"} );
 
 		var fd = new FormData();
@@ -435,7 +447,7 @@ console.log("rulesInfos", rulesInfos);
 		} )
 		.fail( function( jqxhr, textStatus, errorThrown ) {
 			PageMessage.message( "Save \"" + fileName + "\" : " + textStatus + " - " + (errorThrown || "unknown"), "danger");
-			_exportXml( xmlRoot ) 
+			_exportXml( xmlRoot ); 
 			PageMessage.message( "Modified XML file has been exported. You have to upload it on the Vera by hand.", "warning");
 			d.reject();
 		} );
@@ -449,15 +461,15 @@ console.log("rulesInfos", rulesInfos);
 		}
 		xmlRules.each( function( idx, xmlRule ) {
 			if ( idx >= rules.length ) {
-				return
+				return;
 			}
 			var rule = rules[ idx ];
 			if ((rule.idx - 1) !== idx) {
 				PageMessage.message( "Desynchronization: rule at position " + idx + " in the xml file does not correspond to the former known rule #" + rule.id + ". You should not save.", "warning");
 			}
-			var xmlRuleId = $( xmlRule ).children( "field[name=\"id\"]" ).text();
-			var xmlRuleName = $( xmlRule ).children( "value[name=\"name\"]" ).text().trim();
-			if ( xmlRuleId != "" ) {
+			var xmlRuleId = parseInt( $( xmlRule ).children( "field[name=\"id\"]:first" ).text(), 10);
+			var xmlRuleName = $( xmlRule ).children( "value[name=\"name\"]:first" ).text().trim();
+			if ( xmlRuleId != null ) {
 				if ( xmlRuleId !== rule.id ) {
 					PageMessage.message( "Desynchronization: id #" + xmlRuleId + " of the rule at position " + idx + " in the xml file is not the expected id #" + rule.id + ". You should not save.", "warning");
 				}
@@ -474,9 +486,9 @@ console.log("rulesInfos", rulesInfos);
 				}
 			}
 		} );
-	};
+	}
 
-	function _drawBlocklyPanel( device ) {
+	function _drawBlocklyPanel( device, readOnly ) {
 		var toolboxConfig = MultiBox.getStatus( device, "urn:upnp-org:serviceId:RulesEngine1", "ToolboxConfig" );
 		if ( ( toolboxConfig !== undefined ) && ( toolboxConfig !== "" ) ) {
 			try {
@@ -488,7 +500,7 @@ console.log("rulesInfos", rulesInfos);
 			toolboxConfig = [];
 		}
 		// Blockly toolbox
-		$( "#toolbox ").html( xmlToolbox );
+		$( "#rulesengine-blockly-toolbox ").html( xmlToolbox );
 		// Add custom config
 		$.each( toolboxConfig, function( index, config ) {
 			var path = "";
@@ -496,28 +508,32 @@ console.log("rulesInfos", rulesInfos);
 			$.each( categories, function( index, category ) {
 				path += ( index > 0 ? " " : "" ) + "category[name=\"" + category + "\"]";
 			} );
-			$("#toolbox").find( path )
+			$( "#rulesengine-blockly-toolbox" ).find( path )
 				.append( "<block type=\"" + config.type + "\"></block>" );
 		} );
 
 		// Blockly workspace
-		var blocklyDiv = document.getElementById('blocklyDiv');
-		Blockly.inject(blocklyDiv, {
+		var blocklyWorkspace = document.getElementById( "rulesengine-blockly-workspace" );
+		Blockly.inject( blocklyWorkspace, {
 			//media: './media/',
-			toolbox: document.getElementById('toolbox'),
+			toolbox: document.getElementById( "rulesengine-blockly-toolbox" ),
 			grid: {
 				spacing: 20,
 				length: 3,
 				colour: '#ccc',
 				snap: true
 			},
+			readOnly: (readOnly === true),
 			sounds: false,
-			trashcan: true
+			trashcan: true,
+			zoom: {
+				controls: true
+			}
 		});
 
-		// Controller of the Rules Engine
-		$( "#blocklyDiv" ).data( "controller_id", MultiBox.controllerOf( device.altuiid ).controller );
-	};
+		// Controller of the Rules Engine (the engine can just control devices that are on the same controller)
+		$( "#rulesengine-blockly-workspace" ).data( "controller_id", MultiBox.controllerOf( device.altuiid ).controller );
+	}
 
 	function _watchBlocklyChanges( device ) {
 		var workspace = Blockly.getMainWorkspace();
@@ -542,35 +558,37 @@ console.log("rulesInfos", rulesInfos);
 
 	function _showLuaEditor( code, callback ) {
 		var dialog =  DialogManager.registerDialog(
-			"dialogModal",
+			"luaCodeEditorModal",
 			defaultDialogModalTemplate.format( 
+				"luaCodeEditorModal",
 				_T( "Lua Editor" ),
 				"",				// body
 				"modal-lg"		// size
 			)
 		);
-		DialogManager.dlgAddDialogButton( dialog, true, _T( "Save Changes" ), "altui-luacode-save", { "data-dismiss": "modal" } );
-
-		var html = '<div id="luaEditor">' + code + '</div>'; // TODO : escape
-		$(dialog).find( ".row-fluid" ).append( html );
-
-		var editor = ace.edit( "luaEditor" );
-		//editor.setTheme( "ace/theme/monokai" );
-		editor.setTheme( "ace/theme/github" );
-		editor.getSession().setMode( "ace/mode/lua" );
-
-		dialog
-			.on( "click touchend", ".altui-luacode-save", function() {
-				var code = editor.getValue();
-				if ( $.isFunction( callback ) ) {
-					callback( code );
-				}
-			} );
 		dialog.modal();
+
+		$.when( _loadResourcesAsync( [ "https://cdnjs.cloudflare.com/ajax/libs/ace/1.2.2/ace.js" ] ) )
+			.done( function() {
+				var html = '<div id="luaEditor">' + code + '</div>'; // TODO : escape
+				$(dialog).find( ".row-fluid" ).append( html );
+				var editor = ace.edit( "luaEditor" );
+				editor.setTheme( "ace/theme/monokai" );
+				//editor.setTheme( "ace/theme/github" );
+				editor.getSession().setMode( "ace/mode/lua" );
+				DialogManager.dlgAddDialogButton( dialog, true, _T( "Save Changes" ), "altui-luacode-save", { "data-dismiss": "modal" } );
+				dialog
+					.on( "click touchend", ".altui-luacode-save", function() {
+						var code = editor.getValue();
+						if ( $.isFunction( callback ) ) {
+							callback( code );
+						}
+					} );
+			} );
 
 		//editor.resize();
 	}
-	
+
 	function _pageRules( altuiid ) {
 		var device = MultiBox.getDeviceByAltuiID( altuiid );
 		UIManager.clearPage( _T( "Control Panel" ), "Rules - {0} <small>#{1}</small>".format( device.name , altuiid ), UIManager.oneColumnLayout );
@@ -591,6 +609,12 @@ console.log("rulesInfos", rulesInfos);
 			.on( "click", ".altui-rule-create", function() {
 				_pageRuleEdit( altuiid, fileName );
 			} )
+			.on( "click", ".altui-device-title-name", function() {
+				var $rule = $( this ).parents( ".altui-rule" );
+				var fileName = $rule.data( "rulefilename" );
+				var idx = parseInt( $rule.data( "ruleidx" ), 10 );
+				_pageRuleEdit( altuiid, fileName, idx, true );
+			} )
 			.on( "click", ".altui-rule-edit", function() {
 				var $rule = $( this ).parents( ".altui-rule" );
 				var fileName = $rule.data( "rulefilename" );
@@ -602,7 +626,7 @@ console.log("rulesInfos", rulesInfos);
 				var fileName = $rule.data( "rulefilename" );
 				var idx = parseInt( $rule.data( "ruleidx" ), 10 );
 				if (confirm("Are you sure that you want to remove the rule ?")) {
-					 _removeRule( altuiid, fileName, idx )
+					_removeRule( altuiid, fileName, idx );
 				}
 			} )
 			.on( "click", ".altui-rule-arm", function() {
@@ -629,11 +653,12 @@ console.log("rulesInfos", rulesInfos);
 				var ruleId = $rule.data( "ruleid" );
 				var ruleName = $rule.find( ".altui-rule-title-name" ).text();
 				var dialog =  DialogManager.registerDialog(
-					"dialogModal",
+					"ruleErrorsModal",
 					defaultDialogModalTemplate.format(
-						_T( "Rule #" + ruleId + "(" + ruleName + ")" ),
-						"",				// body
-						"modal-lg"		// size
+						"ruleErrorsModal",
+						_T( "Rule" ) + " #" + ruleId + "(" + ruleName + ")",
+						"",
+						"modal-lg"
 					)
 				);
 				$.when( _getRulesInfosAsync( device, ruleId ) )
@@ -648,16 +673,17 @@ console.log("rulesInfos", rulesInfos);
 							html +=				'<tr><td>{0}</td><td>{1}</td><td>{2}</td></tr>'.format( _convertTimestampToLocaleString( e.timestamp ), e.event, e.message);
 						});
 						html +=				'</tbody>'
-							+			'</table></small>';
+							+			'</table></small>'
 							+		'</div>';
-						$(dialog).find( ".row-fluid" ).append(html);
-						$( 'div#dialogModal' ).modal();
+						dialog.find( ".row-fluid" ).append(html);
+						dialog.modal();
 					} );
 			} );
 
 		// Draw the rules
 		$(".altui-mainpanel").append( '<div class="altui-rules"></div>' );
-		$.when( _getRulesAsync( device ) )
+		//$.when( _getRulesAsync( device ) )
+		$.when( _getRulesInfosAsync( device ) )
 			.done( function( rules ) {
 				_settings[ device.altuiid ].rules = rules;
 				// Sort by rule name
@@ -670,16 +696,19 @@ console.log("rulesInfos", rulesInfos);
 					return 0;
 				} );
 				$.each( rules, function( idx, rule) {
+					/*
 					var fileName          = _getParamValue( rule, "FileName");
 					var isAcknowledgeable = ( _getParamValue( rule, "Ackable") === "1" );
 					var isArmed           = ( _getParamValue( rule, "Armed") === "1" );
+					*/
 					$(".altui-mainpanel .altui-rules").append(
 							'<div class="col-sm-6 col-md-4 col-lg-3">'
 						+		'<div class="panel panel-default altui-rule" data-altuiid="' + device.altuiid + '"'
 						+				' data-ruleid="' + rule.id + '"'
 						+				' data-ruleidx="' + rule.idx + '"'
-						+				' data-rulefilename="' + fileName + '"'
-						+				' data-ruleacknowledgeable="' + _getParamValue( rule, "Ackable") + '"'
+						+				' data-rulefilename="' + rule.fileName + '"'
+						//+				' data-ruleacknowledgeable="' + _getParamValue( rule, "Ackable") + '"'
+						+				' data-ruleacknowledgeable="' + rule.isAcknowledgeable + '"'
 						+				' data-ruleacknowledged="0"'
 						+			'>'
 						+			'<div class="panel-heading altui-device-heading">'
@@ -697,7 +726,7 @@ console.log("rulesInfos", rulesInfos);
 						+				'<table>'
 						+					'<tr>'
 						+						'<td>'
-						+							( isAcknowledgeable ?
+						+							( rule.isAcknowledgeable ?
 													'<div class="altui-device-icon altui-rule-icon pull-left img-rounded altui-rule-ack" title="' + _T( "Change aknowledgement" ) + '"></div>'
 													:
 													'<div class="altui-device-icon altui-rule-icon pull-left img-rounded"></div>'
@@ -718,9 +747,9 @@ console.log("rulesInfos", rulesInfos);
 						+	'</div>'
 					);
 				} );
-				_updateRules( device );
+				_updateRules( device, rules );
 			} );
-	};
+	}
 
 	function _updateTimeline( timeline ) {
 		if ( $(".altui-mainpanel .timeline").length === 0 ) {
@@ -735,7 +764,7 @@ console.log("rulesInfos", rulesInfos);
 		$.each( timeline.scheduled, function( idx, item ) {
 			$(".altui-mainpanel .timeline").append( '<div>' + _convertTimestampToLocaleString( item.timestamp ) + ' - ' + item.eventType + ' - ' + item.event + '</div>' );
 		} );
-	};
+	}
 
 	function _pageTimeline( altuiid ) {
 		var device = MultiBox.getDeviceByAltuiID( altuiid );
@@ -750,7 +779,7 @@ console.log("rulesInfos", rulesInfos);
 			.fail( function( errorThrown ) {
 				hide_loading();
 			} );
-	};
+	}
 
 	function _removeRule( altuiid, fileName, idx ) {
 		if ( idx == undefined ) {
@@ -767,7 +796,7 @@ console.log("rulesInfos", rulesInfos);
 						PageMessage.message( "File \"" + fileName + "\" has been saved", "success");
 					} );
 			} );
-	};
+	}
 
 	function _saveBlocklyChanges( altuiid, fileName, xmlRules, idx ) {
 		// Get new or modified rules from Blockly
@@ -788,15 +817,15 @@ console.log("rulesInfos", rulesInfos);
 				_pageRules( altuiid );
 				PageMessage.message( "File \"" + fileName + "\" has been saved", "success");
 			} );
-	};
+	}
 
-	function _pageRuleEdit( altuiid, fileName, idx ) {
+	function _pageRuleEdit( altuiid, fileName, idx, readOnly ) {
 		var device = MultiBox.getDeviceByAltuiID( altuiid );
 		UIManager.clearPage( _T( "Control Panel" ), "Edit rule - {0} <small>#{1}</small>".format( device.name , altuiid ), UIManager.oneColumnLayout );
 
 		// Known rules for this XML file
-		var _currentRules = $.grep( _settings[ altuiid ].rules, function( rule, i ) { return _getParamValue( rule, "FileName") === fileName } )
-			.sort( function( a,b ) { return a.idx - b.idx } );
+		var _currentRules = $.grep( _settings[ altuiid ].rules, function( rule, i ) { return rule.fileName === fileName; } )
+			.sort( function( a,b ) { return a.idx - b.idx; } );
 		// Rules in the XML file
 		var _currentXmlRules = [];
 
@@ -880,19 +909,33 @@ console.log("rulesInfos", rulesInfos);
 
 		$.when( _loadBlocklyResourcesAsync( device ) )
 			.done( function() {
-				_drawBlocklyPanel( device );
-				_watchBlocklyChanges( device );
+				_drawBlocklyPanel( device, readOnly );
+				if ( readOnly !== true ) {
+					_watchBlocklyChanges( device );
+				}
 				$.when( _loadRulesAsync( device, fileName ) )
 					.done( function( xmlRules ) {
 						_currentXmlRules = xmlRules;
 						_checkXmlRulesIds( _currentXmlRules, _currentRules );
 						if ( idx != null ) {
 							var workspace = Blockly.getMainWorkspace();
-							Blockly.Xml.domToWorkspace(workspace, { childNodes: [ _currentXmlRules[ idx - 1 ] ] } );
+							try {
+								Blockly.Xml.domToWorkspace(workspace, { childNodes: [ _currentXmlRules[ idx - 1 ] ] } );
+								var topBlocks = workspace.getTopBlocks( true );
+								if ( ( topBlocks !== undefined ) && ( topBlocks.length > 0 ) ) {
+									// Move first top block
+									var coords = topBlocks[ 0 ].getRelativeToSurfaceXY();
+									topBlocks[ 0 ].moveBy( 10 - coords.x, 10 - coords.y );
+								}
+							} catch( e ) {
+								// There's a critical error
+								// TODO : not be able to save and show XML code
+								console.log(e);
+							}
 						}
 					} );
 			} );
-	};
+	}
 
 	function _importXml() {
 		var workspace = Blockly.getMainWorkspace();
@@ -900,7 +943,7 @@ console.log("rulesInfos", rulesInfos);
 		var xml = Blockly.Xml.textToDom( xml_text );
 		_decodeCarriageReturns( xml );
 		Blockly.Xml.domToWorkspace( workspace, xml );
-	};
+	}
 	function _exportXml( xml ) {
 		var workspace = Blockly.getMainWorkspace();
 		var xml = (xml != undefined ? xml : Blockly.Xml.workspaceToDom( workspace ));
@@ -909,7 +952,7 @@ console.log("rulesInfos", rulesInfos);
 		$( "#altui-rule-xml-export" ).val( xml_text );
 		$( "#altui-rule-export" ).toggleClass( "collapse", false );
 		Blockly.fireUiEvent(window, 'resize');
-	};
+	}
 
 	// explicitly return public methods when this object is instantiated
 	return {
@@ -934,8 +977,10 @@ console.log("rulesInfos", rulesInfos);
 				_updateDevice( device, timeline );
 			} );
 			*/
+			var status = parseInt( MultiBox.getStatus( device, "urn:upnp-org:serviceId:SwitchPower1", "Status" ), 10 );
 
 			return '<div class="panel-content">'
+				+		ALTUI_PluginDisplays.createOnOffButton( status, "altui-rulesengine-" + device.altuiid, _T( "OFF,ON" ), "pull-right" )
 				+		'<div class="btn-group" role="group" aria-label="...">'
 				+			'<button class="btn btn-default pull-left" onclick="javascript:ALTUI_RulesEngine.pageRules(\'' + device.altuiid + '\');">'
 				+				'<span class="glyphicon glyphicon-th" title="' + _T( "Rules" ) + '"></span>'
@@ -945,8 +990,10 @@ console.log("rulesInfos", rulesInfos);
 				+			'</button>'
 				+		'</div>'
 				+		'<div class="info"></div>'
-				//+			'<div class="altui-rule-panel">' + MultiBox.getStatus( device, "urn:upnp-org:serviceId:RulesEngine1", "RulePanel" ) + '</div>'
-				+	'</div>';
+				+	'</div>'
+				+	'<script type="text/javascript">'
+				+		'$("div#altui-rulesengine-{0}").on("click touchend", function() { ALTUI_PluginDisplays.toggleOnOffButton("{0}", "div#altui-rulesengine-{0}"); } );'.format( device.altuiid )
+				+	'</script>';
 		},
 
 		drawControlPanel: function( device, domparent ) {

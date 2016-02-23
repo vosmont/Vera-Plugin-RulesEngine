@@ -2,15 +2,14 @@
 	"flashicon": "http://vosmont.github.io/icons/rules_engine.png",
 	"state_icons": [
 		"rules_engine_0.png",
-		"rules_engine_50.png",
 		"rules_engine_100.png"
 	],
 	"inScene": "1",
 	"DisplayStatus": {
-		"Service": "urn:upnp-org:serviceId:RulesEngine1",
+		"Service": "urn:upnp-org:serviceId:SwitchPower1",
 		"Variable": "Status",
 		"MinValue": "0",
-		"MaxValue": "2"
+		"MaxValue": "1"
 	},
 	"doc_url":{
 		"doc_forced_url":{

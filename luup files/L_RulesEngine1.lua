@@ -6,10 +6,6 @@ License: MIT License, see LICENSE
 --]]
 
 module("L_RulesEngine1", package.seeall)
-if (package.path:find ("./lib/?.lua;", 1, true) == nil) then
-	-- For Unit Tests
-	package.path = package.path .. ";./lib/?.lua"
-end
 
 local status, json = pcall(require, "dkjson")
 if (type(json) ~= "table") then
@@ -43,9 +39,11 @@ local SID = {
 -------------------------------------------
 
 _NAME = "RulesEngine"
-_DESCRIPTION = "Rules Engine for the Vera"
-_VERSION = "0.05"
+_DESCRIPTION = "Rules Engine for the Vera with visual editor"
+_VERSION = "0.06"
+_AUTHOR = "vosmont"
 
+local _isEnabled = false
 local _isStarted = false
 local _pluginParams = {}
 
@@ -83,37 +81,31 @@ end
 
 local string = string
 
---- Pads str to length len with char from left
-function string.lpad (str, len, char)
-	if (char == nil) then
-		char = ' '
-	end
-	return string.rep(char, len - #str) .. str
+-- Pads string to given length with given char from left.
+function string.lpad (s, len, c)
+	s = tostring(s)
+	length = length or 2
+	c = c or " "
+	return c:rep(length - #s) .. s
 end
 
---- Pads str to length len with char from right
-function string.rpad (str, len, char)
-	if (char == nil) then
-		char = ' '
-	end
-	return str .. string.rep(char, len - #str)
+-- Pads string to given length with given char from right.
+function string.rpad (s, length, c)
+	s = tostring(s)
+	length = length or 2
+	c = char or " "
+	return s .. c:rep(length - #s)
 end
 
-function string.split (str, pat)
-	local t = {}  -- NOTE: use {n = 0} in Lua-5.0
-	local fpat = "(.-)" .. pat
-	local last_end = 1
-	local s, e, cap = str:find(fpat, 1)
-	while s do
-		if s ~= 1 or cap ~= "" then
-			table.insert(t,cap)
-		end
-		last_end = e+1
-		s, e, cap = str:find(fpat, last_end)
+-- Splits a string based on the given separator. Returns a table.
+function string.split (s, sep)
+	if (type(s) ~= "string") then
+		return {}
 	end
-	if last_end <= #str then
-		cap = str:sub(last_end)
-		table.insert(t, cap)
+	sep = sep or " "
+	local t = {}
+	for token in s:gmatch("[^"..sep.."]+") do
+		table.insert(t, token)
 	end
 	return t
 end
@@ -124,59 +116,75 @@ end
 
 local table = table
 
--- Check if table contains
-function table.contains (t, i)
+-- Checks if a table contains the given item.
+-- Returns true and the key / index of the item if found, or false if not found.
+function table.contains (t, item)
 	for k, v in pairs(t) do
-		if v == i then
-			return true
+		if (v == item) then
+			return true, k
 		end
 	end
 	return false
 end
 
--- Check if table contains all
-function table.containsAll (t, t2)
-	for k, v in pairs(t2) do
-		if not table.contains (t, v) then
+-- Checks if table contains all the given items (table).
+function table.containsAll (t1, items)
+	if ((type(t1) ~= "table") or (type(t2) ~= "table")) then
+		return false
+	end
+	for _, v in pairs(items) do
+		if not table.contains(t1, v) then
 			return false
 		end
 	end
 	return true
 end
 
--- Adds the contents from one table (b) into another (a)
-function table.add (a, b)
-	if ((a == nil) or (b == nil)) then
+-- Appends the contents of the second table at the end of the first table
+function table.append (t1, t2, noDuplicate)
+	if ((t1 == nil) or (t2 == nil)) then
 		return
 	end
+	local table_insert = table.insert
 	table.foreach(
-		b,
-		function(i,v)
-			table.insert(a, v)
+		t2,
+		function (_, v)
+			if (noDuplicate and table.contains(t1, v)) then
+				return
+			end
+			table_insert(t1, v)
 		end
 	)
+	return t1
 end
 
--- Merge the contents of one table (b) into another (a)
-function table.extend (a, b)
-	if ((a == nil) or (b == nil)) then
+-- Merges (deeply) the contents of one table (t2) into another (t1)
+function table.extend (t1, t2)
+	if ((t1 == nil) or (t2 == nil)) then
 		return
 	end
-	for key, value in pairs(b) do
-		if (value ~= nil) then
-			a[key] = value
+	for key, value in pairs(t2) do
+		if (type(value) == "table") then
+			if (type(t1[key]) == "table") then
+				t1[key] = table.extend(t1[key], value)
+			else
+				t1[key] = table.extend({}, value)
+			end
+		elseif (value ~= nil) then
+			t1[key] = value
 		end
 	end
+	return t1
 end
 
 -- Get first value which is of type "table"
 function table.getFirstTable (t)
 	for _, item in ipairs(t) do
-		if (type(item) == "table")  then
+		if (type(item) == "table") then
 			return item
 		end
 	end
-	return nil;
+	return nil
 end
 
 -------------------------------------------
@@ -191,6 +199,18 @@ decompress_lzo_file_in_tmp() {
 	then
 		TEMP_FILE=$(mktemp)
 		pluto-lzo d $SRC_FILE $TEMP_FILE
+		mv $TEMP_FILE $DEST_FILE
+	fi
+}
+]]
+local compressScript = [[
+compress_lzo_file_in_tmp() {
+	SRC_FILE=/tmp/$1
+	DEST_FILE=/etc/cmh-ludl/$1.lzo
+	if [ ! -e $DEST_FILE -o $SRC_FILE -nt $DEST_FILE ]
+	then
+		TEMP_FILE=$(mktemp)
+		pluto-lzo c $SRC_FILE $TEMP_FILE
 		mv $TEMP_FILE $DEST_FILE
 	fi
 }
@@ -217,61 +237,101 @@ local function _isLogLevel (level)
 	return true
 end
 
+local function getFormatedMethodName (methodName)
+	if (methodName == nil) then
+		methodName = "UNKNOWN"
+	else
+		methodName = "(" .. _NAME .. "::" .. tostring(methodName) .. ")"
+	end
+	return string.rpad(methodName, 45)
+end
+
 function log (msg, methodName, level)
 	level = tonumber(level) or 1
 	if not _isLogLevel(level)then
 		return
 	end
-	if (methodName == nil) then
-		methodName = "UNKNOWN"
-	else
-		methodName = "[" .. _NAME .. "." .. tostring(methodName) .. "]"
-	end
+	--[[
 	if (_verbosity > 2) then
 		methodName = "(" .. tostring(level or 1) .. ")" .. methodName
 	end
-	luup.log(string.rpad(methodName, 45) .. " " .. msg, 50)
+	--]]
+	luup.log(getFormatedMethodName(methodName) .. " " .. msg, 50)
+end
+
+local _memoryLevel = 0
+local _memoryUsedByLevel = {}
+local function debugLogBegin (methodName)
+	if (_verbosity < 4) then
+		return
+	end
+	_memoryLevel = _memoryLevel + 1
+	--collectgarbage()
+	_memoryUsedByLevel[_memoryLevel] = collectgarbage("count")
+	local msg = ""
+	for i = 1, _memoryLevel do
+		msg = msg .. "--"
+	end
+	msg = msg .. "> begin '" .. tostring(methodName) .. "' - " .. tostring(math.ceil(_memoryUsedByLevel[_memoryLevel])) .. "ko"
+	log (msg, methodName, 4)
+end
+local function debugLogEnd (methodName)
+	if (_verbosity < 4) then
+		return
+	end
+	local formerMemoryUsed = _memoryUsedByLevel[_memoryLevel]
+	_memoryUsedByLevel[_memoryLevel] = collectgarbage("count")
+	local _memoryUsed = _memoryUsedByLevel[_memoryLevel]
+	local memoryInfos = tostring(math.ceil(_memoryUsed)) .. "ko("
+	if (_memoryUsed - formerMemoryUsed >= 0) then
+		memoryInfos = memoryInfos .. "+"
+	end
+	memoryInfos = memoryInfos .. tostring((_memoryUsed - formerMemoryUsed) * 1024) .. ")"
+	local msg = "<"
+	for i = 1, _memoryLevel do
+		msg = msg .. "--"
+	end
+	msg = msg .. " end   '" .. tostring(methodName) .. "' - " .. memoryInfos
+	log (msg, methodName, 4)
+	_memoryLevel = _memoryLevel - 1
+end
+
+local function debug (msg, methodName)
+	
 end
 
 local function warning (msg, methodName)
-	if (methodName == nil) then
-		methodName = "UNKNOWN"
-	else
-		methodName = "[" .. _NAME .. "." .. tostring(methodName) .. "]"
-	end
-	luup.log(string.rpad(methodName, 45) .. " WARNING: " .. msg, 2)
+	luup.log(getFormatedMethodName(methodName) .. " WARNING: " .. msg, 2)
 end
 
 local function error (msg, methodName)
-	if (methodName == nil) then
-		methodName = "UNKNOWN"
-	else
-		methodName = "[" .. _NAME .. "." .. tostring(methodName) .. "]"
-	end
-	luup.log(string.rpad(methodName, 45) .. " ERROR: " .. msg, 1)
+	luup.log(getFormatedMethodName(methodName) .. " ERROR: " .. msg, 1)
+end
+
+local function _getRuleSummary (rule)
+	return "Rule #" .. tostring(rule.id) .. "(" .. tostring(rule.name) .. ")"
 end
 
 local function _getItemSummary (item)
 	if (type(item) ~= "table") then
 		return ""
 	end
-	--local summary = "Rule #" .. tostring(item._ruleId) .. "(" .. tostring(getRule(item._ruleId).name) .. ")" ..
-	local summary = "Rule #" .. tostring(item._ruleId) .. " - " .. tostring(item._mainType) .. " #" .. tostring(item._id)
+	local summary = "Rule #" .. tostring(item.ruleId) .. " - " .. tostring(item.mainType) .. " #" .. tostring(item.id)
 	if (item.type ~= nil) then
 		summary = summary .. " of type '" .. tostring(item.type) .. "'"
 	end
 	local separator = "with"
-	if (item._mainType == "GroupAction") then
+	if (item.mainType == "GroupAction") then
 		separator = "for"
 	end
 	if (item.event ~= nil) then
 		summary = summary .. " " .. separator .. " event '" .. tostring(item.event) .. "'"
 	end
-	if (item._level ~= nil) then
-		summary = summary .. " " .. separator .. " level '" .. tostring(item._level) .. "'"
+	if (item.level ~= nil) then
+		summary = summary .. " " .. separator .. " level '" .. tostring(item.level) .. "'"
 	end
-	if ((item._levels ~= nil) and (table.getn(item._levels) > 0)) then
-		summary = summary .. " " .. separator .. " levels " .. tostring(json.encode(item._levels))
+	if ((item.levels ~= nil) and (table.getn(item.levels) > 0)) then
+		summary = summary .. " " .. separator .. " levels " .. tostring(json.encode(item.levels))
 	end
 	return summary
 end
@@ -292,17 +352,17 @@ local function _checkParameters (input, parameters)
 	local isOk = true
 	local msg = _getItemSummary(input)
 	if (input == nil) then
-		addRuleError(input._ruleId, "Check parameter", msg .. " - Input is not defined")
+		addRuleError(input.ruleId, "Check parameter", msg .. " - Input is not defined")
 		isOk = false
 	else
 		for _, parameterAND in ipairs(parameters) do
 			-- AND
 			if (type(parameterAND) == "string") then
 				if (input[parameterAND] == nil) then
-					addRuleError(input._ruleId, "Check parameter", msg .. " - Parameter '" .. parameterAND .. "' is not defined")
+					addRuleError(input.ruleId, "Check parameter", msg .. " - Parameter '" .. parameterAND .. "' is not defined")
 					isOk = false
 				elseif ((type(input[parameterAND]) == "table") and (next(input[parameterAND]) == nil)) then
-					addRuleError(input._ruleId, "Check parameter", msg .. " - Parameter '" .. parameterAND .. "' is empty")
+					addRuleError(input.ruleId, "Check parameter", msg .. " - Parameter '" .. parameterAND .. "' is empty")
 					isOk = false
 				end
 			elseif (type(parameterAND) == "table") then
@@ -319,7 +379,7 @@ local function _checkParameters (input, parameters)
 					end
 				end
 				if not isOk2 then
-					addRuleError(input._ruleId, "Check parameter", msg .. " - Not a single parameter in " .. json.encode(parameterAND) .. "' is defined or not empty")
+					addRuleError(input.ruleId, "Check parameter", msg .. " - Not a single parameter in " .. json.encode(parameterAND) .. "' is defined or not empty")
 					isOk = false
 				end
 			end
@@ -361,7 +421,7 @@ local _labels = {
 	["oneHour"] = "une heure",
 	["oneMinute"] = "une minute",
 	["oneSecond"] = "une seconde",
-	["zeroSecond"] = "zéro seconde",
+	["zeroSecond"] = "zï¿½ro seconde",
 	["days"] = "jours",
 	["hours"] = "heures",
 	["minutes"] = "minutes",
@@ -493,7 +553,10 @@ function getEnhancedMessage (message, context)
 	if (string.find(message, "#devicename#")) then
 		local deviceId = tonumber(context.deviceId or "0") or 0
 		if (deviceId > 0) then
-			message = string.gsub(message, "#devicename#", luup.devices[deviceId].description)
+			local device = luup.devices[deviceId]
+			if (device) then
+				message = string.gsub(message, "#devicename#", device.description)
+			end
 		end
 	end
 	if (string.find(message, "#lastupdate#")) then
@@ -517,11 +580,11 @@ local function _registerConditionForEvent (eventName, condition)
 	if (_indexRulesByEvent[eventName] == nil) then
 		_indexRulesByEvent[eventName] = {}
 	end
-	if (_indexRulesByEvent[eventName][condition._ruleId] == nil) then
-		_indexRulesByEvent[eventName][condition._ruleId] = {}
+	if (_indexRulesByEvent[eventName][condition.ruleId] == nil) then
+		_indexRulesByEvent[eventName][condition.ruleId] = {}
 	end
-	if not table.contains(_indexRulesByEvent[eventName][condition._ruleId], condition) then
-		table.insert(_indexRulesByEvent[eventName][condition._ruleId], condition)
+	if not table.contains(_indexRulesByEvent[eventName][condition.ruleId], condition) then
+		table.insert(_indexRulesByEvent[eventName][condition.ruleId], condition)
 	end
 end
 
@@ -553,7 +616,7 @@ local function _getTaskInfo (task)
 		timeout = os.date("%X", task.timeout),
 		duration = _getDuration(task.delay),
 		delay = task.delay,
-		rule = "#" .. task.ruleId .. "(" .. getRule(task.ruleId).name .. ")",
+		rule = "#" .. tostring(task.ruleId) .. "(" .. getRule(task.ruleId).name .. ")",
 		level = tostring(task.level),
 		["function"] = task.functionName,
 		itemInfo = _getItemSummary(task.item)
@@ -619,7 +682,7 @@ local function _addScheduledTask (rule, functionName, item, params, level, delay
 	local _newScheduledTask = {
 		timeout = (os.time() + tonumber(delay)),
 		delay = tonumber(delay),
-		ruleId = _rule._id,
+		ruleId = _rule.id,
 		level = level,
 		functionName = functionName,
 		item = item,
@@ -640,37 +703,40 @@ local function _addScheduledTask (rule, functionName, item, params, level, delay
 	if _isLogLevel(4) then
 		log("Add task at index #" .. tostring(index) .. "/" .. tostring(#_scheduledTasks) .. ": " .. _getTaskInfo(_newScheduledTask), "addScheduledTask", 4)
 	end
-	updateRulesInfos(rule._id)
+	--updateRulesInfos(rule.id)
 
 	_prepareNextWakeUp()
 end
 
--- Remove all scheduled actions for a rule and optionaly a level or an item
+-- Remove all scheduled actions for optionaly rule / level / item
 local function _removeScheduledTasks (rule, level, item)
-	local msg = "Remove scheduled tasks for rule #" .. rule._id
+	local msg = "Remove scheduled tasks"
+	if (rule ~= nil) then
+		msg = msg .. " for rule #" .. tostring(rule.id)
+	end
 	if (level ~= nil) then
 		msg = msg .. " and level " .. tostring(level)
 	end
 	if (item ~= nil) then
 		msg = msg .. " and item \"" .. _getItemSummary(item) .. "\""
 	end
-	log(msg, "removeScheduledTask", 3)
-	--local ruleScheduledTasks = {}
+	log(msg, "removeScheduledTask", 4)
+	local nbTaskRemoved = 0
 	for i = #_scheduledTasks, 1, -1 do
-		if (_scheduledTasks[i].ruleId == rule._id) then
-			if (((level == nil) or (_scheduledTasks[i].level == level))
-				and ((item == nil) or (_scheduledTasks[i].item == item))
-			) then
-				if _isLogLevel(4) then
-					log("Remove task #" .. tostring(i) .. "/" .. tostring(#_scheduledTasks) .. ": " .. _getTaskInfo(_scheduledTasks[i]), "removeScheduledTask", 4)
-				end
-				table.remove(_scheduledTasks, i)
-			else
-				--table.insert(ruleScheduledTasks, 1, _scheduledTasks[i])
+		if (
+				((rule == nil)  or (_scheduledTasks[i].ruleId == rule.id))
+			and ((level == nil) or (_scheduledTasks[i].level == level))
+			and ((item == nil)  or (_scheduledTasks[i].item == item))
+		) then
+			if _isLogLevel(4) then
+				log("Remove task #" .. tostring(i) .. "/" .. tostring(#_scheduledTasks) .. ": " .. _getTaskInfo(_scheduledTasks[i]), "removeScheduledTask", 4)
 			end
+			table.remove(_scheduledTasks, i)
+			nbTaskRemoved = nbTaskRemoved + 1
 		end
 	end
-	updateRulesInfos(rule._id)
+	log(msg .. ": " .. tostring(nbTaskRemoved) .. " task(s) removed", "removeScheduledTask", 3)
+	--updateRulesInfos(rule.id)
 	_prepareNextWakeUp()
 end
 
@@ -714,7 +780,7 @@ local function _getScheduledTasks (rule)
 	end
 	local scheduledTasks = {}
 	for _, scheduledTask in ipairs(_scheduledTasks) do
-		if (scheduledTask.ruleId == rule._id) then
+		if (scheduledTask.ruleId == rule.id) then
 			table.insert(scheduledTasks, scheduledTask)
 		end
 	end
@@ -754,14 +820,14 @@ setmetatable(_addParam, {
 	_addParam["condition_param_since"] = function (item, param)
 		local sinceInterval = _getIntervalInSeconds(param.sinceInterval, param.unit)
 		log(_getItemSummary(item) .. " - Add 'sinceInterval' : '" .. tostring(sinceInterval) .. "'", "addParams", 4)
-		item["_sinceInterval"] = sinceInterval
+		item.sinceInterval = sinceInterval
 	end
 
 	_addParam["condition_param_level"] = function (item, param)
 		local level = tonumber(param.level)
 		if ((level ~= nil) and (level >= 0)) then
 			log(_getItemSummary(item) .. " - Add 'level' : '" .. tostring(level) .. "'", "addParams", 4)
-			item["_level"] = level
+			item.level = level
 		else
 			log(_getItemSummary(item) .. " - Value '" .. tostring(level) .. "' is not authorized for param 'level'", "addParams", 1)
 		end
@@ -770,11 +836,11 @@ setmetatable(_addParam, {
 	_addParam["action_param_level"] = function (item, param)
 		local level = tonumber(param.level)
 		if ((level ~= nil) and (level >= 0)) then
-			if (item["_levels"] == nil) then
-				item["_levels"] = {}
+			if (item.levels == nil) then
+				item.levels = {}
 			end
 			log(_getItemSummary(item) .. " - Add '" .. tostring(level) .. "' to 'levels'", "addParams", 4)
-			table.insert(item["_levels"], level)
+			table.insert(item.levels, level)
 		else
 			log(_getItemSummary(item) .. " - Value '" .. tostring(level) .. "' is not authorized for param 'level'", "addParams", 1)
 		end
@@ -822,7 +888,7 @@ local function _initProperties (ruleId, properties)
 			local propertyName = property.type
 			property.type = nil
 			result[propertyName] = property
-			log("Rule #" .. ruleId .. " - Add property '" .. tostring(propertyName) .. "': " .. tostring(json.encode(property)), "initProperties", 2)
+			log("Rule #" .. tostring(ruleId) .. " - Add property '" .. tostring(propertyName) .. "': " .. tostring(json.encode(property)), "initProperties", 2)
 		end
 	end
 	return result
@@ -832,100 +898,100 @@ end
 -- Condition (rule condition, action condition)
 -- **************************************************
 
+local function _getDeviceIdsFromCriterias (criterias)
+	local deviceIds = {}
+	if (type(criterias) ~= "table") then
+		return {}
+	end
+	local isMatching
+	for deviceId, device in pairs(luup.devices) do
+		isMatching = true
+		-- Filter on id
+		if (tonumber(criterias.deviceId) and (deviceId ~= tonumber(criterias.deviceId))) then
+			isMatching = false
+		end
+		-- Filter on room
+		if (tonumber(criterias.roomId) and (device.room_num ~= tonumber(criterias.roomId))) then
+			isMatching = false
+		end
+		-- Filter on type
+		if (criterias.deviceType and (device.device_type ~= criterias.deviceType)) then
+			isMatching = false
+		end
+		-- Filter on category
+		if (criterias.category) then
+			local tmpCategory = string.split(criterias.category, ",")
+			if (tonumber(tmpCategory[1]) and (device.category_num ~= tonumber(tmpCategory[1]))) then
+				isMatching = false
+			end
+			if (tonumber(tmpCategory[2]) and (device.subcategory_num ~= tonumber(tmpCategory[2]))) then
+				isMatching = false
+			end
+		end
+		if (isMatching) then
+			table.insert(deviceIds, deviceId)
+		end
+	end
+	log("Retrieve ids " .. json.encode(deviceIds) .. " for criterias " .. json.encode(criterias), "getDeviceIdsFromCriterias", 4)
+	return deviceIds
+end
+
+local function _getDeviceIds (item)
+	local deviceIds = {}
+	if ((type(item) ~= "table") or (type(item.device) ~= "table")) then
+		return {}
+	end
+	if (item.device.type == "device") then
+		item.device.type = nil
+		item.device.mutation = nil
+		table.append(deviceIds, _getDeviceIdsFromCriterias(item.device))
+	else
+		for _, device in pairs(item.device) do
+			if ((type(device) == "table") and (device.type == "device")) then
+				device.type = nil
+				device.mutation = nil
+				table.append(deviceIds,_getDeviceIdsFromCriterias(device), true)
+			end
+		end
+	end
+	log(_getItemSummary(item) .. " - Retrieve ids " .. json.encode(deviceIds), "getDeviceIdsFromParam", 4)
+	return deviceIds
+end
+
+
 -- Modification du statut de la condition
 local function _setConditionStatus (condition, status)
 	local msg = _getItemSummary(condition)
 	local hasConditionStatusChanged = false
-	if (((condition._status == nil) or (condition._status == "0")) and (status == "1")) then
+	if ((condition.context.status < 1) and (status == 1)) then
 		-- The condition has just been activated
 		log(msg .. " is now active", "setConditionStatus", 3)
-		condition._status = "1"
-		condition._lastStatusUpdateTime = os.time()
+		condition.context.status = 1
+		condition.context.lastStatusUpdateTime = os.time()
 		hasConditionStatusChanged = true
-	elseif ((condition._status == "1") and (status == "0")) then
+	elseif ((condition.context.status == 1) and (status == 0)) then
 		-- The condition has just been deactivated
 		log(msg .. " is now inactive", "setConditionStatus", 3)
-		condition._status = "0"
-		condition._lastStatusUpdateTime = os.time()
+		condition.context.status = 0
+		condition.context.lastStatusUpdateTime = os.time()
 		hasConditionStatusChanged = true
-	elseif (condition._status == "1") then
+	elseif (condition.context.status == 1) then
 		-- The condition is still active
 		log(msg .. " is still active (do nothing)", "setConditionStatus", 3)
-	elseif (condition._status == "0") then
+	elseif (condition.context.status == 0) then
 		-- The condition is still inactive
 		log(msg .. " is still inactive (do nothing)", "setConditionStatus", 3)
 	else
-		condition._status = "0"
+		condition.context.status = 0
 		log(msg .. " is inactive", "setConditionStatus", 3)
 	end
 	return hasConditionStatusChanged
 end
 
-local ConditionTypes = {
-	_index = {
-		["armed"]       = { type = "condition_value", service = SID.SecuritySensor,    variable = "Armed" },
-		["tripped"]     = { type = "condition_value", service = SID.SecuritySensor,    variable = "Tripped" },
-		["status"]      = { type = "condition_value", service = SID.SwitchPower,       variable = "Status" },
-		["watts"]       = { type = "condition_value", service = SID.EnergyMetering,    variable = "Watts" },
-		["temperature"] = { type = "condition_value", service = SID.TemperatureSensor, variable = "CurrentTemperature" }
-	}
-}
-
-local function _getConditionEquivalentParams (conditionTypeName)
-		if (conditionTypeName == nil) then
-			return nil
-		end
-		local rootTypeName, operator = string.match(conditionTypeName, "^([^%+%-<>]-)_*([%+%-<>]*)$") -- "something+", "something-" or "something<>"
-		local valueClass
-		if (string.find(rootTypeName, "_") ~= nil) then
-			rootTypeName, valueClass = string.match(rootTypeName, "^(.-)_?([^_]*)$") -- "something_on" or "something_off"
-		end
-		local equivalentParams
-		if (ConditionTypes._index[rootTypeName] ~= nil) then
-			equivalentParams = ConditionTypes._index[rootTypeName]
-		--elseif (ConditionTypes[rootTypeName] ~= nil) then
-		--	equivalentParams = { type = rootTypeName }
-		end
-		if (equivalentParams ~= nil) then
-			equivalentParams.operator = operator
-			if (valueClass == "on") then
-				equivalentParams.value = "1"
-			elseif (valueClass == "off") then
-				equivalentParams.value = "0"
-			end
-		end
-		return equivalentParams
-	end
-
-local function initParams (condition)
-		local equivalentParams = _getConditionEquivalentParams(condition.type)
-		if (equivalentParams ~= nil) then
-			for paramName, paramValue in pairs(equivalentParams) do
-				if (condition[paramName] == nil) then
-					condition[paramName] = paramValue
-				end
-			end
-			condition.type = equivalentParams.type
-		end
-		if (condition.operator == "+") then
-			condition.operator = ">="
-		elseif (condition.operator == "-") then
-			condition.operator = "<="
-		elseif ((condition.operator == nil) or (condition.operator == "")) then
-			condition.operator = "=="
-		end
-	end
-
+local ConditionTypes = {}
 setmetatable(ConditionTypes, {
 	__index = function(t, conditionTypeName)
-		local equivalentTypeName = "unknown"
-		local equivalentParams = _getConditionEquivalentParams(conditionTypeName)
-		if (equivalentParams == nil) then
-			log("SETTING WARNING - Condition type '" .. tostring(conditionTypeName) .. "' is unknown", "ConditionTypes.get")
-		else
-			equivalentTypeName = equivalentParams.type
-		end
-		return ConditionTypes[equivalentTypeName]
+		return ConditionTypes["unknown"]
 	end
 })
 
@@ -964,45 +1030,68 @@ setmetatable(ConditionTypes, {
 	-- Condition of type 'value'
 	ConditionTypes["condition_value"] = {
 		init = function (condition)
-			-- Device (Name is preferred to id)
-			condition.deviceId = tonumber(condition.deviceId)
-			--[[
-			-- TODO : stocker le nom du device
-			if (condition.deviceId ~= nil) then
-				local deviceId = tonumber(_getDeviceIdByName(condition.device))
-				if ((deviceId ~= nil) and (condition.deviceId ~= deviceId)) then
-					log(_getItemSummary(condition) .. " - device #" .. tostring(condition.deviceId) .. "(" .. condition.device .. ") has changed of id: #" .. tostring(deviceId), "ConditionValue.init", 1)
-					condition.deviceId = deviceId
+			log(_getItemSummary(condition) .. " - Init", "ConditionValue.init", 4)
+			-- Get properties from mutation
+			if (condition.mutation ~= nil) then
+				if ((condition.service == nil) and (condition.mutation.variable_service ~= nil)) then
+					condition.service = condition.mutation.variable_service
 				end
-			else
-				condition.deviceId = tonumber(_getDeviceIdByName(condition.device))
-			end
-			--]]
-			if ((condition.device == nil) and (condition.deviceId ~= nil)) then
-				local luDevice = luup.devices[condition.deviceId]
-				if (luDevice ~= nil) then
-					condition.device = luup.devices[condition.deviceId].description
-				else
-					addRuleError(condition._ruleId, "Init condition", _getItemSummary(condition) .. " - Device #" .. tostring(condition.deviceId) .. " is unknown")
-					condition.deviceId = nil
+				if ((condition.variable == nil) and (condition.mutation.variable ~= nil)) then
+					condition.variable = condition.mutation.variable
 				end
+				if ((condition.value == nil) and (condition.mutation.value ~= nil)) then
+					condition.value = condition.mutation.value
+				end
+				condition.mutation = nil
 			end
-			-- Implicit params from type
-			initParams(condition)
-			-- Context
-			condition._context.deviceId = lul_device
-			--condition._context.params = condition.params or {}
+
 			-- Main type
 			if (condition.action ~= nil) then
-				condition._mainType = "External"
+				condition.mainType = "External"
 			else
-				condition._mainType = "Trigger"
+				condition.mainType = "Trigger"
 			end
+
+			-- Get device id(s)
+			if (type(condition.device) == "table") then
+				local deviceIds = _getDeviceIds(condition)
+				condition.device = nil
+				if (#deviceIds == 1) then
+					-- Just one device
+					condition.deviceId = deviceIds[1]
+				else
+					-- List of device - Transform condition into a list of conditions
+					local conditions = {}
+					local newConditionTemplate = table.extend({}, condition)
+					for _, deviceId in ipairs(deviceIds) do
+						local newCondition = table.extend({}, newConditionTemplate)
+						newCondition.deviceId = deviceId
+						table.insert(conditions, newCondition)
+					end
+					condition.type = "list_with_operator_condition"
+					condition.operator = "OR"
+					condition.items = _initConditions(condition.ruleId, conditions, condition.id, condition.noPropagation)
+				end
+			else
+				condition.deviceId = tonumber(condition.deviceId)
+			end
+			log(_getItemSummary(condition) .. " - " .. json.encode(condition), "ConditionValue.init", 4)
+
+			-- Context
+			condition.context.deviceId = lul_device
+			--condition.context.params = condition.params or {}
+
 		end,
 
 		check = function (condition)
-			--if not _checkParameters(condition, {{"device", "deviceId"}, "service", "variable", "value"}) then
 			if not _checkParameters(condition, {"deviceId", "service", "variable"}) then
+				return false
+			end
+			-- Check if device exists
+			local luDevice = luup.devices[condition.deviceId]
+			if (luDevice == nil) then
+				addRuleError(condition.ruleId, "Init condition", _getItemSummary(condition) .. " - Device #" .. tostring(condition.deviceId) .. " is unknown")
+				-- TODO : check if device exposes the variable ?
 				return false
 			end
 			return true
@@ -1010,35 +1099,36 @@ setmetatable(ConditionTypes, {
 
 		start = function (condition)
 			local msg = _getItemSummary(condition)
-			-- Mise à jour des index condition par évènement
 			if (condition.action == nil) then
+				-- Register for event service/variable/device
 				_registerConditionForEvent(condition.service .. "-" .. condition.variable .. "-" .. tostring(condition.deviceId), condition)
+				-- Register (and eventually watch) for event service/variable (optimisation)
 				if not _isEventWatched(condition.service .. "-" .. condition.variable) then
-					log(msg .. " - Watch device #" .. tostring(condition.deviceId) .. "(" .. condition.device .. ")", "ConditionValue.start", 3)
+					log(msg .. " - Watch device #" .. tostring(condition.deviceId) .. "(" .. luup.devices[condition.deviceId].description .. ")", "ConditionValue.start", 3)
 					luup.variable_watch("RulesEngine.onDeviceVariableIsUpdated", condition.service, condition.variable, nil)
 					_setEventIsWatched(condition.service .. "-" .. condition.variable)
 				else
-					log(msg .. " - Watch device #" .. tostring(condition.deviceId) .. "(" .. condition.device .. ") (watch already registered)", "ConditionValue.start", 3)
+					log(msg .. " - Watch device #" .. tostring(condition.deviceId) .. "(" .. luup.devices[condition.deviceId].description .. ") (watch already registered for this service/variable)", "ConditionValue.start", 3)
 				end
 			else
 				log(msg .. " - Can not watch external condition", "ConditionValue.start", 3)
 			end
 		end,
 
-		updateStatus = function (condition)
+		updateStatus = function (condition, currentDeviceId)
 			local msg = _getItemSummary(condition)
-			local context = condition._context
-			local deviceId = currentDeviceId or condition.deviceId
+			local context = condition.context
+			local deviceId = condition.deviceId
 
 			-- Condition of type 'value' / 'value-' / 'value+' / 'value<>'
-			msg = msg .. " for device #" .. tostring(deviceId) .. "(" .. tostring(condition.device) .. ")" .. " - '" .. tostring(condition.service)
+			msg = msg .. " for device #" .. tostring(deviceId) .. "(" .. luup.devices[deviceId].description .. ")" .. " - '" .. tostring(condition.service)
 			if (condition.action ~= nil) then
 				msg = msg .. "-" .. condition.action
 			end
 			msg = msg .. "-" ..  condition.variable .. "'"
 
 			-- Update known value (if needed)
-			if (condition._mainType == "Trigger") then
+			if (condition.mainType == "Trigger") then
 				if (context.lastUpdateTime == nil) then
 					-- The value has not yet been updated
 					msg = msg .. " (value retrieved)"
@@ -1060,7 +1150,7 @@ setmetatable(ConditionTypes, {
 			end
 
 			-- Status update
-			local status = "1"
+			local status = 1
 			local OPERATORS = {
 				EQ = "==",
 				NEQ = "<>",
@@ -1092,7 +1182,7 @@ setmetatable(ConditionTypes, {
 				) then
 					-- Threshold is not respected
 					msg = msg .. " - Does not respect the condition '{value:" .. tostring(context.value) .. "} " .. OPERATORS[condition.operator] .. " " .. tostring(condition.value) .. "'"
-					status = "0"
+					status = 0
 				else
 					msg = msg .. " - Respects the condition '{value:" .. tostring(context.value) .. "} " .. OPERATORS[condition.operator] .. " " .. tostring(condition.value) .. "'"
 				end
@@ -1103,24 +1193,24 @@ setmetatable(ConditionTypes, {
 
 			-- Check since interval if exists
 			local hasToUpdateRuleStatus = false
-			if (condition._sinceInterval ~= nil) then
+			if (condition.sinceInterval ~= nil) then
 				-- Remove scheduled actions for this condition
-				if not condition._noPropagation then
+				if not condition.noPropagation then
 					log(_getItemSummary(condition) .. " has a 'since' condition : remove its former schedule if exists", "ConditionValue.updateStatus", 4)
-					_removeScheduledTasks(getRule(condition._ruleId), nil, condition)
+					_removeScheduledTasks(getRule(condition.ruleId), nil, condition)
 				end
-				if (status == "1") then
+				if (status == 1) then
 					local currentInterval = os.difftime(os.time(), (context.lastUpdateTime or os.time()))
-					if (currentInterval < tonumber(condition._sinceInterval)) then
-						status = "0"
+					if (currentInterval < tonumber(condition.sinceInterval)) then
+						status = 0
 						-- Have to check later again the status of the condition
-						if not condition._noPropagation then
-							local remainingSeconds = tonumber(condition._sinceInterval) - currentInterval
-							msg = msg .. " but not since " .. tostring(condition._sinceInterval) .. " seconds - Check condition status in " .. tostring(remainingSeconds) .. " seconds"
-							_addScheduledTask(getRule(condition._ruleId), "RulesEngine.updateConditionStatus", condition, nil, nil, remainingSeconds)
+						if not condition.noPropagation then
+							local remainingSeconds = tonumber(condition.sinceInterval) - currentInterval
+							msg = msg .. " but not since " .. tostring(condition.sinceInterval) .. " seconds - Check condition status in " .. tostring(remainingSeconds) .. " seconds"
+							_addScheduledTask(getRule(condition.ruleId), "RulesEngine.updateConditionStatus", condition, nil, nil, remainingSeconds)
 						end
 					else
-						msg = msg .. " since " .. tostring(condition._sinceInterval) .. " seconds"
+						msg = msg .. " since " .. tostring(condition.sinceInterval) .. " seconds"
 						hasToUpdateRuleStatus = true
 					end
 				end
@@ -1130,8 +1220,8 @@ setmetatable(ConditionTypes, {
 			local result = _setConditionStatus(condition, status)
 
 			-- Update status of the linked rule if needed (asynchronously)
-			if (hasToUpdateRuleStatus and not condition._noPropagation)then
-				luup.call_delay("RulesEngine.updateRuleStatus", 0, condition._ruleId)
+			if (hasToUpdateRuleStatus and not condition.noPropagation)then
+				luup.call_delay("RulesEngine.updateRuleStatus", 0, condition.ruleId)
 			end
 
 			return result
@@ -1142,17 +1232,11 @@ setmetatable(ConditionTypes, {
 	-- Condition of type 'rule'
 	ConditionTypes["condition_rule"] = {
 		init = function (condition)
-			if (condition.type == "rule_on") then
-				condition.type = "rule"
-				condition.status = "1"
-			elseif (condition.type == "rule_off") then
-				condition.type = "rule"
-				condition.status = "0"
-			end
-			condition._mainType = "Trigger"
+			condition.mainType = "Trigger"
 		end,
 
 		check = function (condition)
+print(json.encode(condition))
 			if not _checkParameters(condition, {{"rule", "ruleId", "ruleName"}, "status"}) then
 				return false
 			else
@@ -1167,21 +1251,21 @@ setmetatable(ConditionTypes, {
 		end,
 
 		start = function (condition)
-			-- Enregistrement de la surveillance du status de la règle
+			-- Register the watch of the rule status
 			log(_getItemSummary(condition) .. " - Watch status for rule '" .. condition.rule .. "'", "ConditionRule.start", 3)
 			_registerConditionForEvent("RuleStatus-" .. condition.rule, condition)
 		end,
 
 		updateStatus = function (condition)
 			local msg = _getItemSummary(condition)
-			local context = condition._context
-			local status = "1"
-			if (tostring(context.status) ~= tostring(condition.status)) then
+			local context = condition.context
+			local status = 1
+			if (context.status ~= condition.status) then
 				msg = msg .. " - Does not respect the condition '{status:" .. tostring(context.status) .. "}==" ..tostring(condition.status) .. "'"
-				status = "0"
+				status = 0
 			else
 				msg = msg .. " - Respects the condition '{status:" .. tostring(context.status) .. "}==" ..tostring(condition.status) .. "'"
-				status = "1"
+				status = 1
 			end
 			log(msg, "ConditionRule.updateStatus", 3)
 
@@ -1206,7 +1290,7 @@ setmetatable(ConditionTypes, {
 				condition.timerType = 2
 				condition.days = {"1","2","3","4","5","6","7"}
 			end
-			condition._mainType = "Trigger"
+			condition.mainType = "Trigger"
 		end,
 
 		check = function (condition)
@@ -1243,7 +1327,7 @@ setmetatable(ConditionTypes, {
 
 		updateStatus = function (condition)
 			local msg = _getItemSummary(condition)
-			local status = "1"
+			local status = 1
 			local hasToTriggerOff = false
 
 			function getDayOfWeek (time)
@@ -1276,10 +1360,10 @@ setmetatable(ConditionTypes, {
 					-- The bounds are on the same day
 					if not table.contains(condition.days, currentDay) then
 						msg = msg .. " - Current day of " .. typeOfDay .. " '" .. tostring(currentDay) .. "' is not in " .. tostring(json.encode(condition.days))
-						status = "0"
+						status = 0
 					elseif ((currentTime < condition.time1) or (currentTime > condition.time2)) then
 						msg = msg .. " - Current time '" .. tostring(currentTime) .. "' is not between '" .. tostring(condition.time1) .. "' and '" .. tostring(condition.time2) .. "'"
-						status = "0"
+						status = 0
 					end
 				else
 					-- The bounds are on 2 days
@@ -1287,19 +1371,19 @@ setmetatable(ConditionTypes, {
 						-- D
 						if (currentTime < condition.time1) then
 							msg = msg .. " - Current time '" .. tostring(currentTime) .. "' is not between '" .. tostring(condition.time1) .. "' and '" .. tostring(condition.time2) .. "'"
-							status = "0"
+							status = 0
 						end
 					elseif table.contains(condition.days, previousDay) then
 						-- D+1
 						if (currentTime < condition.time2) then
 							msg = msg .. " - Current time '" .. tostring(currentTime) .. "' is not between '" .. tostring(condition.time1) .. "' and '" .. tostring(condition.time2) .. "' (D+1)"
-							status = "0"
+							status = 0
 						else
 							msg = msg .. " - Current time '" .. tostring(currentTime) .. "' is between '" .. tostring(condition.time1) .. "' and '" .. tostring(condition.time2) .. "' (D+1)"
 						end
 					else
 						msg = msg .. " - Current day of " .. typeOfDay .. " '" .. tostring(currentDay) .. "' is not in " .. tostring(json.encode(condition.days))
-						status = "0"
+						status = 0
 					end
 				end
 			else
@@ -1307,23 +1391,23 @@ setmetatable(ConditionTypes, {
 				local currentTime = os.date('%H:%M:%S', os.time())
 				if not table.contains(condition.days, currentDay) then
 					msg = msg .. " - Current day of " .. typeOfDay .. " '" .. tostring(currentDay) .. "' is not in " .. tostring(json.encode(condition.days))
-					status = "0"
+					status = 0
 				elseif (currentTime ~= condition.time) then
 					msg = msg .. " - Current time '" .. tostring(currentTime) .. "' is not equal to '" .. tostring(condition.time) .. "'"
-					status = "0"
+					status = 0
 				end
 			end
 
 			log(msg, "ConditionTime.updateStatus", 3)
 
 			if _setConditionStatus(condition, status) then
-				luup.call_delay("RulesEngine.updateRuleStatus", 0, condition._ruleId)
+				luup.call_delay("RulesEngine.updateRuleStatus", 0, condition.ruleId)
 			end
 
-			-- TODO temps de remise à zéro (comme détecteur mouvement)
-			if (hasToTriggerOff and (status == "1")) then
+			-- TODO temps de remise ï¿½ zï¿½ro (comme dï¿½tecteur mouvement)
+			if (hasToTriggerOff and (status == 1)) then
 				if _setConditionStatus(condition, "0") then
-					luup.call_delay("RulesEngine.updateRuleStatus", 0, condition._ruleId)
+					luup.call_delay("RulesEngine.updateRuleStatus", 0, condition.ruleId)
 				end
 			end
 
@@ -1331,16 +1415,17 @@ setmetatable(ConditionTypes, {
 		end
 	}
 
--- Mise à jour du statut de la condition
-local function _updateConditionStatus (condition)
-	return ConditionTypes[condition.type].updateStatus(condition)
+-- Mise Ã  jour du statut de la condition
+local function _updateConditionStatus (condition, params)
+	return ConditionTypes[condition.type].updateStatus(condition, params)
 end
 
 -- **************************************************
 -- Conditions
 -- **************************************************
 
-local function _initConditions (ruleId, conditions, parentId, noPropagation)
+--local function _initConditions (ruleId, conditions, parentId, noPropagation)
+function _initConditions (ruleId, conditions, parentId, noPropagation)
 	if ((conditions == nil) or (type(conditions) ~= "table")) then
 		conditions = {}
 	end
@@ -1365,21 +1450,26 @@ local function _initConditions (ruleId, conditions, parentId, noPropagation)
 					-- Group of conditions
 					conditions[i].items = _initConditions(ruleId, condition.items, id, noPropagation)
 				else
-					condition._mainType = "Condition"
-					condition._id = id
-					condition._ruleId = ruleId
-					condition._status = nil
-					condition._lastStatusUpdateTime = nil
-					condition._noPropagation = noPropagation or false
-					--condition._level = 0
+					condition.mainType = "Condition"
 					condition.type = condition.type or ""
+					condition.id = id
+					condition.ruleId = ruleId
+					--[[
+					condition.status = nil
+					condition.lastStatusUpdateTime = nil
+					condition.noPropagation = noPropagation or false
+					--condition.level = 0
+					--]]
+					-- Context
+					condition.context = {
+						status = -1,
+						lastStatusUpdateTime = 0,
+						noPropagation = noPropagation or false
+						--lastUpdateTime = 0
+					}
 					-- Params
 					_addParams(condition, condition.params)
 					condition.params = nil
-					-- Context
-					condition._context = {
-						--lastUpdateTime = 0
-					}
 					-- Specific initialisation for this type of condition
 					ConditionTypes[condition.type].init(condition)
 				end
@@ -1459,35 +1549,35 @@ local function _getConditionsStatus (conditions, operator)
 					conditionStatus, conditionLevel = _getConditionsStatus(condition.items, condition.operator)
 				else
 					-- Single condition
-					if ((condition._status == nil) or (condition._mainType ~= "Trigger")) then
+					if ((condition.context.status == -1) or (condition.mainType ~= "Trigger")) then
 						_updateConditionStatus(condition)
 					end
-					conditionStatus = condition._status
-					conditionLevel  = condition._level or 0
+					conditionStatus = condition.context.status
+					conditionLevel  = condition.level or 0
 				end
 				-- Update status
 				if (status == nil) then
 					if (conditions[i + 1] == nil) then
 						status = conditionStatus
 					elseif (operator == "OR") then
-						if (conditionStatus == "1") then
-							status = "1"
+						if (conditionStatus == 1) then
+							status = 1
 						end
 					elseif (operator == "AND") then
-						if (conditionStatus == "0") then
-							status = "0"
+						if (conditionStatus == 0) then
+							status = 0
 						end
 					end
 				end
 				-- Update level
-				if ((conditionStatus == "1") and (conditionLevel > level)) then
+				if ((conditionStatus == 1) and (conditionLevel > level)) then
 					level = conditionLevel
 				end
 			end
 		end
 	end
 	if (status == nil) then
-		status = "0"
+		status = 0
 	end
 	return status, level
 end
@@ -1507,29 +1597,53 @@ local _actions = {}
 	_actions["action_device"] = {
 		init = function (action)
 			action.deviceId = tonumber(action.deviceId)
+			-- Get properties from mutation
+			if (action.mutation ~= nil) then
+				if ((action.service == nil) and (action.mutation.action_service ~= nil)) then
+					action.service = action.mutation.action_service
+				end
+				if ((action.action == nil) and (action.mutation.action ~= nil)) then
+					action.action = action.mutation.action
+				end
+				action.mutation = nil
+			end
 			-- Get arguments
 			action.arguments = {}
 			for key, value in pairs(action) do
 				local paramName = string.match(key, "^param_(.*)$")
 				if (paramName ~= nil) then
 					action.arguments[paramName] = value
+				elseif (key == "actionParams") then
+					-- params are encoded into JSON
+					local decodeSuccess, arguments, strError = pcall(json.decode, value)
+					if ((not decodeSuccess) or (type(arguments) ~= "table")) then
+					-- error
+					else
+						table.extend(action.arguments, arguments)
+					end
 				end
 			end
+			-- Get device ids
+			action.deviceIds = _getDeviceIds(action)
+			action.device = nil
+			log("Action '" .. json.encode(action), "initAction.action_device", 4)
 		end,
 		check = function (action)
-			if not _checkParameters(action, {"deviceId", "service", "action", "arguments"}) then
+			if not _checkParameters(action, {"deviceIds", "service", "action", "arguments"}) then
 				return false
 			end
 			return true
 		end,
 		["do"] = function (action, context)
-			-- Check first device com status
-			if (not luup.is_ready(action.deviceId) or luup.variable_get(SID.HaDevice, "CommFailure", action.deviceId) == "1") then
-				error("Device #" .. tostring(action.deviceId) .. " is not ready or has a com failure", "doAction.action_device")
+			for _, deviceId in ipairs(action.deviceIds) do
+				-- Check first device com status
+				if (not luup.is_ready(deviceId) or luup.variable_get(SID.HaDevice, "CommFailure", deviceId) == "1") then
+					error("Device #" .. tostring(deviceId) .. " is not ready or has a com failure", "doAction.action_device")
+				end
+				-- Call luup action
+				log("Action '" .. action.action .. "' for device #" .. tostring(deviceId) .. " with " .. tostring(json.encode(action.arguments)), "doAction.action_device", 3)
+				luup.call_action(action.service, action.action, action.arguments, deviceId)
 			end
-			-- Call luup action
-			log("Action '" .. action.action .. "' for device #" .. tostring(action.deviceId) .. " with " .. tostring(json.encode(action.arguments)), "doAction.action_device", 3)
-			luup.call_action(action.service, action.action, action.arguments, action.deviceId)
 		end
 	}
 
@@ -1545,7 +1659,7 @@ local _actions = {}
 				-- Put the chunk in the plugin environment
 				setfenv(chunk, getfenv(1))
 				action.callback = chunk()
-				action._type = "function"
+				action.type = "function"
 				action.functionContent = nil
 			end
 		end,
@@ -1574,16 +1688,75 @@ end
 -- History
 -- **************************************************
 
+-- TODO : deplacer
+local _storePath
+local function _getStorePath ()
+	if (_storePath ~= nil) then
+		return _storePath
+	end
+	local lfs = require("lfs")
+	_storePath = ""
+	if (lfs.attributes("/tmp/log/cmh", "mode") == "directory") then
+		-- Directory "/tmp/log/cmh" is stored on sda1 in Vera box
+		_storePath = "/tmp/log/cmh/"
+	elseif (lfs.attributes("/tmp", "mode") == "directory") then
+		-- Directory "/tmp" is stored in memory in Vera box
+		_storePath = "/tmp/"
+	else
+		-- Use current directory ("./etc/cmh-ludl" in openLuup)
+		_storePath = ""
+	end
+	log("Path to store datas : '" .. _storePath .. "'", "getStorePath", 4)
+	return _storePath
+end
+
 local _history = {}
 
+local function _loadHistory ()
+	local path = _getStorePath()
+	local fileName = "C_RulesEngine_History.csv"
+
+	_history = {}
+	log("Load history from file '" .. path .. fileName .. "'", "loadHistory")
+	local file = io.open(path .. fileName)
+	if (file == nil) then
+		log("File '" .. path .. fileName .. "' does not exist", "loadHistory")
+		return
+	end
+	local entry
+	for line in file:lines() do
+		entry = string.split(line, ";")
+		table.insert(_history, {
+			timestamp = entry[1],
+			eventType = entry[2],
+			event     = entry[3]
+		})
+	end
+	file:close()
+end
+
+function saveHistory (entry)
+	local path = _getStorePath()
+	local fileName = "C_RulesEngine_History.csv"
+	log("Save history in file '" .. path .. fileName .. "'", "saveHistory")
+	local file = io.open(path .. fileName, "a")
+	if (file == nil) then
+		log("File '" .. path .. fileName .. "' can not be written", "saveHistory")
+		return
+	end
+	file:write(entry.timestamp .. ";" .. entry.eventType .. ";" .. entry.event .. "\n")
+	file:close()
+end
+
 local function _addToHistory (timestamp, eventType, event)
-	-- TODO : à améliorer (sauvegarder)
 	log("Add entry : " .. tostring(timestamp) .. " - " .. tostring(eventType) .. " - " .. tostring(event), "addToHistory", 2)
-	table.insert(_history, {
+	local entry = {
 		timestamp = timestamp,
 		eventType = eventType,
 		event = event
-	})
+	}
+	table.insert(_history, entry)
+	saveHistory(entry)
 	notifyTimelineUpdate()
 end
 
@@ -1602,6 +1775,11 @@ end
 local function _onDeviceVariableIsUpdated (lul_device, lul_service, lul_variable, lul_value_old, lul_value_new)
 	local eventName = lul_service .. "-" .. lul_variable .. "-" .. tostring(lul_device)
 	log("Event '" .. eventName .. "'(" .. luup.devices[lul_device].description .. ") - New value:'" .. tostring(lul_value_new) .. "'", "onDeviceVariableIsUpdated")
+	-- Check if engine is enabled
+	if (not _isEnabled) then
+		log("Rules engine is not enabled - Do nothing", "onDeviceVariableIsUpdated")
+		return false
+	end
 	local linkedConditionsByRule = _getConditionsForEvent(eventName)
 	if (linkedConditionsByRule == nil) then
 		return false
@@ -1610,13 +1788,14 @@ local function _onDeviceVariableIsUpdated (lul_device, lul_service, lul_variable
 		-- Update status of the linked conditions for this rule
 		local hasAtLeastOneConditionStatusChanged = false
 		local context = {
+			deviceId = lul_device,
 			value = lul_value_new,
 			lastUpdateTime = os.time()
 		}
 		for _, condition in ipairs(linkedConditions) do
-			log("This event is linked to rule #" .. condition._ruleId .. " and condition #" .. condition._id, "onDeviceVariableIsUpdated", 2)
+			log("This event is linked to rule #" .. condition.ruleId .. " and condition #" .. condition.id, "onDeviceVariableIsUpdated", 2)
 			-- Update the context of the condition
-			table.extend(condition._context, context)
+			table.extend(condition.context, context)
 			-- Update the status of the condition
 			if _updateConditionStatus(condition) then
 				hasAtLeastOneConditionStatusChanged = true
@@ -1635,6 +1814,11 @@ end
 -- Callback on timer triggered (mios call)
 local function _onTimerIsTriggered (data)
 	log("Event '" .. tostring(data) .. "'", "onTimerIsTriggered")
+	-- Check if engine is enabled
+	if (not _isEnabled) then
+		log("Rules engine is not enabled - Do nothing", "onTimerIsTriggered")
+		return false
+	end
 	local linkedConditionsByRule = _getConditionsForEvent(data)
 	if (linkedConditionsByRule == nil) then
 		return false
@@ -1642,19 +1826,19 @@ local function _onTimerIsTriggered (data)
 	for ruleId, linkedConditions in pairs(linkedConditionsByRule) do
 		-- Update status of the linked conditions for this rule
 		for _, condition in ipairs(linkedConditions) do
-			log("This event is linked to rule #" .. condition._ruleId .. " and condition #" .. condition._id, "onTimerIsTriggered", 2)
+			log("This event is linked to rule #" .. condition.ruleId .. " and condition #" .. condition.id, "onTimerIsTriggered", 2)
 			-- Update the context of the condition
-			--condition._status = "1"
-			--condition._context.status     = "1"
-			--condition._context.lastUpdate = os.time()
+			--condition.status = 1
+			--condition.context.status     = 1
+			--condition.context.lastUpdate = os.time()
 			-- Update the status of the condition
 			_updateConditionStatus(condition)
 
 			--[[
 			updateRuleStatus(rule)
-			if (rule._status == "1") then
-				-- TODO : attention à between
-				condition._status = "0"
+			if (rule.context.status == 1) then
+				-- TODO : attention ï¿½ between
+				condition.status = "0"
 				updateRuleStatus(rule)
 			end
 			--]]
@@ -1668,6 +1852,11 @@ end
 local function _onRuleStatusIsUpdated (watchedRuleName, newStatus)
 	local eventName = "RuleStatus-" .. watchedRuleName
 	log("Event '" .. eventName .. "' - New status:'" .. tostring(newStatus) .. "'", "onRuleStatusIsUpdated")
+	-- Check if engine is enabled
+	if (not _isEnabled) then
+		log("Rules engine is not enabled - Do nothing", "onRuleStatusIsUpdated")
+		return false
+	end
 	local linkedConditionsByRule = _getConditionsForEvent(eventName)
 	if (linkedConditionsByRule == nil) then
 		return false
@@ -1675,10 +1864,10 @@ local function _onRuleStatusIsUpdated (watchedRuleName, newStatus)
 	for ruleId, linkedConditions in pairs(linkedConditionsByRule) do
 		-- Update status of the linked conditions for this rule
 		for _, condition in ipairs(linkedConditions) do
-			log("This event is linked to rule #" .. ruleId .. " and condition #" .. condition._id, "onRuleStatusIsUpdated")
+			log("This event is linked to rule #" .. ruleId .. " and condition #" .. condition.id, "onRuleStatusIsUpdated")
 			-- Update the context of the condition
-			condition._context.status = newStatus
-			condition._context.lastUpdateTime = os.time()
+			condition.context.status = newStatus
+			condition.context.lastUpdateTime = os.time()
 			-- Update the status of the condition
 			_updateConditionStatus(condition)
 		end
@@ -1696,12 +1885,12 @@ local function _initRuleActions (ruleId, actions)
 		actions = {}
 	end
 	for i, action in ipairs(actions) do
-		action._id = tostring(i)
-		action._mainType = "GroupAction"
+		action.id = tostring(i)
+		action.mainType = "GroupAction"
 		action.type = nil
-		action._ruleId = ruleId
-		action._context = {lastUpdateTime = 0}
-		action._levels = {}
+		action.ruleId = ruleId
+		action.context = { lastUpdateTime = 0 }
+		action.levels = {}
 		-- Params
 		_addParams(action, action.params)
 		action.params = nil
@@ -1710,9 +1899,9 @@ local function _initRuleActions (ruleId, actions)
 			action["do"] = {}
 		end
 		for j, actionToDo in ipairs(action["do"]) do
-			actionToDo._id = tostring(i) .. "." .. tostring(j)
-			actionToDo._mainType = "Action"
-			actionToDo._ruleId = ruleId
+			actionToDo.id = tostring(i) .. "." .. tostring(j)
+			actionToDo.mainType = "Action"
+			actionToDo.ruleId = ruleId
 			if ((actionToDo.type ~= nil) and (type(_actions[actionToDo.type]) == "table") and (type(_actions[actionToDo.type].init) == "function")) then
 				_actions[actionToDo.type].init(actionToDo)
 			end
@@ -1756,10 +1945,10 @@ local function _getRuleActionDelay (rule, action, isRecurrent)
 	local delayInterval
 	if (not isRecurrent) then
 		-- Get first delay
-		if (type(action._delayInterval) == "function") then
-			delayInterval = tonumber(action._delayInterval()) or 0
+		if (type(action.delayInterval) == "function") then
+			delayInterval = tonumber(action.delayInterval()) or 0
 		else
-			delayInterval = tonumber(action._delayInterval) or 0
+			delayInterval = tonumber(action.delayInterval) or 0
 		end
 		if ((delayInterval == 0) and (action.event == "reminder")) then
 			isRecurrent = true
@@ -1768,11 +1957,11 @@ local function _getRuleActionDelay (rule, action, isRecurrent)
 
 	if (not isRecurrent) then
 		-- Adjust delay according to elapsed time
-		--local elapsedTime = os.difftime(os.time(), rule._lastStatusUpdateTime)
+		--local elapsedTime = os.difftime(os.time(), rule.context.lastStatusUpdateTime)
 		-- test
-		--local elapsedTime = os.difftime(os.time(), math.max(rule._lastStatusUpdateTime, rule._lastLevelUpdateTime or 0))
-		--local elapsedTime = os.difftime(os.time(), math.max(rule._lastStatusUpdateTime, rule._lastLevelUpdateTime or 0))
-		local elapsedTime = os.difftime(os.time(), math.max(rule._lastStatusUpdateTime, rule._lastLevelUpdateTime or 0))
+		--local elapsedTime = os.difftime(os.time(), math.max(rule.context.lastStatusUpdateTime, rule.context.lastLevelUpdateTime or 0))
+		--local elapsedTime = os.difftime(os.time(), math.max(rule.context.lastStatusUpdateTime, rule.context.lastLevelUpdateTime or 0))
+		local elapsedTime = os.difftime(os.time(), math.max(rule.context.lastStatusUpdateTime, rule.context.lastLevelUpdateTime or 0))
 		if (elapsedTime == 0) then
 			delay = delayInterval
 			log("Delay interval: " .. tostring(delay), "getRuleActionDelay", 4)
@@ -1791,8 +1980,8 @@ local function _getRuleActionDelay (rule, action, isRecurrent)
 			log("Delay interval is zero" , "getRuleActionDelay", 4)
 		else
 			log("Delay interval " .. tostring(delayInterval) .. " < elapsed time " .. tostring(elapsedTime) .. " (problem)", "getRuleActionDelay", 4)
---print(rule._lastStatusUpdateTime)
---print(rule._lastLevelUpdateTime)
+--print(rule.context.lastStatusUpdateTime)
+--print(rule.context.lastLevelUpdateTime)
 		end
 	end
 
@@ -1806,7 +1995,7 @@ local function _getRuleActionDelay (rule, action, isRecurrent)
 			delay = delay * 3600
 		end
 		if (delay < _minRecurrentInterval) then
-			-- Sécurité sur le temps minimal pour les actions récurentes
+			-- Sï¿½curitï¿½ sur le temps minimal pour les actions rï¿½curentes
 			log("Reminder recurrent interval is set to min interval " .. tostring(_minRecurrentInterval), "getRuleActionDelay", 2)
 			delay = _minRecurrentInterval
 		end
@@ -1828,12 +2017,12 @@ end
 local function _isRuleGroupActionMatchingLevel (groupAction, level)
 	local msg = _getItemSummary(groupAction)
 	if (level ~= nil) then
-		if ((table.getn(groupAction._levels) == 0) or not table.contains(groupAction._levels, level)) then
+		if ((table.getn(groupAction.levels) == 0) or not table.contains(groupAction.levels, level)) then
 			log(msg .. " - The requested level '" .. tostring(level) .. "' is not respected", "isRuleGroupActionMatchingLevel", 4)
 			return false
 		end
 	else
-		if ((table.getn(groupAction._levels) > 0) and not table.contains(groupAction._levels, 0)) then
+		if ((table.getn(groupAction.levels) > 0) and not table.contains(groupAction.levels, 0)) then
 			log(msg .. " - There's at least a level different from '0' and none was requested", "isRuleGroupActionMatchingLevel", 4)
 			return false
 		end
@@ -1847,7 +2036,7 @@ local function _doRuleAction (action, params, level)
 		-- TODO : msg
 		return
 	end
-	local rule = getRule(action._ruleId)
+	local rule = getRule(action.ruleId)
 	if (rule == nil) then
 		-- TODO : msg
 		return
@@ -1855,28 +2044,34 @@ local function _doRuleAction (action, params, level)
 	local params = params or {}
 	--local level = params.level
 
-	-- Update context level
-	rule._context.level = level or rule._level
+	-- Check if engine is enabled
+	if (not _isEnabled) then
+		log("Rules engine is not enabled - Do nothing", "doRuleAction")
+		return false
+	end
 
-	local message = "*   Rule #" .. rule._id .. "(" .. rule.name .. ") - Group of actions #" .. tostring(action._id) .. " for event '" .. tostring(action.event) .. "'"
+	-- Update context level
+	rule.context.level = level or rule.context.level
+
+	local message = "*   Rule #" .. rule.id .. "(" .. rule.name .. ") - Group of actions #" .. tostring(action.id) .. " for event '" .. tostring(action.event) .. "'"
 	if (action.level ~= nil) then
-		message = message .. "(level " .. json.encode(action._levels) .. ")"
+		message = message .. "(level " .. json.encode(action.levels) .. ")"
 	end
 
 	-- Check if a hook prevents to do action
-	if not doHook("beforeDoingAction", rule, action._id) then
+	if not doHook("beforeDoingAction", rule, action.id) then
 		log(message .. " - A hook prevent from doing these actions", "doRuleAction", 3)
 	-- Check if the rule is disarmed
-	elseif (not rule._isArmed and (action.event ~= "end")) then
+	elseif (not rule.context.isArmed and (action.event ~= "end")) then
 		log(message .. " - Don't do actions - Rule is disarmed and event is not 'end'", "doRuleAction")
 	-- Check if the rule is acknowledged
-	elseif (rule._isAcknowledged and (action.event == "reminder")) then
+	elseif (rule.context.isAcknowledged and (action.event == "reminder")) then
 		log(message .. " - Don't do reminder actions - Rule is acknowledged", "doRuleAction")
 
 	--[[
-	-- TODO faire maj pour condition externe de la règle
+	-- TODO faire maj pour condition externe de la rÃ¨gle
 	-- Check if the rule main conditions are still respected
-	if not isMatchingAllConditions(rule.conditions, rule._context.deviceId) then
+	if not isMatchingAllConditions(rule.conditions, rule.context.deviceId) then
 		log(message .. " - Don't do action - Rule conditions are not respected", "doRuleAction", 2)
 		setRuleStatus(rule, "0")
 		return false
@@ -1899,20 +2094,20 @@ local function _doRuleAction (action, params, level)
 --print("actionToDo.type", actionToDo.type)
 			if (actionToDo.type == "action_wait") then
 				-- Wait and resume
-				log(message .. " - Do action #" .. tostring(actionToDo._id) ..  " - Wait " .. tostring(actionToDo.delayInterval) .. " seconds", "doRuleAction", 3)
+				log(message .. " - Do action #" .. tostring(actionToDo.id) ..  " - Wait " .. tostring(actionToDo.delayInterval) .. " seconds", "doRuleAction", 3)
 				_addScheduledTask(rule, "RulesEngine.doRuleAction", action, {idx = i + 1}, level, actionToDo.delayInterval)
 				return
 			elseif (_actions[actionToDo.type] == nil) then
-				log(message .. " - Can not do action #" .. tostring(actionToDo._id) ..  " of type '" .. actionToDo.type .. "' - Unknown action type", "doRuleAction", 1)
+				log(message .. " - Can not do action #" .. tostring(actionToDo.id) ..  " of type '" .. actionToDo.type .. "' - Unknown action type", "doRuleAction", 1)
 			else
-				log(message .. " - Do action #" .. tostring(actionToDo._id) ..  " of type '" .. actionToDo.type .. "'", "doRuleAction", 3)
+				log(message .. " - Do action #" .. tostring(actionToDo.id) ..  " of type '" .. actionToDo.type .. "'", "doRuleAction", 3)
 				local functionToDo
 				if (type(_actions[actionToDo.type]) == "function") then
 					functionToDo = _actions[actionToDo.type]
 				else
 					functionToDo = _actions[actionToDo.type]["do"]
 				end
-				local ok, err = pcall(functionToDo, actionToDo, rule._context)
+				local ok, err = pcall(functionToDo, actionToDo, rule.context)
 				if not ok then
 					addRuleError(ruleId, "Rule action", tostring(err))
 					_addToHistory(os.time(), "RuleAction", "ERROR Rule action : " .. _getItemSummary(actionToDo) .. " - " .. tostring(err))
@@ -1925,7 +2120,7 @@ local function _doRuleAction (action, params, level)
 	end
 
 	if (action.event == "reminder") then
-		-- Relance de la surveillance du statut de la règle
+		-- Relance de la surveillance du statut de la rÃ¨gle
 		local delay = _getRuleActionDelay(rule, action, true)
 		log(message .. " - Do recurrent action in " .. tostring(delay) .. " seconds", "doRuleAction", 2)
 		_addScheduledTask(rule, "RulesEngine.doRuleAction", action, nil, level, delay)
@@ -1937,19 +2132,25 @@ end
 function doRuleActions (ruleId, event, level)
 	local rule = getRule(ruleId)
 
+	-- Check if engine is enabled
+	if (not _isEnabled) then
+		log("Rules engine is not enabled - Do nothing", "doRuleActions")
+		return false
+	end
+
 	-- Check if rule is disarmed
-	if (not rule._isArmed and (event ~= "end")) then
-		log("Rule #" .. rule._id .. "(" .. rule.name .. ") is disarmed and event is not 'end' - Do nothing", "doRuleActions")
+	if (not rule.context.isArmed and (event ~= "end")) then
+		log(_getRuleSummary(rule) .. " is disarmed and event is not 'end' - Do nothing", "doRuleActions")
 		return false
 	end
 
 	-- Announce what will be done
 	if (level ~= nil) then
-		log("*** Rule #" .. rule._id .. "(" .. rule.name .. ") - Do actions for event '" .. event .. "' with explicit level '" .. tostring(level) .. "'", "doRuleActions")
-	--elseif (rule._level > 0) then
-	--	log("*** Rule #" .. rule._id .. "(" .. rule.name .. ") - Do actions for event '" .. event .. "' matching rule level '" .. tostring(rule._level) .. "'", "doRuleActions")
+		log("*** Rule #" .. tostring(rule.id) .. "(" .. rule.name .. ") - Do actions for event '" .. event .. "' with explicit level '" .. tostring(level) .. "'", "doRuleActions")
+	--elseif (rule.context.level > 0) then
+	--	log("*** Rule #" .. rule.id .. "(" .. rule.name .. ") - Do actions for event '" .. event .. "' matching rule level '" .. tostring(rule.context.level) .. "'", "doRuleActions")
 	else
-		log("*** Rule #" .. rule._id .. "(" .. rule.name .. ") - Do actions for event '" .. event .. "'", "doRuleActions")
+		log("*** Rule #" .. tostring(rule.id) .. "(" .. rule.name .. ") - Do actions for event '" .. event .. "'", "doRuleActions")
 	end
 
 	-- Search actions of the rule, linked to the event
@@ -1957,36 +2158,36 @@ function doRuleActions (ruleId, event, level)
 	for actionId, action in ipairs(rule.actions) do
 		local msg = "**  " .. _getItemSummary(action)
 		if (
-			(event == nil) -- Pas d'évènement précis
-			or (action.event == nil) -- Action valable pour tous les évènements
-			or (action.event == event) -- Action valable pour l'évènement demandé
+			(event == nil) -- Pas d'Ã©vÃ©nement prÃ©cis
+			or (action.event == nil) -- Action valable pour tous les Ã©vÃ¨nements
+			or (action.event == event) -- Action valable pour l'Ã©vÃ¨nement demandÃ©
 		) then
-			--if not isMatchingAllConditions(action.conditions, rule._context.deviceId) then
-				-- Les conditions particulières de l'action ne sont pas respectées
+			--if not isMatchingAllConditions(action.conditions, rule.context.deviceId) then
+				-- Les conditions particuliÃ¨res de l'action ne sont pas respectÃ©es
 				--log(msg .. " - Don't do action - The action conditions are not respected", 2, "doRuleActions")
 			if not _isRuleGroupActionMatchingLevel(action, level) then
 				log(msg .. " - Don't do because level is not respected", "doRuleActions", 3)
 			else
 				local delay = _getRuleActionDelay(rule, action)
 				if (delay == nil) then
-					-- Le délai est dépassé (l'action a déjà été faite)
+					-- Delay is passed (the action has already been done)
 					log(msg .. " - Don't do because it already has been done", "doRuleActions", 3)
 				else
-					-- Exécution de l'action
+					-- Executes the action
 					isAtLeastOneActionToDo = true
 					if (delay > 0) then
 						log(msg .. " - Do in " .. tostring(delay) .. " second(s)", "doRuleActions", 2)
 					else
 						log(msg .. " - Do immediately", "doRuleActions", 2)
 					end
-					-- Les appels se font tous en asynchrone pour éviter les blocages
+					-- Les appels se font tous en asynchrone pour ï¿½viter les blocages
 					_addScheduledTask(rule, "RulesEngine.doRuleAction", action, nil, level, delay)
 				end
 			end
 		end
 	end
 	if not isAtLeastOneActionToDo then
-		local msg = "Rule #" .. rule._id .. "(" .. rule.name .. ") - No action to do for event '" .. event .. "'"
+		local msg = _getRuleSummary(rule) .. " - No action to do for event '" .. event .. "'"
 		if (level ~= nil) then
 			msg = msg .. " and level '" .. tostring(level) .. "'"
 		end
@@ -2000,118 +2201,72 @@ end
 
 local _rulesInfos = {}
 
-local function _getRuleInfosIndex (rule)
-	local index = -1
-	for i, ruleInfos in ipairs(_rulesInfos) do
-		if ((ruleInfos.id == rule._id) and (ruleInfos.idx == rule._idx)) then
-			if (index == -1) then
-				index = i
-			else
-				-- there are several rules with the same id
-				index = -1
-				break
-			end
-		end
-	end
-	return index
-end
-
-local function _removeRuleInfos (rule)
-	local idx = _getRuleInfosIndex(rule)
-	if (idx > -1) then
-		log("Rule #" .. rule._id .. " - Infos are removed from position " .. tostring(idx), "removeRuleInfos")
-		table.remove(_rulesInfos, idx)
-	else
-		log("Rule #" .. rule._id .. " - Can not find position of informations", "removeRuleInfos")
-	end
-end
-
-local function _getFormerRuleInfos (ruleId)
-	local formerRuleInfos
-	for i, ruleInfos in ipairs(_pluginParams.rulesInfos) do
-		if (ruleInfos.id == ruleId) then
-			if (formerRuleInfos == nil) then 
-				formerRuleInfos = ruleInfos
-			else
-				formerRuleInfos = nil
-				break
-			end
-		end
-	end
-	return formerRuleInfos
-end
-
 local function _getRuleInfos (rule)
-	local idx = _getRuleInfosIndex(rule)
-	if (idx > -1) then
-		return _rulesInfos[idx]
+	for _, ruleInfos in ipairs(_rulesInfos) do
+		if ((ruleInfos.id == rule.id) and (ruleInfos.fileName == rule.fileName) and (ruleInfos.idx == rule.idx)) then
+			return ruleInfos
+		end
 	end
+	log("Can not find rule infos for rule #" .. tostring(rule.id), "getRuleInfos", 4)
 	return nil
 end
 
-local function _initRuleInfos (rule)
-	local ruleInfos = _getRuleInfos(rule)
-	if (ruleInfos == nil) then
-		ruleInfos = {}
-		table.insert(_rulesInfos, ruleInfos)
-		log("Rule #" .. rule._id .. " - Infos are added at position " .. tostring(#_rulesInfos), "initRuleInfos")
-	end
-	ruleInfos.id      = rule._id
-	ruleInfos.idx     = rule._idx
-	ruleInfos.status  = "-1"
-	ruleInfos.errors = {}
+local function _loadRulesInfos ()
+	local path = _getStorePath()
+	local fileName = "C_RulesEngine_RulesInfos.json"
 
-	return ruleInfos
+	_rulesInfos = {}
+	log("Load rules infos from file '" .. path .. fileName .. "'", "loadRulesInfos")
+	local file = io.open(path .. fileName)
+	if (file == nil) then
+		log("File '" .. path .. fileName .. "' does not exist", "loadRulesInfos")
+		return
+	end
+	local jsonRulesInfos = ""
+	for line in file:lines() do
+		jsonRulesInfos = jsonRulesInfos .. line
+	end
+	file:close()
+	local decodeSuccess, rulesInfos, strError = pcall(json.decode, jsonRulesInfos)
+	if ((not decodeSuccess) or (type(rulesInfos) ~= "table")) then
+		-- TODO : log error
+	else
+		_rulesInfos = rulesInfos
+	end
 end
 
-function addRuleError (ruleId, event, message)
-	if (ruleId == nil) then
-		return
+local function _removeRuleInfos (rule)
+	for i, ruleInfos in ipairs(_rulesInfos) do
+		if ((ruleInfos.id == rule.id) and (ruleInfos.fileName == rule.fileName) and (ruleInfos.idx == rule.idx)) then
+			table.remove(_rulesInfos, i)
+			return true
+		end
 	end
-	local rule = getRule(ruleId)
-	if (rule == nil) then
-		return
-	end
-	local ruleInfos = _getRuleInfos(rule)
-	if (ruleInfos == nil) then
-		error("Can not find informations for rule #" .. rule._id, "addRuleError")
-		return
-	end
-	error(tostring(event) .. ": " .. tostring(message), "addRuleError")
-	table.insert(ruleInfos.errors, {
-		timestamp = os.time(),
-		event = event,
-		message = message
-	})
+	return false
 end
 
-function updateRulesInfos (ruleId)
-	if (ruleId == nil) then
-		return
-	end
-	local rule = getRule(ruleId)
-	local ruleInfos = _getRuleInfos(rule)
-	if ((rule == nil) or (ruleInfos == nil)) then
-		return
-	end
-	table.extend(ruleInfos, {
-		status           = rule._status,
-		lastStatusUpdate = rule._lastStatusUpdateTime,
-		level            = rule._level,
-		lastLevelUpdate  = rule._lastLevelUpdateTime,
-		lastUpdate       = rule._lastUpdateTime,
-		nextSchedule     = rule._nextScheduleTime,
-		isArmed          = rule._isArmed,
-		isAcknowledged   = rule._isAcknowledged,
-		isStarted        = rule._isStarted
-	})
-end
-
-function notifyRulesInfosUpdate ()
+function saveRulesInfos ()
 	if (_pluginParams.deviceId == nil) then
 		return false
 	end
-	luup.variable_set(SID.RulesEngine, "RulesInfos", tostring(json.encode(_rulesInfos)), _pluginParams.deviceId)
+
+	local path = _getStorePath()
+	local fileName = "C_RulesEngine_RulesInfos.json"
+	log("Save rules infos in file '" .. path .. fileName .. "'", "saveRulesInfos")
+	local file = io.open(path .. fileName, "w")
+	if (file == nil) then
+		log("File '" .. path .. fileName .. "' can not be written or created", "saveRulesInfos")
+		return
+	end
+	local rulesInfos = {}
+	for _, rule in pairs(_rules) do
+		table.insert(rulesInfos, rule.context)
+	end
+	file:write(json.encode(rulesInfos))
+	file:close()
+
+	-- Notify a change to the client
+	luup.variable_set(SID.RulesEngine, "LastUpdate", tostring(os.time()), _pluginParams.deviceId)
 end
 
 -- **************************************************
@@ -2136,9 +2291,9 @@ function doHook (event, rule)
 	end
 	local nbHooks = table.getn(_hooks[event])
 	if (nbHooks == 1) then
-		log("Rule #" .. rule._id .. " - Event '" .. event .. "' - There is 1 hook to do", "doHook", 2)
+		log(_getRuleSummary(rule) .. " - Event '" .. event .. "' - There is 1 hook to do", "doHook", 2)
 	elseif (nbHooks > 1) then
-		log("Rule #" .. rule._id .. " - Event '" .. event .. "' - There are " .. tostring(nbHooks) .. " hooks to do" , "doHook", 2)
+		log(_getRuleSummary(rule) .. " - Event '" .. event .. "' - There are " .. tostring(nbHooks) .. " hooks to do" , "doHook", 2)
 	end
 	local isHookOK = true
 	for _, hook in ipairs(_hooks[event]) do
@@ -2151,7 +2306,7 @@ function doHook (event, rule)
 		if (callback ~= nil) then
 			local status, result = pcall(callback, rule)
 			if not status then
-				log("Rule #" .. rule._id .. " - Event '" .. event .. "' - ERROR: " .. tostring(result), "doHook", 1)
+				log(_getRuleSummary(rule) .. " - Event '" .. event .. "' - ERROR: " .. tostring(result), "doHook", 1)
 				addRuleError(rule, "Hook " .. event, tostring(result))
 			elseif not result then
 				isHookOK = false
@@ -2167,26 +2322,34 @@ end
 
 -- Rule initialisation
 local function _initRule (rule)
+	log(_getRuleSummary(rule) .. " - Init rule", "initRule", 4)
 	table.extend(rule, {
-		_isArmed = true,
-		_isStarted = false,
-		_isAcknowledged = false,
-		_isAcknowledgeable = false,
-		_level = 0,
-		_status = "-1",
-		_lastUpdateTime = 0,
-		_lastStatusUpdateTime = 0,
-		_lastLevelUpdateTime = 0,
-		_context = {
+		areSettingsOk = false,
+		context = {
+			id = rule.id,
+			fileName = rule.fileName,
+			idx = rule.idx,
 			name = rule.name,
 			lastUpdateTime = 0,
 			lastStatusUpdateTime = 0,
-			lastLevelUpdateTime = 0
+			level = 0,
+			lastLevelUpdateTime = 0,
+			isArmed = true,
+			isStarted = false,
+			isAcknowledgeable = false,
+			isAcknowledged = false,
+			errors = {}
 		},
-		properties = _initProperties(rule._id, rule.properties),
-		conditions = _initConditions(rule._id, rule.conditions),
-		actions    = _initRuleActions(rule._id, rule.actions)
+		properties = _initProperties(rule.id, rule.properties),
+		conditions = _initConditions(rule.id, rule.conditions),
+		actions    = _initRuleActions(rule.id, rule.actions)
 	})
+	-- Retrieve former state before start
+	table.extend(rule.context, _getRuleInfos(rule))
+	-- Reset errors
+	rule.context.errors = {}
+	-- Reset status
+	rule.context.status = -1
 end
 
 local function _checkRuleSettings (rule)
@@ -2194,72 +2357,59 @@ local function _checkRuleSettings (rule)
 		_checkConditionsSettings(rule.conditions)
 		and _checkRuleActionsSettings(rule.actions)
 	) then
-		rule._areSettingsOk = true
+		rule.areSettingsOk = true
 		return true
 	else
-		--luup.task("Error in settings for rule #" .. rule._id .. "(" .. rule.name .. ") (see log)", 2, "RulesEngine", _taskId)
-		rule._areSettingsOk = false
+		--luup.task("Error in settings for rule #" .. rule.id .. "(" .. rule.name .. ") (see log)", 2, "RulesEngine", _taskId)
+		rule.areSettingsOk = false
 		return false
 	end
 end
 
--- Compute rule status according to conditions
+-- Computes rule status according to conditions
 local function _computeRuleStatus (rule)
 	--[[
-	if (not rule._isArmed) then
+	if (not rule.context.isArmed) then
 		return nil, nil
 	end
 	--]]
-	local msg = "Rule #" .. rule._id
+	local msg = _getRuleSummary(rule)
 	log(msg .. " - Compute rule status", "computeRuleStatus", 3)
 	local status, level = _getConditionsStatus(rule.conditions)
-	log(msg .. " - Rule status:'" .. tostring(status) .. "' - Rule level: '" .. tostring(level) .. "'", "computeRuleStatus")
+	log(msg .. " - Rule status: '" .. tostring(status) .. "' - Rule level: '" .. tostring(level) .. "'", "computeRuleStatus")
 	return status, level
 end
 
--- Start a rule
+-- Starts a rule
 local function _startRule (rule)
-	-- Initialisation du statut de la règle
-	if (not rule._areSettingsOk) then
-		log("Rule #" .. rule._id .. "(" .. rule.name .. ") - Can not start the rule - Settings are not correct", "startRule", 1)
+	debugLogBegin("startRule")
+	local msg = _getRuleSummary(rule)
+
+	-- Init the status of the rule
+	if (not rule.areSettingsOk) then
+		log(msg .. " - Can not start the rule - Settings are not correct", "startRule", 1)
 		return
 	end
-	log("Rule #" .. rule._id .. "(" .. rule.name .. ") - Init rule status", "startRule", 2)
+	log(msg .. " - Init rule status", "startRule", 2)
 
 	-- Check if rule is acknowledgeable
 	if (rule.properties["property_is_acknowledgeable"] ~= nil) then
-		rule._isAcknowledgeable = (rule.properties["property_is_acknowledgeable"].isAcknowledgeable == "TRUE")
-	end
-
-	-- Get initial states
-	local ruleInfos = _getFormerRuleInfos(rule._id)
-	if (ruleInfos ~= nil) then
-		local initialStates = {
-			_isArmed              = ruleInfos.isArmed,
-			_isAcknowledged       = (rule._isAcknowledgeable and ruleInfos.isAcknowledged),
-			--_status               = (ruleInfos.status == "1") and "1" or "0", 
-			_lastStatusUpdateTime = ruleInfos.lastStatusUpdate,
-			_level                = ruleInfos.level,
-			_lastLevelUpdateTime  = ruleInfos.lastLevelUpdate,
-			_lastUpdateTime       = ruleInfos.lastUpdate
-		}
-		log("Rule #" .. rule._id .. " - Set initial states: " .. json.encode(initialStates), "startRule", 4)
-		table.extend(rule, initialStates)
+		rule.context.isAcknowledgeable = (rule.properties["property_is_acknowledgeable"].isAcknowledgeable == "TRUE")
 	end
 
 	doHook("onRuleStatusInit", rule)
-	if (rule._status ~= "-1") then
-		-- Status of the has been initialized by a hook
+	if (rule.context.status > -1) then
+		-- Status of the rule has already been initialized (by a hook or already started)
 		-- Update statuses of the conditions
 		_computeRuleStatus(rule)
 	else
-		-- Calcul du statut de la règle car non initialisée par un hook
-		rule._status, rule._level = _computeRuleStatus(rule)
+		-- Compute the status of the rule
+		rule.context.status, rule.context.level = _computeRuleStatus(rule)
 	end
-	if (rule._status == "1") then
-		log("Rule #" .. rule._id .. "(" .. rule.name .. ") is active on start", "startRule", 2)
+	if (rule.context.status == 1) then
+		log(msg .. " is active on start", "startRule", 2)
 	else
-		log("Rule #" .. rule._id .. "(" .. rule.name .. ") is not active on start", "startRule", 2)
+		log(msg .. " is not active on start", "startRule", 2)
 	end
 	updateRuleContext(rule)
 
@@ -2267,94 +2417,117 @@ local function _startRule (rule)
 	_startConditions(rule.conditions)
 	_startRuleActionsConditions(rule.actions)
 
-	-- Exécution si possible des actions liées à l'activation
-	-- Actions avec délai (non faites si redémarrage Luup) ou de rappel
-	if (rule._status == "1") then
+	-- ExÃ©cution si possible des actions liÃ©es Ã  l'activation
+	-- Actions avec dÃ©lai (non faites si redÃ©marrage Luup) ou de rappel
+	if (rule.context.status == 1) then
 		if doHook("beforeDoingActionsOnRuleIsActivated", rule) then
 			doRuleActions(rule, "start")
 			doRuleActions(rule, "reminder")
-			if (rule._level > 0) then
-				doRuleActions(rule, "start", rule._level)
-				doRuleActions(rule, "reminder", rule._level)
+			if (rule.context.level > 0) then
+				doRuleActions(rule, "start", rule.context.level)
+				doRuleActions(rule, "reminder", rule.context.level)
 			end
 		else
-			log("Rule #" .. rule._id .. "(" .. rule.name .. ") is now active, but a hook prevents from doing actions", 1, "startRule")
+			log(msg .. " is now active, but a hook prevents from doing actions", 1, "startRule")
 		end
 	end
 
-	rule._isStarted = true
+	rule.context.isStarted = true
 
 	-- Update rule infos
-	updateRulesInfos(rule._id)
+	--updateRulesInfos(rule.id)
 
 	-- Update rule status
 	-- Start actions won't be done again if status is still activated (no change)
-	_onRuleStatusIsUpdated(rule.name, rule._status)
+	_onRuleStatusIsUpdated(rule.name, rule.context.status)
+
+	debugLogEnd("startRule")
 end
 
--- Update rule context
+-- Stops a rule
+local function _stopRule (rule)
+	local msg = _getRuleSummary(rule)
+	log(_getRuleSummary(rule) .. " is stoping", "stopRule", 2)
+	_removeScheduledTasks(rule)
+	rule.context.status = -1
+	rule.context.isStarted = false
+end
+
+-- Updates rule context
+--[[
 function updateRuleContext (ruleId, context)
 	local rule = getRule(ruleId)
 	if (rule == nil) then
 		return
 	end
-	log("Rule #" .. rule._id .. " - Update rule context", "updateRuleContext", 4)
-	rule._context.lastStatusUpdateTime = rule._lastStatusUpdateTime
-	rule._context.lastLevelUpdateTime  = rule._lastLevelUpdateTime
-	rule._context.lastUpdateTime       = rule._lastUpdateTime
+	log("Rule #" .. rule.id .. " - Update rule context", "updateRuleContext", 4)
+	rule.context.lastStatusUpdateTime = rule.context.lastStatusUpdateTime
+	rule.context.lastLevelUpdateTime  = rule.context.lastLevelUpdateTime
+	rule.context.lastUpdateTime       = rule.lastUpdateTime
 	if (context ~= nil) then
-		table.extend(rule._context, context)
+		table.extend(rule.context, context)
 	end
-	if (rule._context.lastUpdateTime > rule._lastUpdateTime) then
-		rule._lastUpdateTime = rule._context.lastUpdateTime
+	if (rule.context.lastUpdateTime > rule.lastUpdateTime) then
+		rule.lastUpdateTime = rule.context.lastUpdateTime
 	end
+end
+--]]
+function updateRuleContext (ruleId, context)
+	local rule = getRule(ruleId)
+	if (rule == nil) then
+		return
+	end
+	log(_getRuleSummary(rule) .. " - Update rule context", "updateRuleContext", 4)
+	table.extend(rule.context, context)
 end
 
 local function _getNextFreeRuleId ()
 	_lastRuleId = _lastRuleId + 1
-	return tostring(_lastRuleId)
+	return _lastRuleId
 end
 
--- Add a rule
+-- Adds a rule
 function addRule (rule, keepFormerRuleWithSameId)
+	debugLogBegin("addRule")
+	local msg = _getRuleSummary(rule)
+
 	if ((rule == nil) or (type(rule) ~= "table")) then
+		debugLogEnd("addRule")
 		return false
 	end
 	if (rule.name == nil) then
 		rule.name = "Undefined"
 	end
-	log("Add rule #" .. tostring(rule._id) .. "(" .. rule.name .. ")", "addRule")
+	log("Add " .. msg , "addRule")
 
-	if ((rule._id == nil) or (rule._id == "")) then
+	-- Check if id of the rule is defined
+	if ((rule.id == nil) or (rule.id == "")) then
 		log("WARNING : Rule '" .. rule.name .. "' has no id (will be calculated later)", "addRule")
 		table.insert(_rulesWithoutId, rule)
+		debugLogEnd("addRule")
 		return false
 	end
 
-	-- Check if a rule already exists with this id (if defined)
-	local formerRule = _indexRulesById[rule._id]
+	-- Check if a rule already exists with this id
+	local formerRule = _indexRulesById[tostring(rule.id)]
 	if (formerRule ~= nil) then
 		if not keepFormerRuleWithSameId then
-			log("Rule #" .. formerRule._id .. "(" .. formerRule.name .. ") already exists - Remove it", "addRule")
-			removeRule(formerRule._id)
-			_initRuleInfos(rule)
+			log(_getRuleSummary(formerRule) .. " already exists - Remove it", "addRule")
+			removeRule(formerRule.id)
 		else
-			_initRuleInfos(rule)
-			addRuleError(rule, "AddRule", "Duplicate rule with id #" .. formerRule._id .. "(" .. formerRule.name .. ")")
+			addRuleError(rule, "AddRule", "Duplicate rule with id #" .. formerRule.id .. "(" .. formerRule.name .. ")")
 		end
-	else
-		_initRuleInfos(rule)
 	end
 
 	-- Update the last free rule id
-	if ((tonumber(rule._id) or 0) > _lastRuleId) then
-		_lastRuleId = tonumber(rule._id)
+	if (rule.id > _lastRuleId) then
+		_lastRuleId = rule.id
 	end
 
 	-- Add the rule
 	table.insert(_rules, rule)
 	-- Add to indexes
-	_indexRulesById[rule._id] = rule
+	_indexRulesById[tostring(rule.id)] = rule
 	_indexRulesByName[rule.name] = rule
 
 	-- Init
@@ -2367,25 +2540,27 @@ function addRule (rule, keepFormerRuleWithSameId)
 			_startRule(rule)
 		end
 	else
-		rule._isArmed = false
-		log("ERROR : Rule #" .. rule._id .. " has at least one error in settings", "addRule")
+		--rule.context.isArmed = false
+		log("ERROR : " .. msg .. " has at least one error in settings", "addRule")
 	end
-	updateRulesInfos(rule._id)
+	--updateRulesInfos(rule.id)
+
+	debugLogEnd("addRule")
 	return true
 end
 
--- Remove a rule
+-- Removes a rule
 function removeRule (ruleId)
 	local rule = getRule(ruleId)
 	if (rule ~= nil) then
-		log("Remove rule #" .. rule._id .. "(" .. rule.name .. ")", "removeRule")
-		if (rule._isStarted) then
+		log("Remove rule #" .. rule.id .. "(" .. rule.name .. ")", "removeRule")
+		if (rule.isStarted) then
 			_removeScheduledTasks(rule)
 		end
 		-- Remove rule infos
 		_removeRuleInfos(rule)
 		-- Remove rule from indexes
-		_indexRulesById[rule._id] = nil
+		_indexRulesById[tostring(rule.id)] = nil
 		_indexRulesByName[rule.name] = nil
 		-- Remove rule
 		for i = #_rules, 1, -1 do
@@ -2398,7 +2573,26 @@ function removeRule (ruleId)
 	end
 end
 
+-- Adds an error to a rule
+function addRuleError (ruleId, event, message)
+	if (ruleId == nil) then
+		return
+	end
+	local rule = getRule(ruleId)
+	if (rule == nil) then
+		return
+	end
+	error(tostring(event) .. ": " .. tostring(message), "addRuleError")
+	table.insert(rule.context.errors, {
+		timestamp = os.time(),
+		event = event,
+		message = message
+	})
+end
+
 function loadModules ()
+	debugLogBegin("loadModules")
+
 	local moduleNames = string.split(_pluginParams.modules, ",")
 	for _, moduleName in ipairs(moduleNames) do
 		-- Load module
@@ -2412,9 +2606,13 @@ function loadModules ()
 			error("Can not load module: " .. tostring(myModule), "loadModules")
 		end
 	end
+
+	debugLogEnd("loadModules")
 end
 
 function loadStartupFiles ()
+	debugLogBegin("loadStartupFiles")
+
 	local lfs = require("lfs")
 	local fileNames = string.split(_pluginParams.startupFiles, ",")
 	for _, fileName in ipairs(fileNames) do
@@ -2428,7 +2626,7 @@ function loadStartupFiles ()
 		log("Load LUA startup from file '" .. path .. tostring(fileName) .. "'", "loadStartupFiles")
 		local startup, errorMessage = loadfile(path .. fileName)
 		if (startup ~= nil) then
-			log("Execute startup LUA code", "startup")
+			log("Execute startup LUA code", "loadStartupFiles")
 			-- Put the startup in the plugin environment
 			setfenv(startup, getfenv(1))
 			local status, result = pcall(startup)
@@ -2439,6 +2637,8 @@ function loadStartupFiles ()
 			error("Can not execute startup LUA code: " .. tostring(errorMessage), "loadStartupFiles")
 		end
 	end
+
+	debugLogEnd("loadStartupFiles")
 end
 
 local function _addRulesWithoutId ()
@@ -2446,45 +2646,126 @@ local function _addRulesWithoutId ()
 	-- For the moment, I've not found a way to edit safely the XML files
 	-- So it's done by the UI client which upload the modified XML file
 	for _, rule in ipairs(_rulesWithoutId) do
-		rule._id = _getNextFreeRuleId()
-		log("Set id to #" .. rule._id .. " for rule '" .. rule.name .. "' in file '" .. rule._fileName .. "' at position " .. tostring(rule._idx), "loadRuleFiles")
+		rule.id = _getNextFreeRuleId()
+		log("Set id to #" .. tostring(rule.id) .. " for rule '" .. rule.name .. "' in file '" .. rule.fileName .. "' at position " .. tostring(rule.idx), "loadRulesFiles")
+		saveRuleId(rule)
 		addRule(rule, true)
 	end
 	_rulesWithoutId = {}
 end
 
-function loadRuleFiles ()
-	local fileNames = string.split(_pluginParams.ruleFiles, ",")
-	log("Load rules from files", "loadRuleFiles")
+function loadRulesFiles ()
+	debugLogBegin("loadRulesFiles")
+
+	local fileNames = string.split(_pluginParams.rulesFiles, ",")
+	log("Load rules from files", "loadRulesFiles")
 	-- Add rules from XML files
 	for _, fileName in ipairs(fileNames) do
-		loadRuleFile(fileName, true)
+		loadRulesFile(fileName, true)
 	end
 	_addRulesWithoutId()
+
+	debugLogEnd("loadRulesFiles")
 end
 
--- Load rules from xml file (Blockly format)
-function loadRuleFile (fileName, keepFormerRuleWithSameId)
+local function _getRulesFileContent (fileName)
 	local lfs = require("lfs")
 	local fileName = fileName or "C_RulesEngine_Rules.xml"
 	local path = ""
+	local wasCompressed = false
+
 	if lfs.attributes("/etc/cmh-ludl/" .. fileName .. ".lzo", "mode") then
-		log("Decompress rule file '/etc/cmh-ludl/" .. tostring(fileName) .. ".lzo'", "loadRuleFile")
+		wasCompressed = true
+		log("Decompress file '/etc/cmh-ludl/" .. fileName .. ".lzo'", "getRulesFileContent")
 		path = "/tmp/"
 		os.execute(decompressScript .. "decompress_lzo_file_in_tmp " .. fileName)
 	end
-	log("Load rules from file '" .. fileName .. "'", "loadRuleFile")
+
+	log("Load content from file '" .. path .. fileName .. "'", "getRulesFileContent")
 	local file = io.open(path .. fileName)
 	if (file == nil) then
-		log("File '" .. fileName .. "' does not exist", "loadRuleFile")
+		log("File '" .. path .. fileName .. "' does not exist", "getRulesFileContent")
 		return
 	end
-	local xmlRules = ""
+
+	local content = ""
 	for line in file:lines() do
-		xmlRules = xmlRules .. line
+		content = content .. line
 	end
 	file:close()
 
+	return content, path, wasCompressed
+end
+
+local function _saveRulesFileContent (path, fileName, content, hasToCompress)
+	log("Save content into file '" .. path .. fileName .. "'", "saveRulesFileContent")
+	local file = io.open(path .. fileName, "w")
+	if (file == nil) then
+		log("File '" .. path .. fileName .. "' can not be created", "getRulesFileContent")
+		return
+	end
+	file:write(content)
+	file:close()
+end
+
+function saveRuleId (rule)
+	log(_getRuleSummary(rule) .. " - Save rule id at position " .. tostring(rule.idx) .. " in file '" .. rule.fileName .. "'", "saveRuleId")
+
+	-- save id of the rule in its file (and compress if needed)
+	local content, path, wasCompressed = _getRulesFileContent(rule.fileName)
+	if (content == nil) then
+		return
+	end
+
+	-- Search and modify id in the content (XML)
+	local newContent
+	local idx = 1
+	local i1, j1, i2, j2 = 1, 1, 1, 1
+	local k, l, id = 1, 1
+	i1, j1 = string.find(content, '<block type="rule".->', 1)
+	while ((i1 ~= nil) and (idx <= rule.idx)) do
+		i2, j2 = string.find(content, '<block type="rule".->', j1 + 1)
+print("i1",i1,"j1",j1,"i2",i2,"j2",j2)
+
+		-- Search the id tag
+		k, l, id = string.find(content, '<field name="id">(.-)</field>', j1 + 1)
+print("idx",idx,"rule.idx",rule.idx,"k",k,"l",l,"id",id)
+
+		if ((k == nil) or ((i2 ~= nil) and (k > i2))) then
+			-- The tag id does not exist or is after the next rule tag
+			break
+		end
+
+		if (idx == rule.idx) then
+			-- The position of the id tag for this rule is found
+			if ((id ~= nil) and (id ~= "")) then
+				-- The id was already here ?
+				break
+			end
+			log(_getRuleSummary(rule) .. " - Modify file content", "saveRuleId")
+			newContent = string.sub(content, 1, k - 1) .. '<field name="id">' .. tostring(rule.id) .. '</field>' .. string.sub(content, l + 1)
+
+			break
+		end
+		
+		i1, j1 = i2, j2
+		idx = idx + 1
+	end
+
+	-- Save the modifications
+	if (newContent ~= nil) then
+		_saveRulesFileContent(path, rule.fileName, newContent, wasCompressed)
+	end
+end
+
+
+-- Load rules from xml file (Blockly format)
+-- Get the rule descriptions in the file lzo uploaded by javascript client
+-- For openLuup, this file is save in etc/cmh-ludl
+function loadRulesFile (fileName, keepFormerRuleWithSameId)
+	debugLogBegin("loadRulesFile")
+
+	-- Parser of an LOM item
 	function parseXmlItem (xmlItem, lvl)
 		local item, nextItem = nil, nil
 		local key = nil
@@ -2541,7 +2822,7 @@ function loadRuleFile (fileName, keepFormerRuleWithSameId)
 						nextItem = { nextItem }
 					end
 					--print("item", json.encode(item), "nextItem", json.encode(nextItem))
-					table.add(item, nextItem)
+					table.append(item, nextItem)
 					--print("item", json.encode(item))
 					--table.insert(a, 1, item)
 				end
@@ -2584,7 +2865,8 @@ function loadRuleFile (fileName, keepFormerRuleWithSameId)
 			--print("next", json.encode(item))
 
 		elseif (xmlItem.tag == "mutation") then
-			-- do nothing
+			key = "mutation"
+			item = table.extend({}, xmlItem.attr)
 
 		else
 			--print("tag '" .. json.encode(xmlItem) .. "' not used")
@@ -2594,20 +2876,23 @@ function loadRuleFile (fileName, keepFormerRuleWithSameId)
 		return item, key
 	end
 
+	-- Parse the XML string into LOM (Lua Object Model from LuaExpat)
+	local content = _getRulesFileContent(fileName)
 	local lom = require("lxp.lom")
-	xmltable = lom.parse(xmlRules)
-	--print(json.encode(xmltable))
-	--print("")
+	xmltable = lom.parse(content)
+--print(json.encode(xmltable))
+--print("")
 
+	-- Add the rules parsed from XML
 	local idx = 1
 	if ((type(xmltable) == "table") and (xmltable.tag == "xml")) then
 		for _, xmlRule in ipairs(xmltable) do
 			if ((type(xmlRule) == "table") and (xmlRule.tag == "block") and (xmlRule.attr.type == "rule")) then
 				local rule = parseXmlItem(xmlRule, 0)
 --print(json.encode(rule))
-				rule._id = tostring(rule.id or "")
-				rule._fileName = fileName
-				rule._idx = idx -- Index in the XML file
+				rule.id = tonumber(rule.id or "")
+				rule.fileName = fileName
+				rule.idx = idx -- Index in the XML file
 --print("")
 --print("rule", json.encode(rule))
 				addRule(rule, keepFormerRuleWithSameId)
@@ -2617,10 +2902,12 @@ function loadRuleFile (fileName, keepFormerRuleWithSameId)
 		if (_isStarted) then
 			_addRulesWithoutId()
 		end
-		notifyRulesInfosUpdate()
+		--notifyRulesInfosUpdate()
 	else
-		log("File '" .. fileName .. "' does not contain XML", "loadRuleFile")
+		log("File '" .. fileName .. "' does not contain XML", "loadRulesFile")
 	end
+
+	debugLogEnd("loadRulesFile")
 end
 
 -- Get rule (try first by id, then by name or return the input if it is a table)
@@ -2643,8 +2930,8 @@ function getRule (ruleId)
 			--rule = { name = "unknown" }
 		end
 	elseif (type(ruleId) == "table") then
-		if (ruleId._id ~= nil) then
-			rule = getRule(ruleId._id)
+		if (ruleId.id ~= nil) then
+			rule = getRule(ruleId.id)
 			if (rule ~= ruleId) then
 				error("Given rule is not the rule added with this id", "getRule")
 			end
@@ -2662,7 +2949,7 @@ end
 function getRuleStatus (ruleId)
 	local rule = getRule(ruleId)
 	if (rule ~= nil) then
-		return rule._status or "0"
+		return rule.context.status
 	else
 		return nil
 	end
@@ -2677,7 +2964,7 @@ end
 function getRuleLevel (ruleId)
 	local rule = getRule(ruleId)
 	if (rule ~= nil) then
-		return rule._level or 0
+		return rule.context.level or 0
 	else
 		return nil
 	end
@@ -2689,15 +2976,16 @@ function setRuleArming (ruleId, arming)
 	if (rule == nil) then
 		return false, "Rule #" .. tostring(ruleId) .. " is unknown"
 	end
-	local msg = "Rule #" .. rule._id .. "(" .. rule.name .. ")"
-	if (arming == "1") then
-		if not rule._isArmed then
-			if (rule._areSettingsOk) then
-				rule._isArmed = true
+	local msg = _getRuleSummary(rule)
+	if ((arming == "1") or (arming == true)) then
+		if not rule.context.isArmed then
+			if (rule.areSettingsOk) then
+				rule.context.isArmed = true
 				log(msg .. " is now armed", "setRuleArming")
 				doHook("onRuleIsArmed", rule)
-				updateRulesInfos(rule._id)
-				notifyRulesInfosUpdate()
+				--updateRulesInfos(rule.id)
+				--notifyRulesInfosUpdate()
+				saveRulesInfos()
 			else
 				log(msg .. " can not be armed - Settings are not ok", "setRuleArming")
 			end
@@ -2707,12 +2995,13 @@ function setRuleArming (ruleId, arming)
 			return false, msg
 		end
 	else
-		if rule._isArmed then
-			rule._isArmed = false
+		if rule.context.isArmed then
+			rule.context.isArmed = false
 			log(msg .. " is now disarmed", "setRuleArming")
 			doHook("onRuleIsDisarmed", rule)
-			updateRulesInfos(rule._id)
-			notifyRulesInfosUpdate()
+			--updateRulesInfos(rule.id)
+			--notifyRulesInfosUpdate()
+			saveRulesInfos()
 		else
 			msg = msg .. " was already disarmed"
 			log(msg, "setRuleArming")
@@ -2728,37 +3017,39 @@ function isRuleArmed (ruleId)
 	if (rule == nil) then
 		return false
 	end
-	return (rule._isArmed == true)
+	return (rule.context.isArmed == true)
 end
 
 -- Rule acknowledgement
 function setRuleAcknowledgement (ruleId, acknowledgement)
-	local rule = getRule(ruleId)
+	local rule, err = getRule(ruleId)
 	if (rule == nil) then
-		return false, "Rule #" .. tostring(ruleId) .. " is unknown"
+		return false, err
 	end
-	local msg = "Rule #" .. rule._id .. "(" .. rule.name .. ")"
-	if (acknowledgement == "1") then
-		if (rule._isAcknowledgeable and not rule._isAcknowledged) then
-			rule._isAcknowledged = true
+	local msg = _getRuleSummary(rule)
+	if ((acknowledgement == "1") or (acknowledgement == true)) then
+		if (rule.context.isAcknowledgeable and not rule.context.isAcknowledged) then
+			rule.context.isAcknowledged = true
 			log(msg .. " is now acknowledged", "setRuleAcknowledge")
 			doHook("onRuleIsAcknowledged", rule)
-			updateRulesInfos(rule._id)
-			notifyRulesInfosUpdate()
-			updatePanel()
+			--updateRulesInfos(rule.id)
+			--notifyRulesInfosUpdate()
+			saveRulesInfos()
+			--updatePanel()
 		else
 			msg = msg .. " was already acknowledged"
 			log(msg, "setRuleAcknowledge")
 			return false, msg
 		end
 	else
-		if rule._isAcknowledged then
-			rule._isAcknowledged = false
+		if rule.context.isAcknowledged then
+			rule.context.isAcknowledged = false
 			log(msg .. " is now not acknowledged", "setRuleAcknowledge")
 			doHook("onRuleIsUnacknowledged", rule)
-			updateRulesInfos(rule._id)
-			notifyRulesInfosUpdate()
-			updatePanel()
+			--updateRulesInfos(rule.id)
+			--notifyRulesInfosUpdate()
+			saveRulesInfos()
+			--updatePanel()
 		else
 			msg = msg .. " was already not acknowledged"
 			log(msg, "setRuleAcknowledge")
@@ -2770,18 +3061,18 @@ end
 
 -- Set the status of the rule and start linked actions
 function setRuleStatus (ruleId, status, level)
-	local rule = getRule(ruleId)
+	local rule, err = getRule(ruleId)
 	if (rule == nil) then
-		return false
+		return false, err
 	end
-	local msg = "Rule #" .. rule._id .. "(" .. rule.name .. ")"
+	local msg = _getRuleSummary(rule)
 
 	-- Update rule active level
 	local hasRuleLevelChanged = false
-	local oldLevel = rule._level
+	local oldLevel = rule.context.level
 	if ((level ~= nil) and (level ~= oldLevel)) then
-		rule._level = level
-		rule._lastLevelUpdateTime = os.time()
+		rule.context.level = level
+		rule.context.lastLevelUpdateTime = os.time()
 		hasRuleLevelChanged = true
 		log(msg .. " level has changed (oldLevel:'" .. tostring(oldLevel).. "', newLevel:'" .. tostring(level) .. "')", "setRuleStatus", 2)
 	end
@@ -2789,22 +3080,23 @@ function setRuleStatus (ruleId, status, level)
 	local hasRuleStatusChanged = false
 
 	-- Check if rule is armed
-	if (not rule._isArmed) then
-		if (rule._status == "1") then
+	if (not rule.context.isArmed) then
+		if (rule.context.status == 1) then
 			log(msg .. " is disarmed and is now inactive", "setRuleStatus")
-			status = "0"
+			status = 0
 		else
 			log(msg .. " is disarmed - Do nothing ", "setRuleStatus")
 			return
 		end
 	end
 
-	if ((rule._status == "0") and (status == "1")) then
+	if ((rule.context.status == 0) and (status == 1)) then
 		-- The rule has just been activated
 		log(msg .. " is now active", "setRuleStatus")
-		rule._status = "1"
-		rule._lastStatusUpdateTime = os.time()
-		updateRuleContext(rule)
+		rule.context.status = 1
+		rule.context.lastStatusUpdateTime = os.time()
+		--updateRuleContext(rule)
+		-- Reset acknowledgement
 		setRuleAcknowledgement(rule, "0")
 
 		hasRuleStatusChanged = true
@@ -2824,12 +3116,12 @@ function setRuleStatus (ruleId, status, level)
 			_addToHistory(os.time(), "RuleStatus", "Rule '" .. rule.name .. "' is now active, but a hook prevents from doing actions")
 		end
 
-	elseif ((rule._status == "1") and (status == "0")) then
+	elseif ((rule.context.status == 1) and (status == 0)) then
 		-- The rule has just been deactivated
-		log("Rule '" .. rule.name .. "' is now inactive", "setRuleStatus")
-		rule._status = "0"
-		rule._lastStatusUpdateTime = os.time()
-		updateRuleContext(rule)
+		log(msg .. " is now inactive", "setRuleStatus")
+		rule.context.status = 0
+		rule.context.lastStatusUpdateTime = os.time()
+		--updateRuleContext(rule)
 
 		hasRuleStatusChanged = true
 		doHook("onRuleIsDeactivated", rule)
@@ -2849,11 +3141,11 @@ function setRuleStatus (ruleId, status, level)
 			_addToHistory(os.time(), "RuleStatus", "Rule '" .. rule.name .. "' is now inactive, but a hook prevents from doing actions")
 		end
 
-	elseif (rule._status == "1") then
+	elseif (rule.context.status == 1) then
 		-- The rule is still active
 		if (hasRuleLevelChanged) then
-			log("Rule '" .. rule.name .. "' is still active but its level has changed", "setRuleStatus")
-			updateRuleContext(rule)
+			log(msg .. " is still active but its level has changed", "setRuleStatus")
+			--updateRuleContext(rule)
 			-- Cancel scheduled actions for this rule and for old level
 			_removeScheduledTasks(rule, oldLevel)
 			-- Execute actions linked to level change
@@ -2861,23 +3153,24 @@ function setRuleStatus (ruleId, status, level)
 			doRuleActions(rule, "start", level)
 			doRuleActions(rule, "reminder", level)
 		else
-			log("Rule '" .. rule.name .. "' is still active (do nothing)", "setRuleStatus")
+			log(msg .. " is still active (do nothing)", "setRuleStatus")
 		end
 
-	--elseif (rule._status == "0") then
+	--elseif (rule.context.status == 0) then
 	else
 		-- The rule is still inactive
 		log("Rule '" .. rule.name .. "' is still inactive (do nothing)", "setRuleStatus")
 	end
 
 	if (hasRuleStatusChanged or hasRuleLevelChanged) then
-		updateRulesInfos(rule._id)
-		notifyRulesInfosUpdate()
+		--updateRulesInfos(rule.id)
+		--notifyRulesInfosUpdate()
+		saveRulesInfos()
 	end
 	if (hasRuleStatusChanged) then
 		-- Notify that rule status has changed
 		updatePanel()
-		_onRuleStatusIsUpdated(rule.name, rule._status)
+		_onRuleStatusIsUpdated(rule.name, rule.context.status)
 	end
 
 end
@@ -2887,14 +3180,14 @@ function updateRuleStatus (ruleId)
 	if (rule == nil) then
 		return false
 	end
-	log("Update status of rule '" .. rule.name .. "'", "updateRuleStatus", 2)
+	log("Update status of rule #" .. tostring(rule.id) .. "(" .. rule.name .. ")", "updateRuleStatus", 2)
 	local status, level = _computeRuleStatus(rule)
 	setRuleStatus(rule, status, level)
 end
 
 -- Update HTML panel show on UI
 function updatePanel ()
-	local status = "0"
+	local status = 0
 	local style = ""
 
 	local panel = ""
@@ -2903,35 +3196,18 @@ function updatePanel ()
 		panel = panel .. '<div style="color:gray;font-size:.7em;text-align:left;">Debug enabled (' .. tostring(_verbosity) .. ')</div>'
 	end
 
-	local rulePanel = ""
+	local nbRules, nbArmedRules, nbActiveRules, nbAcknowledgedRules = 0, 0, 0, 0
 	for _, rule in pairs(_rules) do
-		if (rule.name ~= "") then
-			style = "border: gray 1px solid; padding:2px; margin:2px; display:inline-block;"
-			if (rule._status == "1") then
-				style = style .. " font-weight:bold;"
-				if (rule._isAcknowledged == "1") then
-					-- Rule active but acknowledged
-					if (status ~= "1") then
-						-- There's not an active rule not acknowledged
-						status = "2"
-					end
-					style = style .. " color:orange;"
-				else
-					-- Rule active
-					status = "1"
-					style = style .. " color:red;"
-				end
-				rulePanel = rulePanel .. '<li style="' .. style .. '">' .. tostring(rule.name) .. '</li>'
-			end
+		nbRules = nbRules + 1
+		if (rule.context.status == 1) then
+			nbActiveRules = nbActiveRules + 1
+		end
+		if (rule.context.isAcknowledged) then
+			nbAcknowledgedRules = nbAcknowledgedRules + 1
 		end
 	end
-
-	if (rulePanel ~= "") then
-		panel = panel .. '<ul class="AlarmPanel" style="text-align: justify; text-indent: 0px; display: inline;">' .. rulePanel .. '</ul>'
-	else
-		panel = panel .. '<div style="color:gray;font-size:.7em;text-align:left;">No active rule</div>'
-	end
-print(panel)
+	panel = panel .. '<div style="color:gray;font-size:.7em;text-align:left;">' .. tostring(nbRules) .. ' rules</div>'
+--print(panel)
 	luup.variable_set(SID.RulesEngine, "RulePanel", panel, _pluginParams.deviceId)
 	luup.variable_set(SID.RulesEngine, "Status", status, _pluginParams.deviceId)
 end
@@ -2940,25 +3216,43 @@ end
 -- Main methods
 -- **************************************************
 
+function isStarted()
+	return (_isStarted == true)
+end
+
 -- Start
 function start ()
+	debugLogBegin("start")
+
 	if (_isStarted) then
 		log("RulesEngine already started", "start")
 	end
 
 	log("Start RulesEngine (v" .. _VERSION ..")", "start")
+	_isEnabled = true
+	_addToHistory(os.time(), "General", "Start engine")
 	for ruleId, rule in pairs(_rules) do
 		_startRule(rule)
 	end
-	updatePanel()
-	notifyRulesInfosUpdate()
+	--updatePanel()
+	saveRulesInfos()
 	_isStarted = true
+	luup.variable_set(SID.SwitchPower, "Status", "1", _pluginParams.deviceId)
 	--RulesEngine.dump()
+
+	debugLogEnd("start")
 end
 
 -- Stop
 function stop ()
+	log("Stop RulesEngine", "stop")
+	_isEnabled = false
+	_addToHistory(os.time(), "General", "Stop engine")
+	for ruleId, rule in pairs(_rules) do
+		_stopRule(rule)
+	end
 	_isStarted = false
+	luup.variable_set(SID.SwitchPower, "Status", "0", _pluginParams.deviceId)
 end
 
 -- Dump for debug
@@ -3070,23 +3364,20 @@ local _handlerCommands = {
 	end,
 
 	["getRulesInfos"] = function (params, outputFormat)
-		local ruleId = params["ruleId"]
-		local ruleIdx = params["ruleIdx"]
+		local ruleId = tonumber(params["ruleId"])
+		local ruleIdx = tonumber(params["ruleIdx"])
 		local ruleFileName = params["ruleFileName"]
-		local rulesInfos
-		if (ruleId ~= nil) then
-			rulesInfos = {}
-			for i, ruleInfos in ipairs(_rulesInfos) do
-				if (ruleInfos.id == ruleId) then
-					table.insert(rulesInfos, ruleInfos)
-				end
+
+		local rulesInfos = {}
+		for _, rule in pairs(_rules) do
+			if ((ruleId == nil) or (rule.id == ruleId)) then
+				table.insert(rulesInfos, rule.context)
 			end
-		else
-			rulesInfos = _rulesInfos
 		end
 		return tostring(json.encode(rulesInfos)), "application/json"
 	end,
 
+	-- ImperiHome Standard System (ISS)
 	["ISS"] = function (params, outputFormat)
 		local path = params["path"] or "/devices"
 		local result
@@ -3104,19 +3395,16 @@ local _handlerCommands = {
 			log("Get device list", "handleCommand.ISS", 2)
 			result = { devices = {} }
 			for _, rule in pairs(_rules) do
-			
---print((rule._status == "1"), (rule._isAcknowledged == "0"))
-			
 				table.insert(result.devices, {
-					id   = rule._id,
+					id   = rule.id,
 					name = rule.name,
 					type = "DevMotion",
 					room = "1",
-					idx = rule._idx,
+					idx = rule.idx,
 					params = {
 						{
 							key = "FileName",
-							value = rule._fileName
+							value = rule.fileName
 						},
 						{
 							key = "Armable",
@@ -3124,23 +3412,23 @@ local _handlerCommands = {
 						},
 						{
 							key = "Ackable",
-							value = ((rule._isAcknowledgeable and "1") or "0")
+							value = ((rule.context.isAcknowledgeable and "1") or "0")
 						},
 						{
 							key = "Armed",
-							value = ((rule._isArmed and "1") or "0")
+							value = ((rule.context.isArmed and "1") or "0")
 						},
 						{
 							key = "Tripped",
-							value = ((((rule._status == "1") and not rule._isAcknowledged) and "1") or "0")
+							value = ((((rule.context.status == 1) and not rule.context.isAcknowledged) and "1") or "0")
 						},
 						{
 							key = "Ack",
-							value = ((rule._isAcknowledged and "1") or "0")
+							value = ((rule.context.isAcknowledged and "1") or "0")
 						},
 						{
 							key = "lasttrip",
-							value = rule._lastStatusUpdateTime
+							value = rule.context.lastStatusUpdateTime
 						}
 					}
 				})
@@ -3191,9 +3479,9 @@ setmetatable(_handlerCommands,{
 })
 
 local function _handleCommand (lul_request, lul_parameters, lul_outputformat)
-	log("lul_request: " .. tostring(lul_request), "handleCommand")
-	log("lul_parameters: " .. tostring(json.encode(lul_parameters)), "handleCommand")
-	log("lul_outputformat: " .. tostring(lul_outputformat), "handleCommand")
+	--log("lul_request: " .. tostring(lul_request), "handleCommand")
+	--log("lul_parameters: " .. tostring(json.encode(lul_parameters)), "handleCommand")
+	--log("lul_outputformat: " .. tostring(lul_outputformat), "handleCommand")
 
 	local command = lul_parameters["command"] or "default"
 	log("Get handler for command '" .. tostring(command) .."'", "handleCommand")
@@ -3209,16 +3497,16 @@ local function _initPluginInstance (lul_device)
 	log("initPluginInstance", "Init")
 
 	-- Get plugin params for this device
-	_getVariableOrInit(lul_device, SID.RulesEngine, "Status", "0")
+	_isEnabled = (_getVariableOrInit(lul_device, SID.SwitchPower, "Status", "0") == "1")
 	_getVariableOrInit(lul_device, SID.RulesEngine, "Message", "")
 	_getVariableOrInit(lul_device, SID.RulesEngine, "LastUpdate", "")
-	_getVariableOrInit(lul_device, SID.RulesEngine, "RulePanel", "")
+	--_getVariableOrInit(lul_device, SID.RulesEngine, "RulePanel", "")
 	_pluginParams = {
 		deviceId = lul_device,
 		modules = _getVariableOrInit(lul_device, SID.RulesEngine, "Modules", "") or "",
 		toolboxConfig = _getVariableOrInit(lul_device, SID.RulesEngine, "ToolboxConfig", "") or "",
 		startupFiles = _getVariableOrInit(lul_device, SID.RulesEngine, "StartupFiles", "C_RulesEngine_Startup.lua") or "",
-		ruleFiles = _getVariableOrInit(lul_device, SID.RulesEngine, "RuleFiles", "C_RulesEngine_Rules.xml") or "",
+		rulesFiles = _getVariableOrInit(lul_device, SID.RulesEngine, "RuleFiles", "C_RulesEngine_Rules.xml") or "",
 		rulesInfos = json.decode(_getVariableOrInit(lul_device, SID.RulesEngine, "RulesInfos", "[]")) or {}
 	}
 
@@ -3241,10 +3529,13 @@ local function _deferredStartup (lul_device)
 	loadStartupFiles()
 
 	-- Load rules
-	loadRuleFiles()
+	_loadHistory()
+	_loadRulesInfos()
+	loadRulesFiles()
 
-	-- TODO : bouton ON /OFF
-	start()
+	if (_isEnabled) then
+		start()
+	end
 end
 
 -- Register with ALTUI once it is ready

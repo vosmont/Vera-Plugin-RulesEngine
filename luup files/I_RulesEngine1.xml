@@ -20,7 +20,11 @@
 			<name>SetTarget</name>
 			<job>
 				if (RulesEngine ~= nil) then
-					RulesEngine.setTarget(lul_device, lul_settings.newTargetValue)
+					if ((lul_settings.newTargetValue == "1") and not RulesEngine.isStarted()) then
+						RulesEngine.start()
+					elseif ((lul_settings.newTargetValue == "0") and RulesEngine.isStarted()) then
+						RulesEngine.stop()
+					end
 				end
 				return 4, nil
 			</job>
@@ -30,7 +34,7 @@
 			<name>LoadRules</name>
 			<job>
 				if (RulesEngine ~= nil) then
-					RulesEngine.loadRuleFile(lul_settings.fileName, false)
+					RulesEngine.loadRulesFile(lul_settings.fileName, false)
 				end
 				return 4, nil
 			</job>

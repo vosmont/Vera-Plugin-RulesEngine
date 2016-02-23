@@ -1,11 +1,11 @@
 {
-	"default_icon": "http://vosmont.github.io/icons/virtual_alarm_panel.png",
+	"default_icon": "http://vosmont.github.io/icons/rules_engine_off.png",
 	"state_icons": [
 		{
 			"img": "http://vosmont.github.io/icons/rules_engine_off.png",
 			"conditions": [
 				{
-					"service": "urn:upnp-org:serviceId:RulesEngine1",
+					"service": "urn:upnp-org:serviceId:SwitchPower1",
 					"variable": "Status",
 					"operator": "==",
 					"value": 0
@@ -16,21 +16,10 @@
 			"img": "http://vosmont.github.io/icons/rules_engine_on.png",
 			"conditions": [
 				{
-					"service": "urn:upnp-org:serviceId:RulesEngine1",
+					"service": "urn:upnp-org:serviceId:SwitchPower1",
 					"variable": "Status",
 					"operator": "==",
 					"value": 1
-				}
-			]
-		},
-		{
-			"img": "http://vosmont.github.io/icons/rules_engine_on_acknoledge.png",
-			"conditions": [
-				{
-					"service": "urn:upnp-org:serviceId:RulesEngine1",
-					"variable": "Status",
-					"operator": "==",
-					"value": 2
 				}
 			]
 		}
@@ -73,7 +62,7 @@
 								"text": "OFF"
 							},
 							"Display": {
-								"Service": "urn:upnp-org:serviceId:RulesEngine1",
+								"Service": "urn:upnp-org:serviceId:SwitchPower1",
 								"Variable": "Status",
 								"Value": "0"
 							},
@@ -95,12 +84,12 @@
 								"text": "ON"
 							},
 							"Display": {
-								"Service": "urn:upnp-org:serviceId:RulesEngine1",
+								"Service": "urn:upnp-org:serviceId:SwitchPower1",
 								"Variable": "Status",
 								"Value": "1"
 							},
 							"Command": {
-								"Service": "urn:upnp-org:serviceId:RulesEngine1",
+								"Service": "urn:upnp-org:serviceId:SwitchPower1",
 								"Action": "SetTarget",
 								"Parameters": [
 									{
