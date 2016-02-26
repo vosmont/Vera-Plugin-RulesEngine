@@ -48,7 +48,7 @@
 								"text": "OFF"
 							},
 							"Display": {
-								"Service": "urn:upnp-org:serviceId:RulesEngine1",
+								"Service": "urn:upnp-org:serviceId:SwitchPower1",
 								"Variable": "Status",
 								"Value": "0"
 							},
@@ -70,12 +70,12 @@
 								"text": "ON"
 							},
 							"Display": {
-								"Service": "urn:upnp-org:serviceId:RulesEngine1",
+								"Service": "urn:upnp-org:serviceId:SwitchPower1",
 								"Variable": "Status",
 								"Value": "1"
 							},
 							"Command": {
-								"Service": "urn:upnp-org:serviceId:RulesEngine1",
+								"Service": "urn:upnp-org:serviceId:SwitchPower1",
 								"Action": "SetTarget",
 								"Parameters": [
 									{

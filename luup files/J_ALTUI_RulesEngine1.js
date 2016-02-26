@@ -80,6 +80,7 @@ var ALTUI_RulesEngine = ( function( window, undefined ) {
 		<block type="list_action_param"></block>\
 		<block type="action_param_level"></block>\
 		<block type="action_param_delay"></block>\
+		<block type="action_param_critical"></block>\
 	</category>\
 </category>\
 <sep></sep>\
@@ -819,6 +820,39 @@ div.altui-rule-acknowledged { cursor: pointer; background: url("http://vosmont.g
 			} );
 	}
 
+	// Load all the action of devices (ALTUI just load them on demand)
+	var _indexDevicesActions = {};
+	function _loadDevicesActions() {
+		var d = $.Deferred();
+		_indexDevicesActions = {};
+		MultiBox.getDevices(
+			null,
+			null,
+			function( devices ) {
+				var nbRetrieved = 0;
+				$.each( devices, function( i, device ) {
+					MultiBox.getDeviceActions( device, function ( services ) {
+						for ( var i = 0; i < services.length; i++ ) {
+							var actionService = services[ i ].ServiceId;
+							for ( var j = 0; j < services[ i ].Actions.length; j++ ) {
+								var action = services[ i ].Actions[ j ];
+								_indexDevicesActions[ actionService + ";" + action.name ] = action;
+							}
+						}
+						nbRetrieved++;
+						if ( nbRetrieved === devices.length ) {
+							d.resolve();
+						}
+					} );
+				} );
+			}
+		);
+		return d.promise();
+	}
+	function _getDeviceAction( actionService, actionName ) {
+		return _indexDevicesActions[ actionService + ";" + actionName ];
+	}
+
 	function _pageRuleEdit( altuiid, fileName, idx, readOnly ) {
 		var device = MultiBox.getDeviceByAltuiID( altuiid );
 		UIManager.clearPage( _T( "Control Panel" ), "Edit rule - {0} <small>#{1}</small>".format( device.name , altuiid ), UIManager.oneColumnLayout );
@@ -906,8 +940,10 @@ div.altui-rule-acknowledged { cursor: pointer; background: url("http://vosmont.g
 				$( "#altui-rule-export" ).toggleClass( "collapse", false );
 				Blockly.fireUiEvent(window, 'resize');
 			} );
-
-		$.when( _loadBlocklyResourcesAsync( device ) )
+		$.when( 
+			_loadDevicesActions(),
+			_loadBlocklyResourcesAsync( device )
+		)
 			.done( function() {
 				_drawBlocklyPanel( device, readOnly );
 				if ( readOnly !== true ) {
@@ -1005,6 +1041,7 @@ div.altui-rule-acknowledged { cursor: pointer; background: url("http://vosmont.g
 		pageRules: _pageRules,
 		pageTimeline: _pageTimeline,
 
-		showLuaEditor: _showLuaEditor
+		showLuaEditor: _showLuaEditor,
+		getDeviceAction: _getDeviceAction
 	};
 })( window );

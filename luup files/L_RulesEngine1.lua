@@ -40,7 +40,7 @@ local SID = {
 
 _NAME = "RulesEngine"
 _DESCRIPTION = "Rules Engine for the Vera with visual editor"
-_VERSION = "0.06"
+_VERSION = "0.07"
 _AUTHOR = "vosmont"
 
 local _isEnabled = false
@@ -728,11 +728,15 @@ local function _removeScheduledTasks (rule, level, item)
 			and ((level == nil) or (_scheduledTasks[i].level == level))
 			and ((item == nil)  or (_scheduledTasks[i].item == item))
 		) then
-			if _isLogLevel(4) then
-				log("Remove task #" .. tostring(i) .. "/" .. tostring(#_scheduledTasks) .. ": " .. _getTaskInfo(_scheduledTasks[i]), "removeScheduledTask", 4)
+			if (_scheduledTasks[i].item.isCritical) then
+				log("Can not remove task #" .. tostring(i) .. "/" .. tostring(#_scheduledTasks) .. " because the item is critical: " .. _getTaskInfo(_scheduledTasks[i]), "removeScheduledTask", 2)
+			else
+				if _isLogLevel(4) then
+					log("Remove task #" .. tostring(i) .. "/" .. tostring(#_scheduledTasks) .. ": " .. _getTaskInfo(_scheduledTasks[i]), "removeScheduledTask", 4)
+				end
+				table.remove(_scheduledTasks, i)
+				nbTaskRemoved = nbTaskRemoved + 1
 			end
-			table.remove(_scheduledTasks, i)
-			nbTaskRemoved = nbTaskRemoved + 1
 		end
 	end
 	log(msg .. ": " .. tostring(nbTaskRemoved) .. " task(s) removed", "removeScheduledTask", 3)
@@ -757,6 +761,8 @@ local function _doScheduledTasks ()
 				end
 				if (type(_G[scheduledTask.functionName]) == "function") then
 					_G[scheduledTask.functionName](scheduledTask.item, scheduledTask.params, scheduledTask.level)
+				else
+					error("'" .. tostring(scheduledTask.functionName) .. "' is not a global function", "doScheduledTasks")
 				end
 			end
 		end
@@ -814,7 +820,7 @@ setmetatable(_addParam, {
 	_addParam["property_auto_untrip"] = function (item, param)
 		local autoUntripInterval = _getIntervalInSeconds(param.autoUntripInterval, param.unit)
 		log(_getItemSummary(item) .. " - Add 'autoUntripInterval' : '" .. tostring(autoUntripInterval) .. "'", "addParams", 4)
-		item["_autoUntripInterval"] = autoUntripInterval
+		item.autoUntripInterval = autoUntripInterval
 	end
 
 	_addParam["condition_param_since"] = function (item, param)
@@ -849,7 +855,13 @@ setmetatable(_addParam, {
 	_addParam["action_param_delay"] = function (item, param)
 		local delayInterval = _getIntervalInSeconds(param.delayInterval, param.unit)
 		log(_getItemSummary(item) .. " - Add 'delayInterval' : '" .. tostring(delayInterval) .. "'", "addParams", 4)
-		item["_delayInterval"] = delayInterval
+		item.delayInterval = delayInterval
+	end
+
+	_addParam["action_param_critical"] = function (item, param) 
+		local isCritical = (param.isCritical == "TRUE")
+		log(_getItemSummary(item) .. " - Add 'isCritical' : '" .. tostring(isCritical) .. "'", "addParams", 4)
+		item.isCritical = isCritical
 	end
 
 local function _addParams (item, params)
@@ -1233,10 +1245,11 @@ setmetatable(ConditionTypes, {
 	ConditionTypes["condition_rule"] = {
 		init = function (condition)
 			condition.mainType = "Trigger"
+			condition.status = tonumber(condition.status)
 		end,
 
 		check = function (condition)
-print(json.encode(condition))
+--print(json.encode(condition))
 			if not _checkParameters(condition, {{"rule", "ruleId", "ruleName"}, "status"}) then
 				return false
 			else
@@ -1659,7 +1672,6 @@ local _actions = {}
 				-- Put the chunk in the plugin environment
 				setfenv(chunk, getfenv(1))
 				action.callback = chunk()
-				action.type = "function"
 				action.functionContent = nil
 			end
 		end,
@@ -1884,21 +1896,21 @@ local function _initRuleActions (ruleId, actions)
 	if (actions == nil) then
 		actions = {}
 	end
-	for i, action in ipairs(actions) do
-		action.id = tostring(i)
-		action.mainType = "GroupAction"
-		action.type = nil
-		action.ruleId = ruleId
-		action.context = { lastUpdateTime = 0 }
-		action.levels = {}
+	for i, actionGroup in ipairs(actions) do
+		actionGroup.id = tostring(i)
+		actionGroup.mainType = "GroupAction"
+		actionGroup.type = nil
+		actionGroup.ruleId = ruleId
+		actionGroup.context = { lastUpdateTime = 0 }
+		actionGroup.levels = {}
 		-- Params
-		_addParams(action, action.params)
-		action.params = nil
+		_addParams(actionGroup, actionGroup.params)
+		actionGroup.params = nil
 		-- Actions to do
-		if (type(action["do"]) ~= "table") then
-			action["do"] = {}
+		if (type(actionGroup["do"]) ~= "table") then
+			actionGroup["do"] = {}
 		end
-		for j, actionToDo in ipairs(action["do"]) do
+		for j, actionToDo in ipairs(actionGroup["do"]) do
 			actionToDo.id = tostring(i) .. "." .. tostring(j)
 			actionToDo.mainType = "Action"
 			actionToDo.ruleId = ruleId
@@ -1906,8 +1918,8 @@ local function _initRuleActions (ruleId, actions)
 				_actions[actionToDo.type].init(actionToDo)
 			end
 		end
-		-- Action conditions
-		action.conditions = _initConditions(ruleId .. "-Action#" .. tostring(i), action.conditions, nil, true)
+		-- Conditions of the group of actions
+		actionGroup.conditions = _initConditions(ruleId .. "-Action#" .. tostring(i), actionGroup.conditions, nil, true)
 	end
 	return actions
 end
@@ -2053,54 +2065,53 @@ local function _doRuleAction (action, params, level)
 	-- Update context level
 	rule.context.level = level or rule.context.level
 
-	local message = "*   Rule #" .. rule.id .. "(" .. rule.name .. ") - Group of actions #" .. tostring(action.id) .. " for event '" .. tostring(action.event) .. "'"
+	local msg = "*   Rule #" .. rule.id .. "(" .. rule.name .. ") - Group of actions #" .. tostring(action.id) .. " for event '" .. tostring(action.event) .. "'"
 	if (action.level ~= nil) then
-		message = message .. "(level " .. json.encode(action.levels) .. ")"
+		msg = msg .. "(level " .. json.encode(action.levels) .. ")"
 	end
 
 	-- Check if a hook prevents to do action
 	if not doHook("beforeDoingAction", rule, action.id) then
-		log(message .. " - A hook prevent from doing these actions", "doRuleAction", 3)
+		log(msg .. " - A hook prevent from doing these actions", "doRuleAction", 3)
 	-- Check if the rule is disarmed
 	elseif (not rule.context.isArmed and (action.event ~= "end")) then
-		log(message .. " - Don't do actions - Rule is disarmed and event is not 'end'", "doRuleAction")
+		log(msg .. " - Don't do actions - Rule is disarmed and event is not 'end'", "doRuleAction")
 	-- Check if the rule is acknowledged
 	elseif (rule.context.isAcknowledged and (action.event == "reminder")) then
-		log(message .. " - Don't do reminder actions - Rule is acknowledged", "doRuleAction")
+		log(msg .. " - Don't do reminder actions - Rule is acknowledged", "doRuleAction")
 
 	--[[
 	-- TODO faire maj pour condition externe de la règle
 	-- Check if the rule main conditions are still respected
 	if not isMatchingAllConditions(rule.conditions, rule.context.deviceId) then
-		log(message .. " - Don't do action - Rule conditions are not respected", "doRuleAction", 2)
+		log(msg .. " - Don't do action - Rule conditions are not respected", "doRuleAction", 2)
 		setRuleStatus(rule, "0")
 		return false
 	end
 	--]]
 
-	-- Check if the rule action conditions are still respected
-	elseif ((table.getn(action.conditions) > 0) and (_getConditionsStatus(action.conditions) == "0")) then
-		log(message .. " - Don't do anything - Rule is still active but action conditions are not respected", "doRuleAction", 3)
+	-- Check if the conditions of the group of rule actions are still respected
+	elseif ((table.getn(action.conditions) > 0) and (_getConditionsStatus(action.conditions) == 0)) then
+		log(msg .. " - Don't do anything - Rule is still active but conditions of the group of actions are no more respected", "doRuleAction", 3)
 	-- Check if the level is respected
 	elseif not _isRuleGroupActionMatchingLevel(action, level) then
-		log(message .. " - Don't do anything - Level doesn't match the requested level " .. tostring(level), "doRuleAction", 3)
+		log(msg .. " - Don't do anything - Level doesn't match the requested level " .. tostring(level), "doRuleAction", 3)
 	else
-		--log(message .. " - Do actions", "doRuleAction", 3)
+		--log(msg .. " - Do actions", "doRuleAction", 3)
 		if (params.idx ~= nil) then
-			log(message .. " - Resume from action #" .. tostring(params.idx), "doRuleAction", 3)
+			log(msg .. " - Resume from action #" .. tostring(params.idx), "doRuleAction", 3)
 		end
 		for i = (params.idx or 1), #action["do"] do
 			local actionToDo = action["do"][i]
---print("actionToDo.type", actionToDo.type)
 			if (actionToDo.type == "action_wait") then
 				-- Wait and resume
-				log(message .. " - Do action #" .. tostring(actionToDo.id) ..  " - Wait " .. tostring(actionToDo.delayInterval) .. " seconds", "doRuleAction", 3)
-				_addScheduledTask(rule, "RulesEngine.doRuleAction", action, {idx = i + 1}, level, actionToDo.delayInterval)
+				log(msg .. " - Do action #" .. tostring(actionToDo.id) ..  " - Wait " .. tostring(actionToDo.delayInterval) .. " seconds", "doRuleAction", 3)
+				_addScheduledTask(rule, "RulesEngine.doRuleAction", action, { idx = i + 1 }, level, actionToDo.delayInterval)
 				return
 			elseif (_actions[actionToDo.type] == nil) then
-				log(message .. " - Can not do action #" .. tostring(actionToDo.id) ..  " of type '" .. actionToDo.type .. "' - Unknown action type", "doRuleAction", 1)
+				log(msg .. " - Can not do action #" .. tostring(actionToDo.id) ..  " of type '" .. actionToDo.type .. "' - Unknown action type", "doRuleAction", 1)
 			else
-				log(message .. " - Do action #" .. tostring(actionToDo.id) ..  " of type '" .. actionToDo.type .. "'", "doRuleAction", 3)
+				log(msg .. " - Do action #" .. tostring(actionToDo.id) ..  " of type '" .. actionToDo.type .. "'", "doRuleAction", 3)
 				local functionToDo
 				if (type(_actions[actionToDo.type]) == "function") then
 					functionToDo = _actions[actionToDo.type]
@@ -2120,15 +2131,15 @@ local function _doRuleAction (action, params, level)
 	end
 
 	if (action.event == "reminder") then
-		-- Relance de la surveillance du statut de la règle
+		-- Relaunching of the surveillance of the status of the rule
 		local delay = _getRuleActionDelay(rule, action, true)
-		log(message .. " - Do recurrent action in " .. tostring(delay) .. " seconds", "doRuleAction", 2)
+		log(msg .. " - Do recurrent action in " .. tostring(delay) .. " seconds", "doRuleAction", 2)
 		_addScheduledTask(rule, "RulesEngine.doRuleAction", action, nil, level, delay)
 	end
 
 end
 
--- Do actions from a rule for an event and optionally a level
+-- Do actions from a rule (group of actions) for an event and optionally a level
 function doRuleActions (ruleId, event, level)
 	local rule = getRule(ruleId)
 
@@ -2146,42 +2157,43 @@ function doRuleActions (ruleId, event, level)
 
 	-- Announce what will be done
 	if (level ~= nil) then
-		log("*** Rule #" .. tostring(rule.id) .. "(" .. rule.name .. ") - Do actions for event '" .. event .. "' with explicit level '" .. tostring(level) .. "'", "doRuleActions")
+		log("*** " .. _getRuleSummary(rule) .. " - Do actions for event '" .. event .. "' with explicit level '" .. tostring(level) .. "'", "doRuleActions")
 	--elseif (rule.context.level > 0) then
-	--	log("*** Rule #" .. rule.id .. "(" .. rule.name .. ") - Do actions for event '" .. event .. "' matching rule level '" .. tostring(rule.context.level) .. "'", "doRuleActions")
+	--	log("*** " .. _getRuleSummary(rule) .. " - Do actions for event '" .. event .. "' matching rule level '" .. tostring(rule.context.level) .. "'", "doRuleActions")
 	else
-		log("*** Rule #" .. tostring(rule.id) .. "(" .. rule.name .. ") - Do actions for event '" .. event .. "'", "doRuleActions")
+		log("*** " .. _getRuleSummary(rule) .. " - Do actions for event '" .. event .. "'", "doRuleActions")
 	end
 
 	-- Search actions of the rule, linked to the event
 	local isAtLeastOneActionToDo = false
-	for actionId, action in ipairs(rule.actions) do
-		local msg = "**  " .. _getItemSummary(action)
+	for actionId, actionGroup in ipairs(rule.actions) do
+		local msg = "**  " .. _getItemSummary(actionGroup)
 		if (
-			(event == nil) -- Pas d'événement précis
-			or (action.event == nil) -- Action valable pour tous les évènements
-			or (action.event == event) -- Action valable pour l'évènement demandé
+			(event == nil) -- No precise event
+			or (actionGroup.event == nil) -- Valid action for all the events
+			or (actionGroup.event == event) -- Valid action for the wanted event
 		) then
-			--if not isMatchingAllConditions(action.conditions, rule.context.deviceId) then
-				-- Les conditions particulières de l'action ne sont pas respectées
-				--log(msg .. " - Don't do action - The action conditions are not respected", 2, "doRuleActions")
-			if not _isRuleGroupActionMatchingLevel(action, level) then
+			-- Check if the level is respected
+			if not _isRuleGroupActionMatchingLevel(actionGroup, level) then
 				log(msg .. " - Don't do because level is not respected", "doRuleActions", 3)
+			-- Check if the specific conditions of the group of rule actions are respected
+			elseif ((table.getn(actionGroup.conditions) > 0) and (_getConditionsStatus(actionGroup.conditions) == 0)) then
+				log(msg .. " - Don't do anything - Rule is still active but conditions of the group of actions are not respected", "doRuleAction", 3)
 			else
-				local delay = _getRuleActionDelay(rule, action)
+				local delay = _getRuleActionDelay(rule, actionGroup)
 				if (delay == nil) then
 					-- Delay is passed (the action has already been done)
 					log(msg .. " - Don't do because it already has been done", "doRuleActions", 3)
 				else
-					-- Executes the action
+					-- Execute the action
 					isAtLeastOneActionToDo = true
 					if (delay > 0) then
 						log(msg .. " - Do in " .. tostring(delay) .. " second(s)", "doRuleActions", 2)
 					else
 						log(msg .. " - Do immediately", "doRuleActions", 2)
 					end
-					-- Les appels se font tous en asynchrone pour �viter les blocages
-					_addScheduledTask(rule, "RulesEngine.doRuleAction", action, nil, level, delay)
+					-- The calls are made all in asynchronous to avoid the blockings
+					_addScheduledTask(rule, "RulesEngine.doRuleAction", actionGroup, nil, level, delay)
 				end
 			end
 		end
@@ -2725,11 +2737,11 @@ function saveRuleId (rule)
 	i1, j1 = string.find(content, '<block type="rule".->', 1)
 	while ((i1 ~= nil) and (idx <= rule.idx)) do
 		i2, j2 = string.find(content, '<block type="rule".->', j1 + 1)
-print("i1",i1,"j1",j1,"i2",i2,"j2",j2)
+--print("i1",i1,"j1",j1,"i2",i2,"j2",j2)
 
 		-- Search the id tag
 		k, l, id = string.find(content, '<field name="id">(.-)</field>', j1 + 1)
-print("idx",idx,"rule.idx",rule.idx,"k",k,"l",l,"id",id)
+--print("idx",idx,"rule.idx",rule.idx,"k",k,"l",l,"id",id)
 
 		if ((k == nil) or ((i2 ~= nil) and (k > i2))) then
 			-- The tag id does not exist or is after the next rule tag
@@ -3107,7 +3119,7 @@ function setRuleStatus (ruleId, status, level)
 		if doHook("beforeDoingActionsOnRuleIsActivated", rule) then
 			doRuleActions(rule, "start")
 			doRuleActions(rule, "reminder")
-			if (level or 0 > 0) then
+			if ((level or 0) > 0) then
 				doRuleActions(rule, "start", level)
 				doRuleActions(rule, "reminder", level)
 			end
