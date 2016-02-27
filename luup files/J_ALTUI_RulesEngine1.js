@@ -831,19 +831,36 @@ div.altui-rule-acknowledged { cursor: pointer; background: url("http://vosmont.g
 			function( devices ) {
 				var nbRetrieved = 0;
 				$.each( devices, function( i, device ) {
-					MultiBox.getDeviceActions( device, function ( services ) {
-						for ( var i = 0; i < services.length; i++ ) {
-							var actionService = services[ i ].ServiceId;
-							for ( var j = 0; j < services[ i ].Actions.length; j++ ) {
-								var action = services[ i ].Actions[ j ];
-								_indexDevicesActions[ actionService + ";" + action.name ] = action;
+					if ( device && device.id !== 0 ) {
+						var controller = MultiBox.controllerOf( device.altuiid ).controller;
+						var devicetypesDB = MultiBox.getDeviceTypesDB( controller );
+						var dt = devicetypesDB[ device.device_type ];
+						if ( dt.Services && ( dt.Services.length > 0 ) ) {
+							MultiBox.getDeviceActions( device, function ( services ) {
+								for ( var i = 0; i < services.length; i++ ) {
+									var actionService = services[ i ].ServiceId;
+									for ( var j = 0; j < services[ i ].Actions.length; j++ ) {
+										var action = services[ i ].Actions[ j ];
+										_indexDevicesActions[ actionService + ";" + action.name ] = action;
+									}
+								}
+								nbRetrieved++;
+								if ( nbRetrieved === devices.length ) {
+									d.resolve();
+								}
+							} );
+						} else {
+							nbRetrieved++;
+							if ( nbRetrieved === devices.length ) {
+								d.resolve();
 							}
 						}
+					}  else {
 						nbRetrieved++;
 						if ( nbRetrieved === devices.length ) {
 							d.resolve();
 						}
-					} );
+					}
 				} );
 			}
 		);
