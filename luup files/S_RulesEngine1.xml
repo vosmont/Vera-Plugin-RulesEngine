@@ -31,6 +31,11 @@
 			<dataType>string</dataType>
 		</stateVariable>
 		<stateVariable>
+			<name>A_ARG_TYPE_RuleIdx</name>
+			<sendEventsAttribute>no</sendEventsAttribute>
+			<dataType>string</dataType>
+		</stateVariable>
+		<stateVariable>
 			<name>A_ARG_TYPE_RuleName</name>
 			<sendEventsAttribute>no</sendEventsAttribute>
 			<dataType>string</dataType>
@@ -54,6 +59,31 @@
 					<name>fileName</name>
 					<direction>in</direction>
 					<relatedStateVariable>A_ARG_TYPE_FileName</relatedStateVariable>
+				</argument>
+				<argument>
+					<name>ruleIdx</name>
+					<direction>in</direction>
+					<relatedStateVariable>A_ARG_TYPE_RuleIdx</relatedStateVariable>
+				</argument>
+			</argumentList>
+		</action>
+		<action>
+			<name>RemoveRule</name>
+			<argumentList>
+				<argument>
+					<name>fileName</name>
+					<direction>in</direction>
+					<relatedStateVariable>A_ARG_TYPE_FileName</relatedStateVariable>
+				</argument>
+				<argument>
+					<name>ruleIdx</name>
+					<direction>in</direction>
+					<relatedStateVariable>A_ARG_TYPE_RuleIdx</relatedStateVariable>
+				</argument>
+				<argument>
+					<name>ruleId</name>
+					<direction>in</direction>
+					<relatedStateVariable>A_ARG_TYPE_RuleId</relatedStateVariable>
 				</argument>
 			</argumentList>
 		</action>

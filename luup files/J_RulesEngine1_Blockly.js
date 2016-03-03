@@ -1,13 +1,12 @@
 //# sourceURL=J_RulesEngine1_Blockly.js
 "use strict";
-// This program is free software: you can redistribute it and/or modify
-// it under the condition that it is for private or home useage and 
-// this whole comment is reproduced in the source code file.
-// Commercial utilisation is not authorized without the appropriate
-// written agreement from amg0 / alexis . mermet @ gmail . com
-// This program is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. 
+
+/**
+ * This file is part of the plugin RulesEngine.
+ * https://github.com/vosmont/Vera-Plugin-RulesEngine
+ * Copyright (c) 2016 Vincent OSMONT
+ * This code is released under the MIT License, see LICENSE.
+ */
 
 window.ALTUI_RulesEngineResourcesAreLoaded = true;
 
@@ -455,8 +454,8 @@ Blockly.Blocks.properties.HUE = 160;
 Blockly.Msg.LIST_PROPERTY_TOOLTIP = "A LUA code.";
 Blockly.Msg.LIST_RULE_PROPERTY_TOOLTIP = "List of rule properties";
 Blockly.Msg.LIST_RULE_PROPERTY_CREATE_EMPTY_TITLE = "no property";
-Blockly.Msg.RULE_PROPERTY_AUTO_UNTRIP_TOOLTIP = "Defines the time after which the rule is switched off automatically.";
-Blockly.Msg.RULE_PROPERTY_IS_ACKNOWLEDGEABLE_TOOLTIP = "Defines if this rule is acknowledgeable.";
+Blockly.Msg.RULE_PROPERTY_AUTO_UNTRIP_TOOLTIP = "Define the time after which the rule is switched off automatically.";
+Blockly.Msg.RULE_PROPERTY_IS_ACKNOWLEDGEABLE_TOOLTIP = "Define if this rule is acknowledgeable.";
 
 
 Blockly.Blocks[ "list_property" ] = function() {};
@@ -602,8 +601,9 @@ var _INPUTS = {
 	"action_service"  : { "type": "deviceFilter", "input": "action_service",   "field": "service", "label": "service" },
 	"action"          : { "type": "deviceFilter", "input": "action",           "field": "action", "label": "action" },
 	"action_params"   : { "type": "deviceFilter", "input": "action_params",    "field": "params", "label": "with params" },
-	"action_group_params"    : { "type": "value", "input": "params",     "label": "with param", "align": "ALIGN_RIGHT", "check": [ "ActionParams", "ActionParam" ], "before": [ "conditions", "do" ] },
-	"action_group_conditions": { "type": "value", "input": "conditions", "label": "if",         "align": "ALIGN_RIGHT", "check": "Boolean", "before": [ "do" ] }
+	"action_group_description": { "type": "value", "input": "description", "label": "description", "align": "ALIGN_RIGHT", "check": [ "String" ], "before": [ "params", "conditions", "do" ] },
+	"action_group_params"     : { "type": "value", "input": "params",      "label": "with param",  "align": "ALIGN_RIGHT", "check": [ "ActionParams", "ActionParam" ], "before": [ "conditions", "do" ] },
+	"action_group_conditions" : { "type": "value", "input": "conditions",  "label": "if",          "align": "ALIGN_RIGHT", "check": "Boolean", "before": [ "do" ] }
 };
 
 function _isEmpty(str) {
@@ -1062,7 +1062,7 @@ function _sortOptionsByName( a, b ) {
 	if ( a[ 0 ] < b[ 0 ] ) {
 		return -1;
 	}
-	if ( a[ 0 ] > b[ 10 ] ) {
+	if ( a[ 0 ] > b[ 0 ] ) {
 		return 1;
 	}
 	return 0;
@@ -1844,6 +1844,8 @@ Blockly.Blocks.actions.HUE2 = 240;
 Blockly.Msg.ACTION_GROUP_TOOLTIP = "Group of actions. Choose the event linked to these actions and eventually parameters and specific conditions.";
 Blockly.Msg.CONTROLS_ACTION_GROUP_TITLE = "group of actions";
 Blockly.Msg.CONTROLS_ACTION_GROUP_TOOLTIP = "Group of actions.";
+Blockly.Msg.CONTROLS_ACTION_GROUP_DESCRIPTION_TITLE = "description";
+Blockly.Msg.CONTROLS_ACTION_GROUP_DESCRIPTION_TOOLTIP = "";
 Blockly.Msg.CONTROLS_ACTION_GROUP_PARAMS_TITLE = "param";
 Blockly.Msg.CONTROLS_ACTION_GROUP_PARAMS_TOOLTIP = "Parameter which can change the behaviour of the group of actions.";
 Blockly.Msg.CONTROLS_ACTION_GROUP_CONDITIONS_TITLE = "condition";
@@ -1869,8 +1871,8 @@ Blockly.Blocks[ "action_group" ] = {
 						[ "START of the rule", "start" ],
 						[ "REPEAT as long as the rule is active", "reminder" ],
 						[ "END of the rule", "end" ],
-						[ "(TODO) a condition is filled", "conditionStart" ],
-						[ "(TODO) a condition is no more filled", "conditionEnd" ],
+						[ "a condition is filled", "conditionStart" ],
+						[ "a condition is no more filled", "conditionEnd" ],
 					],
 					function( option ) {
 						var recurrentIntervalInput = ( option === "reminder" );
@@ -1886,8 +1888,8 @@ Blockly.Blocks[ "action_group" ] = {
 			.setCheck( "ActionType" )
 			.appendField( "do" );
 
-		this.inputs_ = [ "action_group_params", "action_group_conditions" ];
-		this.setMutator( new Blockly.Mutator( [ "controls_action_group_params", "controls_action_group_conditions" ] ) );
+		this.inputs_ = [ "action_group_description", "action_group_params", "action_group_conditions" ];
+		this.setMutator( new Blockly.Mutator( [ "controls_action_group_description", "controls_action_group_params", "controls_action_group_conditions" ] ) );
 
 		this.setInputsInline( false );
 		this.setPreviousStatement( true, "Action" );
@@ -1946,6 +1948,18 @@ Blockly.Blocks[ "controls_action_group" ] = {
 	}
 };
 
+Blockly.Blocks[ "controls_action_group_description" ] = {
+	init: function() {
+		this.setColour(Blockly.Blocks.actions.HUE1);
+		this.appendDummyInput()
+			.appendField(Blockly.Msg.CONTROLS_ACTION_GROUP_DESCRIPTION_TITLE);
+		this.setPreviousStatement(true);
+		this.setNextStatement(true);
+		this.setTooltip(Blockly.Msg.CONTROLS_ACTION_GROUP_DESCRIPTION_TOOLTIP);
+		this.contextMenu = false;
+	}
+};
+
 Blockly.Blocks[ "controls_action_group_params" ] = {
 	init: function() {
 		this.setColour(Blockly.Blocks.actions.HUE1);
@@ -1975,9 +1989,9 @@ Blockly.Blocks[ "controls_action_group_conditions" ] = {
 // Blockly - Rule actions - Types
 // ****************************************************************************
 
-Blockly.Msg.ACTION_WAIT_TOOLTIP = "Waits a defined time.";
-Blockly.Msg.ACTION_FUNCTION_TOOLTIP = "Executes LUA code.";
-Blockly.Msg.ACTION_DEVICE_TOOLTIP = "Executes an action of a device.";
+Blockly.Msg.ACTION_WAIT_TOOLTIP = "Wait a defined time.";
+Blockly.Msg.ACTION_FUNCTION_TOOLTIP = "Execute LUA code.";
+Blockly.Msg.ACTION_DEVICE_TOOLTIP = "Execute an action of a device.";
 
 Blockly.Blocks['action_wait'] = {
 	init: function () {
@@ -2069,8 +2083,8 @@ Blockly.Blocks['action_device'] = {
 
 Blockly.Msg.LIST_ACTION_PARAM_TOOLTIP = "List of action parameters";
 Blockly.Msg.LIST_ACTION_PARAM_CREATE_EMPTY_TITLE = "no param";
-Blockly.Msg.ACTION_PARAM_LEVEL_TOOLTIP = "Defines for which level of the rule these actions are planned.";
-Blockly.Msg.ACTION_PARAM_DELAY_TOOLTIP = "Defines the time to wait before doing the actions.";
+Blockly.Msg.ACTION_PARAM_LEVEL_TOOLTIP = "Define for which level of the rule these actions are planned.";
+Blockly.Msg.ACTION_PARAM_DELAY_TOOLTIP = "Define the time to wait before doing the actions.";
 Blockly.Msg.ACTION_PARAM_CRITICAL_TOOLTIP = "Defines if these actions can be stopped if the status of the rule changes during their execution (critical can't be stopped).";
 
 Blockly.Blocks['list_action_param'] = function() {};

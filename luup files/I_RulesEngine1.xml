@@ -34,7 +34,17 @@
 			<name>LoadRules</name>
 			<job>
 				if (RulesEngine ~= nil) then
-					RulesEngine.loadRulesFile(lul_settings.fileName, false)
+					RulesEngine.RulesFile.load(lul_settings.fileName, false, lul_settings.ruleIdx)
+				end
+				return 4, nil
+			</job>
+		</action>
+		<action>
+			<serviceId>urn:upnp-org:serviceId:RulesEngine1</serviceId>
+			<name>RemoveRule</name>
+			<job>
+				if (RulesEngine ~= nil) then
+					RulesEngine.Rules.remove(lul_settings.fileName, lul_settings.ruleIdx, lul_settings.ruleId)
 				end
 				return 4, nil
 			</job>
@@ -44,7 +54,7 @@
 			<name>SetRuleArming</name>
 			<job>
 				if (RulesEngine ~= nil) then
-					RulesEngine.setRuleArming(lul_settings.ruleId, lul_settings.arming)
+					RulesEngine.Rule.setArming(lul_settings.ruleId, lul_settings.arming)
 				end
 				return 4, nil
 			</job>
@@ -54,7 +64,7 @@
 			<name>SetRuleAcknowledgement</name>
 			<job>
 				if (RulesEngine ~= nil) then
-					RulesEngine.setRuleAcknowledgement(lul_settings.ruleId, lul_settings.acknowledgement)
+					RulesEngine.Rule.setAcknowledgement(lul_settings.ruleId, lul_settings.acknowledgement)
 				end
 				return 4, nil
 			</job>

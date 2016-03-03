@@ -1,13 +1,12 @@
 //# sourceURL=J_ALTUI_RulesEngine1.js
 "use strict";
-// This program is free software: you can redistribute it and/or modify
-// it under the condition that it is for private or home useage and 
-// this whole comment is reproduced in the source code file.
-// Commercial utilisation is not authorized without the appropriate
-// written agreement from amg0 / alexis . mermet @ gmail . com
-// This program is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. 
+
+/**
+ * This file is part of the plugin RulesEngine.
+ * https://github.com/vosmont/Vera-Plugin-RulesEngine
+ * Copyright (c) 2016 Vincent OSMONT
+ * This code is released under the MIT License, see LICENSE.
+ */
 
 var ALTUI_RulesEngine = ( function( window, undefined ) {  
 
@@ -19,7 +18,7 @@ var ALTUI_RulesEngine = ( function( window, undefined ) {
 	var htmlControlPanel = '\
 <div id="rulesengine-blockly-panel">\
 	<xml id="rulesengine-blockly-toolbox" style="display: none"></xml>\
-	<div id="rulesengine-blockly-workspace" style="width: 100%; height: 800px;"></div>\
+	<div id="rulesengine-blockly-workspace"></div>\
 </div>';
 
 	var xmlToolbox = '\
@@ -109,7 +108,9 @@ div.altui-rule-acknowledged { cursor: pointer; background: url("http://vosmont.g
 .altui-rule-body .altui-rule-errors { color:red; font-size:0.8em; }\
 .altui-rule-xml .panel-body { padding: 0px; }\
 .altui-rule-xml-content { width: 100%; height: 200px; }\
-#rulesengine-blockly-panel { position: relative; }\
+#rulesengine-blockly-panel {  }\
+#rulesengine-blockly-workspace { width: 100%; height: 2000px; }\
+div.blocklyToolboxDiv { height: auto !important; }\
 #blocklyArea { height: 100%; }\
 #luaEditor { height: 600px; }\
 		';
@@ -159,12 +160,18 @@ div.altui-rule-acknowledged { cursor: pointer; background: url("http://vosmont.g
 		}
 	}
 
-	function _getTimelineAsync( device ) {
-		// seul un device réponds via le handler : que se passe-t-il si plusieurs device se sont enregistrés ?
+	function _getTimelineAsync( device, params ) {
+		// seul un device répond via le handler : que se passe-t-il si plusieurs device se sont enregistrés ?
 		var d = $.Deferred();
+		var params = params || {};
+		var url = window.location.pathname + "?id=lr_RulesEngine&command=getTimeline"
+				+ ( params.fileName !== undefined ? "&ruleFileName=" + params.fileName : "" )
+				+ ( params.ruleIdx !== undefined ? "&ruleIdx=" + params.ruleIdx : "" )
+				+ ( params.ruleId !== undefined ? "&ruleId=" + params.ruleId : "" )
+				+ "&output_format=json#";
 		$.when(
 			$.ajax( {
-				url: window.location.pathname + "?id=lr_RulesEngine&command=getTimeline&output_format=json#",
+				url: url,
 				dataType: "json"
 			} )
 		)
@@ -183,11 +190,17 @@ div.altui-rule-acknowledged { cursor: pointer; background: url("http://vosmont.g
 		return d.promise();
 	}
 
-	function _getRulesInfosAsync( device, ruleId ) {
+	function _getRulesInfosAsync( device, params ) {
 		var d = $.Deferred();
+		var params = params || {};
+		var url = window.location.pathname + "?id=lr_RulesEngine&command=getRulesInfos"
+				+ ( params.fileName !== undefined ? "&ruleFileName=" + params.fileName : "" )
+				+ ( params.ruleIdx !== undefined ? "&ruleIdx=" + params.ruleIdx : "" )
+				+ ( params.ruleId !== undefined ? "&ruleId=" + params.ruleId : "" )
+				+ "&output_format=json#";
 		$.when(
 			$.ajax( {
-				url: window.location.pathname + "?id=lr_RulesEngine&command=getRulesInfos" + ( ruleId != undefined ? "&ruleId=" + ruleId : "" ) + "&output_format=json#",
+				url: url,
 				dataType: "json"
 			} )
 		)
@@ -252,9 +265,9 @@ div.altui-rule-acknowledged { cursor: pointer; background: url("http://vosmont.g
 		if ( $( ".altui-rules" ).length === 0 ) {
 			return;
 		}
-//console.log("rulesInfos", rulesInfos);
 		$.each( rulesInfos, function( i, ruleInfos ) {
-			var $rule = $( '.altui-mainpanel .altui-rule[data-ruleid="' + ruleInfos.id + '"][data-ruleidx="' + ruleInfos.idx + '"]' );
+			//var $rule = $( '.altui-mainpanel .altui-rule[data-ruleid="' + ruleInfos.id + '"][data-ruleidx="' + ruleInfos.idx + '"]' );
+			var $rule = $( '.altui-mainpanel .altui-rule[data-rulefileName="' + ruleInfos.fileName + '"][data-ruleid="' + ruleInfos.id + '"][data-ruleidx="' + ruleInfos.idx + '"]' );
 			// Icon status
 			var $icon = $rule.find( ".altui-rule-icon" );
 			$icon
@@ -268,6 +281,11 @@ div.altui-rule-acknowledged { cursor: pointer; background: url("http://vosmont.g
 				.toggleClass( "paused",   ( ( ruleInfos.status !== -1 ) && !ruleInfos.isArmed ) )
 				.toggleClass( "altui-rule-warning", ( ruleInfos.status === -1 ) )
 				.attr( "title", ( ruleInfos.status === -1 ? "Rule KO" : ( ruleInfos.isArmed ? _T( "Disarm rule" ) : _T( "Arm rule" ) ) ) );
+			// Set acknowledgement
+			$rule.find( ".altui-rule-ack" )
+				.toggleClass( "activated", ( ( ruleInfos.status !== -1 ) && ruleInfos.isAcknowledged ) )
+				//.toggleClass( "paused",   ( ( ruleInfos.status !== -1 ) && !ruleInfos.isAcknowledged ) )
+				.attr( "title", ( ruleInfos.status === -1 ? "Rule KO" : ( ruleInfos.isAcknowledged ? _T( "Disacknowledge rule" ) : _T( "Acknowledge rule" ) ) ) );
 			// Infos
 			var statusText = {
 				"1": "ON",
@@ -372,7 +390,6 @@ div.altui-rule-acknowledged { cursor: pointer; background: url("http://vosmont.g
 	}
 
 	function _loadRulesAsync( device, fileName ) {
-		_settings[ device.altuiid ].rules = [];
 		var d = $.Deferred();
 		$.ajax( {
 			url: _location + fileName,
@@ -456,37 +473,58 @@ div.altui-rule-acknowledged { cursor: pointer; background: url("http://vosmont.g
 		return d.promise();
 	}
 
-	function _checkXmlRulesIds( xmlRules, rules ) {
-		if ( xmlRules.length !== rules.length ) {
-			PageMessage.message( "Desynchronization : expected " + rules.length + " rule(s) and found " + xmlRules.length + " in the xml file", "warning");
+	function _checkXmlRulesIds( xmlRules, rulesInfos ) {
+		if ( xmlRules.length !== rulesInfos.length ) {
+			PageMessage.message( "Desynchronization : expected " + rulesInfos.length + " rule(s) and found " + xmlRules.length + " in the xml file", "warning");
 		}
+		// Sort the rulesInfos by idx
+		rulesInfos.sort( function( a,b ) { return a.idx - b.idx; } );
 		xmlRules.each( function( idx, xmlRule ) {
-			if ( idx >= rules.length ) {
+			if ( idx >= rulesInfos.length ) {
 				return;
 			}
-			var rule = rules[ idx ];
-			if ((rule.idx - 1) !== idx) {
-				PageMessage.message( "Desynchronization: rule at position " + idx + " in the xml file does not correspond to the former known rule #" + rule.id + ". You should not save.", "warning");
+			var ruleInfos = rulesInfos[ idx ];
+			if ((ruleInfos.idx - 1) !== idx) {
+				PageMessage.message( "Desynchronization: rule at position " + idx + " in the xml file does not correspond to the former known rule #" + ruleInfos.id + ". You should not save.", "warning");
 			}
 			var xmlRuleId = parseInt( $( xmlRule ).children( "field[name=\"id\"]:first" ).text(), 10);
 			var xmlRuleName = $( xmlRule ).children( "value[name=\"name\"]:first" ).text().trim();
 			if ( xmlRuleId != null ) {
-				if ( xmlRuleId !== rule.id ) {
-					PageMessage.message( "Desynchronization: id #" + xmlRuleId + " of the rule at position " + idx + " in the xml file is not the expected id #" + rule.id + ". You should not save.", "warning");
+				if ( xmlRuleId !== ruleInfos.id ) {
+					PageMessage.message( "Desynchronization: id #" + xmlRuleId + " of the rule at position " + idx + " in the xml file is not the expected id #" + ruleInfos.id + ". You should not save.", "warning");
 				}
-				if ( xmlRuleName !== rule.name ) {
-					PageMessage.message( "Desynchronization: name '" + xmlRuleName + "' of the rule at position " + idx + " in the xml file is not the expected name '" + rule.name + "'. You should not save.", "warning");
+				if ( xmlRuleName !== ruleInfos.name ) {
+					PageMessage.message( "Desynchronization: name '" + xmlRuleName + "' of the rule at position " + idx + " in the xml file is not the expected name '" + ruleInfos.name + "'. You should not save.", "warning");
 				}
 			} else {
+				// DEPRECATED : the id of the rule is know written by the back
+				/*
 				// The rule has not an id; add it (calculated by the LUA part of the plugin)
-				if ( xmlRuleName !== rule.name ) {
-					PageMessage.message( "Desynchronization: name '" + xmlRuleName + "' of the rule at position " + idx + " in the xml file is not the expected name '" + rule.name + "'. You should not save.", "warning");
+				if ( xmlRuleName !== ruleInfos.name ) {
+					PageMessage.message( "Desynchronization: name '" + xmlRuleName + "' of the rule at position " + idx + " in the xml file is not the expected name '" + ruleInfos.name + "'. You should not save.", "warning");
 				} else {
 					$( xmlRule ).children( "field[name=\"id\"]" ).remove();
-					$( xmlRule ).append( '<field name="id">' + rule.id + '</field>' );
+					$( xmlRule ).append( '<field name="id">' + ruleInfos.id + '</field>' );
 				}
+				*/
+				PageMessage.message( "Desynchronization: rule at position " + idx + " in the xml file has no id. You should not save.", "warning");
 			}
 		} );
+	}
+
+	function _scrollBlocklyToolbox() {
+		var blocklyPanel = $( "#rulesengine-blockly-panel" );
+		if ( blocklyPanel.length === 0 ) {
+			$( window ).off( "scroll", _scrollBlocklyToolbox );
+			return;
+		}
+		var navbarHeight = $(".navbar-fixed-top").height();
+		var blocklyPanelTop = blocklyPanel.offset().top;
+		if ( blocklyPanelTop - ( $(window).scrollTop() + navbarHeight ) <= 0 ) {
+			$( ".blocklyToolboxDiv" ).css( { "position": "fixed", "top": "50px" } );
+		} else {
+			$( ".blocklyToolboxDiv" ).css( { "position": "", "top": blocklyPanelTop + "px !important" } );
+		}
 	}
 
 	function _drawBlocklyPanel( device, readOnly ) {
@@ -517,14 +555,14 @@ div.altui-rule-acknowledged { cursor: pointer; background: url("http://vosmont.g
 		var blocklyWorkspace = document.getElementById( "rulesengine-blockly-workspace" );
 		Blockly.inject( blocklyWorkspace, {
 			//media: './media/',
-			toolbox: document.getElementById( "rulesengine-blockly-toolbox" ),
+			toolbox: ( readOnly === true ? null : document.getElementById( "rulesengine-blockly-toolbox" ) ),
 			grid: {
 				spacing: 20,
 				length: 3,
 				colour: '#ccc',
 				snap: true
 			},
-			readOnly: (readOnly === true),
+			readOnly: ( readOnly === true ),
 			sounds: false,
 			trashcan: true,
 			zoom: {
@@ -534,6 +572,11 @@ div.altui-rule-acknowledged { cursor: pointer; background: url("http://vosmont.g
 
 		// Controller of the Rules Engine (the engine can just control devices that are on the same controller)
 		$( "#rulesengine-blockly-workspace" ).data( "controller_id", MultiBox.controllerOf( device.altuiid ).controller );
+
+		if ( readOnly !== true ) {
+			//$( window ).on( "scroll", _scrollBlocklyToolbox );
+			//$( window ).on( "resize", function() { console.info("resize") } );
+		}
 	}
 
 	function _watchBlocklyChanges( device ) {
@@ -590,6 +633,81 @@ div.altui-rule-acknowledged { cursor: pointer; background: url("http://vosmont.g
 		//editor.resize();
 	}
 
+	function _getRuleParamsFromObject( object ) {
+		var $rule = $( object ).parents( ".altui-rule" );
+		return {
+			altuiid : $rule.data( "altuiid" ),
+			fileName: $rule.data( "rulefilename" ),
+			ruleIdx : parseInt( $rule.data( "ruleidx" ), 10 ),
+			ruleId  : $rule.data( "ruleid" ),
+			ruleName: $rule.find( ".altui-rule-title-name" ).text()
+		};
+	}
+
+	function _showRuleErrors() {
+		var params = _getRuleParamsFromObject( this );
+		var device = MultiBox.getDeviceByAltuiID( params.altuiid );
+		var dialog = DialogManager.registerDialog(
+			"ruleErrorsModal",
+			defaultDialogModalTemplate.format(
+				"ruleErrorsModal",
+				_T( "Rule" ) + " #" + params.ruleId + "(" + params.ruleName + ")",
+				"",
+				"modal-lg"
+			)
+		);
+		$.when( _getRulesInfosAsync( device, params ) )
+			.done( function( rulesInfos ) {
+				var html = '<div class="panel panel-default">'
+					+			'<small><table class="table">'
+					+				'<thead>'
+					+					('<tr><th>{0}</th><th>{1}</th><th>{2}</th></tr>'.format( _T( "Date" ), _T( "Event" ), _T( "Error" ) ) )
+					+				'</thead>'
+					+				'<tbody>';
+				$.each(rulesInfos[0].errors, function( i, e ) {
+					html +=				'<tr><td>{0}</td><td>{1}</td><td>{2}</td></tr>'.format( _convertTimestampToLocaleString( e.timestamp ), e.event, e.message);
+				});
+				html +=				'</tbody>'
+					+			'</table></small>'
+					+		'</div>';
+				dialog.find( ".row-fluid" ).append(html);
+				dialog.modal();
+			} );
+	}
+
+	function _showRuleTimeline() {
+		var params = _getRuleParamsFromObject( this );
+		var device = MultiBox.getDeviceByAltuiID( params.altuiid );
+		var dialog = DialogManager.registerDialog(
+			"ruleTimelineModal",
+			defaultDialogModalTemplate.format(
+				"ruleTimelineModal",
+				_T( "Rule" ) + " #" + params.ruleId + "(" + params.ruleName + ")",
+				"",
+				"modal-lg"
+			)
+		);
+		$.when( _getTimelineAsync( device, params ) )
+			.done( function( timeline ) {
+
+				var html = '<div class="panel panel-default">'
+					+			'<small><table class="table">'
+					+				'<thead>'
+					+					('<tr><th>{0}</th><th>{1}</th><th>{2}</th></tr>'.format( _T( "Date" ), _T( "Event" ), _T( "Error" ) ) )
+					+				'</thead>'
+					+				'<tbody>';
+				$.each( timeline.history, function( i, e ) {
+					html +=				'<tr><td>{0}</td><td>{1}</td><td>{2}</td></tr>'.format( _convertTimestampToLocaleString( e.timestamp ), e.event, e.message);
+				});
+				html +=				'</tbody>'
+					+			'</table></small>'
+					+		'</div>';
+
+				dialog.find( ".row-fluid" ).append(html);
+				dialog.modal();
+			} );
+	}
+
 	function _pageRules( altuiid ) {
 		var device = MultiBox.getDeviceByAltuiID( altuiid );
 		UIManager.clearPage( _T( "Control Panel" ), "Rules - {0} <small>#{1}</small>".format( device.name , altuiid ), UIManager.oneColumnLayout );
@@ -605,141 +723,100 @@ div.altui-rule-acknowledged { cursor: pointer; background: url("http://vosmont.g
 			+				_T( "Create" )
 			+			'</button>'
 			+	'</div>';
+		// Manage the UI events
 		$(".altui-mainpanel")
 			.append( html )
 			.on( "click", ".altui-rule-create", function() {
 				_pageRuleEdit( altuiid, fileName );
 			} )
-			.on( "click", ".altui-device-title-name", function() {
-				var $rule = $( this ).parents( ".altui-rule" );
-				var fileName = $rule.data( "rulefilename" );
-				var idx = parseInt( $rule.data( "ruleidx" ), 10 );
-				_pageRuleEdit( altuiid, fileName, idx, true );
+			.on( "click", ".altui-rule-icon", function() {
+				var params = _getRuleParamsFromObject( this );
+				_pageRuleEdit( params.altuiid, params.fileName, params.ruleIdx, true );
 			} )
-			.on( "click", ".altui-rule-edit", function() {
-				var $rule = $( this ).parents( ".altui-rule" );
-				var fileName = $rule.data( "rulefilename" );
-				var idx = parseInt( $rule.data( "ruleidx" ), 10 );
-				_pageRuleEdit( altuiid, fileName, idx );
+			.on( "click", ".altui-rule-edit", function( event ) {
+				event.stopPropagation();
+				var params = _getRuleParamsFromObject( this );
+				_pageRuleEdit( params.altuiid, params.fileName, params.ruleIdx );
 			} )
 			.on( "click", ".altui-rule-remove", function() {
-				var $rule = $( this ).parents( ".altui-rule" );
-				var fileName = $rule.data( "rulefilename" );
-				var idx = parseInt( $rule.data( "ruleidx" ), 10 );
-				if (confirm("Are you sure that you want to remove the rule ?")) {
-					_removeRule( altuiid, fileName, idx );
+				var params = _getRuleParamsFromObject( this );
+				if ( confirm( "Are you sure that you want to remove the rule ?" ) ) {
+					_removeRule( params.altuiid, params.fileName, params.ruleIdx, params.ruleId );
 				}
 			} )
 			.on( "click", ".altui-rule-arm", function() {
-				var ruleId = $( this ).parents( ".altui-rule" ).data( "ruleid" );
+				var params = _getRuleParamsFromObject( this );
 				if ( $( this ).hasClass( "activated" ) ) {
-					MultiBox.runActionByAltuiID( altuiid, "urn:upnp-org:serviceId:RulesEngine1", "SetRuleArming", { ruleId: ruleId, arming: "0" } );
+					MultiBox.runActionByAltuiID( params.altuiid, "urn:upnp-org:serviceId:RulesEngine1", "SetRuleArming", { ruleId: params.ruleId, arming: "0" } );
 				} else if ( $( this ).hasClass( "paused" ) ) {
-					MultiBox.runActionByAltuiID( altuiid, "urn:upnp-org:serviceId:RulesEngine1", "SetRuleArming", { ruleId: ruleId, arming: "1" } );
+					MultiBox.runActionByAltuiID( params.altuiid, "urn:upnp-org:serviceId:RulesEngine1", "SetRuleArming", { ruleId: params.ruleId, arming: "1" } );
 				}
 			} )
 			.on( "click", ".altui-rule-ack", function() {
-				var $rule = $( this ).parents( ".altui-rule" );
-				var ruleId = $rule.data( "ruleid" );
-				if ( $( this ).hasClass( "altui-rule-active" ) ) {
+				var params = _getRuleParamsFromObject( this );
+				if ( $( this ).hasClass( "activated" ) ) {
 					//$( this ).addClass("big-spinner");
-					MultiBox.runActionByAltuiID( altuiid, "urn:upnp-org:serviceId:RulesEngine1", "SetRuleAcknowledgement", { ruleId: ruleId, acknowledgement: "1" } );
-				} else if ( $( this ).hasClass( "altui-rule-acknowledged" ) ) {
+					MultiBox.runActionByAltuiID( params.altuiid, "urn:upnp-org:serviceId:RulesEngine1", "SetRuleAcknowledgement", { ruleId: params.ruleId, acknowledgement: "0" } );
+				//} else if ( $( this ).hasClass( "paused" ) ) {
+				} else {
 					//$( this ).addClass("big-spinner");
-					MultiBox.runActionByAltuiID( altuiid, "urn:upnp-org:serviceId:RulesEngine1", "SetRuleAcknowledgement", { ruleId: ruleId, acknowledgement: "0" } );
+					MultiBox.runActionByAltuiID( params.altuiid, "urn:upnp-org:serviceId:RulesEngine1", "SetRuleAcknowledgement", { ruleId: params.ruleId, acknowledgement: "1" } );
 				}
 			} )
-			.on( "click", ".altui-rule-errors", function() {
-				var $rule = $( this ).parents( ".altui-rule" );
-				var ruleId = $rule.data( "ruleid" );
-				var ruleName = $rule.find( ".altui-rule-title-name" ).text();
-				var dialog =  DialogManager.registerDialog(
-					"ruleErrorsModal",
-					defaultDialogModalTemplate.format(
-						"ruleErrorsModal",
-						_T( "Rule" ) + " #" + ruleId + "(" + ruleName + ")",
-						"",
-						"modal-lg"
-					)
-				);
-				$.when( _getRulesInfosAsync( device, ruleId ) )
-					.done( function( rulesInfos ) {
-						var html = '<div class="panel panel-default">'
-							+			'<small><table class="table">'
-							+				'<thead>'
-							+					('<tr><th>{0}</th><th>{1}</th><th>{2}</th></tr>'.format( _T( "Date" ), _T( "Event" ), _T( "Error" ) ) )
-							+				'</thead>'
-							+				'<tbody>';
-						$.each(rulesInfos[0].errors, function( i, e ) {
-							html +=				'<tr><td>{0}</td><td>{1}</td><td>{2}</td></tr>'.format( _convertTimestampToLocaleString( e.timestamp ), e.event, e.message);
-						});
-						html +=				'</tbody>'
-							+			'</table></small>'
-							+		'</div>';
-						dialog.find( ".row-fluid" ).append(html);
-						dialog.modal();
-					} );
-			} );
+			.on( "click", ".altui-rule-errors", _showRuleErrors )
+			.on( "click", ".altui-rule-timeline", _showRuleTimeline );
 
 		// Draw the rules
 		$(".altui-mainpanel").append( '<div class="altui-rules"></div>' );
-		//$.when( _getRulesAsync( device ) )
 		$.when( _getRulesInfosAsync( device ) )
-			.done( function( rules ) {
-				_settings[ device.altuiid ].rules = rules;
+			.done( function( rulesInfos ) {
 				// Sort by rule name
-				rules.sort( function( a, b ) {
+				rulesInfos.sort( function( a, b ) {
 					if ( a.name < b.name ) {
 						return -1;
-					} else if ( a.name < b.name ) {
+					} else if ( a.name > b.name ) {
 						return 1;
 					}
 					return 0;
 				} );
-				$.each( rules, function( idx, rule) {
-					/*
-					var fileName          = _getParamValue( rule, "FileName");
-					var isAcknowledgeable = ( _getParamValue( rule, "Ackable") === "1" );
-					var isArmed           = ( _getParamValue( rule, "Armed") === "1" );
-					*/
+				$.each( rulesInfos, function( idx, ruleInfos) {
 					$(".altui-mainpanel .altui-rules").append(
 							'<div class="col-sm-6 col-md-4 col-lg-3">'
 						+		'<div class="panel panel-default altui-rule" data-altuiid="' + device.altuiid + '"'
-						+				' data-ruleid="' + rule.id + '"'
-						+				' data-ruleidx="' + rule.idx + '"'
-						+				' data-rulefilename="' + rule.fileName + '"'
-						//+				' data-ruleacknowledgeable="' + _getParamValue( rule, "Ackable") + '"'
-						+				' data-ruleacknowledgeable="' + rule.isAcknowledgeable + '"'
+						+				' data-ruleid="' + ruleInfos.id + '"'
+						+				' data-ruleidx="' + ruleInfos.idx + '"'
+						+				' data-rulefilename="' + ruleInfos.fileName + '"'
+						+				' data-ruleacknowledgeable="' + ruleInfos.isAcknowledgeable + '"'
 						+				' data-ruleacknowledged="0"'
 						+			'>'
 						+			'<div class="panel-heading altui-device-heading">'
 						+				'<button type="button" class="altui-rule-remove pull-right btn btn-default btn-xs" title="' + _T( "Remove" ) + '">'
 						+					'<span class="glyphicon glyphicon-trash text-danger"></span>'
 						+				'</button>'
-						+				'<div class="pull-right text-muted"><small>#' + rule.id + '</small></div>'
+						+				'<div class="pull-right text-muted"><small>#' + ruleInfos.id + '</small></div>'
 						+				'<div class="panel-title altui-device-title" data-toggle="tooltip" data-placement="left">'
 						+					'<span class="altui-rule-arm glyphicon glyphicon-off" aria-hidden="true"></span>'
-						+					'<small class="altui-rule-title-name">' + rule.name + '</small>'
+						+					'<small class="altui-rule-title-name">' + ruleInfos.name + '</small>'
 						+				'</div>'
 						+			'</div>'
-						+			'<div class="panel-body altui-rule-body">'
+						+			'<div class="panel-body altui-rule-body" title="' + _T( "View rule" ) + '">'
 						+				'<small class="altui-rule-infos text-muted pull-right"></small>'
-						+				'<table>'
+						+				'<table height="70px">'
 						+					'<tr>'
 						+						'<td>'
-						+							( rule.isAcknowledgeable ?
-													'<div class="altui-device-icon altui-rule-icon pull-left img-rounded altui-rule-ack" title="' + _T( "Change aknowledgement" ) + '"></div>'
-													:
-													'<div class="altui-device-icon altui-rule-icon pull-left img-rounded"></div>'
-													)
+						+							'<div class="altui-device-icon altui-rule-icon pull-left img-rounded"></div>'
 						+						'</td>'
-						+						'<td width="16px">'
-						+							'<button type="button" class="altui-rule-edit pull-left btn btn-xs btn-default" title="' + _T( "Edit" ) + '">'
-						+								'<span class="glyphicon glyphicon-pencil " aria-hidden="true"></span>'
+						+						'<td width="25px">'
+						+							'<button type="button" class="altui-rule-edit pull-left btn btn-xs btn-default" style="width: 25px;" title="' + _T( "Edit" ) + '">'
+						+								'<span class="glyphicon glyphicon-pencil" aria-hidden="true"></span>'
 						+							'</button>'
-						+							'<button type="button" class="altui-rule-timeline pull-left btn btn-xs btn-default" data-ruleid="' + rule.id + '"  title="' + _T( "Timeline" ) + '">'
+						+							'<button type="button" class="altui-rule-timeline pull-left btn btn-xs btn-default" style="width: 25px;" title="' + _T( "Timeline" ) + '">'
 						+								'<span class="glyphicon glyphicon-calendar" aria-hidden="true"></span>'
 						+							'</button>'
+						+							( ruleInfos.isAcknowledgeable ?
+													'<button type="button" class="altui-rule-ack pull-left btn btn-xs btn-default" style="width: 25px;">'
+						+								'<span class="glyphicon glyphicon glyphicon-ok" aria-hidden="true"></span>'
+						+							'</button>' : '' )
 						+						'</td>'
 						+					'</tr>'
 						+				'</table>'
@@ -748,7 +825,7 @@ div.altui-rule-acknowledged { cursor: pointer; background: url("http://vosmont.g
 						+	'</div>'
 					);
 				} );
-				_updateRules( device, rules );
+				_updateRules( device, rulesInfos );
 			} );
 	}
 
@@ -782,39 +859,52 @@ div.altui-rule-acknowledged { cursor: pointer; background: url("http://vosmont.g
 			} );
 	}
 
-	function _removeRule( altuiid, fileName, idx ) {
+	function _removeRule( altuiid, fileName, idx, id ) {
 		if ( idx == undefined ) {
 			return;
 		}
 		var device = MultiBox.getDeviceByAltuiID( altuiid );
 		$.when( _loadRulesAsync( device, fileName ) )
 			.done( function( xmlRules ) {
-				xmlRules.splice((idx - 1), 1);
+				xmlRules.splice((idx - 1), 1); // Should check that id is the same
 				$.when( _saveRulesFileAsync( fileName, xmlRules ) )
 					.done( function() {
-						MultiBox.runActionByAltuiID( altuiid, "urn:upnp-org:serviceId:RulesEngine1", "LoadRules", { fileName: fileName } );
-						_pageRules( altuiid );
+						// The file of rules has been uploaded without the designed rule
+						// Now, inform the back that the rule does no more exist
+						MultiBox.runActionByAltuiID( altuiid, "urn:upnp-org:serviceId:RulesEngine1", "RemoveRule", { fileName: fileName, ruleIdx: idx, ruleId: id } );
+						window.setTimeout( _pageRules, 1000, altuiid ); // wait a little before displaying the rules
 						PageMessage.message( "File \"" + fileName + "\" has been saved", "success");
 					} );
 			} );
 	}
 
+	// TODO : récupérer xmlRules dans cette fonction avec _loadRulesAsync ?
+	// par contre ça fait deux chargements de règles (un à l'affichage, un à la sauvegarde)
+	// (permet de récupérer d'éventuels changement fait dans une autre session sur les autres règles)
 	function _saveBlocklyChanges( altuiid, fileName, xmlRules, idx ) {
-		// Get new or modified rules from Blockly
+		// Get new or modified rules from Blockly panel
 		var workspace = Blockly.getMainWorkspace();
 		var $xmlBlockly = $( Blockly.Xml.workspaceToDom( workspace ) );
+		var modifiedRuleIdxes = [];
 		$xmlBlockly.find( "block[type=\"rule\"]" )
 			.each( function( i, xmlNewRule ) {
-				if ( ( idx != undefined ) && ( i === 0 ) ) {
+				if ( ( idx !== undefined ) && ( i === 0 ) ) {
+					// the modified rule
+					modifiedRuleIdxes.push( idx );
 					xmlRules[ idx - 1 ] = xmlNewRule;
 				} else {
+					// a new rule
 					xmlRules.push( xmlNewRule );
+					modifiedRuleIdxes.push( xmlRules.length );
 				}
 			} );
 
 		$.when( _saveRulesFileAsync( fileName, xmlRules ) )
 			.done( function() {
-				MultiBox.runActionByAltuiID( altuiid, "urn:upnp-org:serviceId:RulesEngine1", "LoadRules", { fileName: fileName } );
+				MultiBox.runActionByAltuiID(
+					altuiid, "urn:upnp-org:serviceId:RulesEngine1", "LoadRules",
+					{ fileName: fileName, ruleIdx: modifiedRuleIdxes.join( "," ) }
+				);
 				_pageRules( altuiid );
 				PageMessage.message( "File \"" + fileName + "\" has been saved", "success");
 			} );
@@ -872,11 +962,9 @@ div.altui-rule-acknowledged { cursor: pointer; background: url("http://vosmont.g
 
 	function _pageRuleEdit( altuiid, fileName, idx, readOnly ) {
 		var device = MultiBox.getDeviceByAltuiID( altuiid );
-		UIManager.clearPage( _T( "Control Panel" ), "Edit rule - {0} <small>#{1}</small>".format( device.name , altuiid ), UIManager.oneColumnLayout );
+		UIManager.clearPage( _T( "Control Panel" ), ( readOnly ? _T( "View rule" ) : _T( "Edit rule" ) ) + " - {0} <small>#{1}</small>".format( device.name , altuiid ), UIManager.oneColumnLayout );
+		$(window).scrollTop(0);
 
-		// Known rules for this XML file
-		var _currentRules = $.grep( _settings[ altuiid ].rules, function( rule, i ) { return rule.fileName === fileName; } )
-			.sort( function( a,b ) { return a.idx - b.idx; } );
 		// Rules in the XML file
 		var _currentXmlRules = [];
 
@@ -886,9 +974,11 @@ div.altui-rule-acknowledged { cursor: pointer; background: url("http://vosmont.g
 			+			'<button class="btn btn-default altui-rule-cancel" title="' + _T( "Cancel" ) + '">'
 			+				'<span class="glyphicon glyphicon-remove" aria-hidden="true"></span>'
 			+			'</button>'
-			+			'<button class="btn btn-default disabled altui-rule-confirm" title="' + _T( "Save Changes" ) + '">'
+			+			( readOnly ? '' :
+						'<button class="btn btn-default disabled altui-rule-confirm" title="' + _T( "Save Changes" ) + '">'
 			+				'<span class="glyphicon glyphicon-cloud-upload" aria-hidden="true"></span>'
 			+			'</button>'
+						)
 			+		'</div>'
 			+		'<div class="btn-group pull-right" role="group" aria-label="...">'
 			+			'<button class="btn btn-default altui-rule-import" title="' + _T( "Import XML" ) + '">'
@@ -925,12 +1015,13 @@ div.altui-rule-acknowledged { cursor: pointer; background: url("http://vosmont.g
 			+		'</div>'
 			+	'</div>'
 			+	'<div class="col-xs-12">' + htmlControlPanel + '</div>';
+		// Manage the UI events
 		$(".altui-mainpanel")
 			.append(  html )
 			.on( "click", ".altui-rule-cancel", function() {
-				if (
-					$( ".altui-mainpanel .altui-rule-confirm" ).hasClass( "disabled" ) 
-					|| confirm("The rule has been modified, are you sure to cancel ?")
+				if ( readOnly
+					|| $( ".altui-mainpanel .altui-rule-confirm" ).hasClass( "disabled" ) 
+					|| confirm( "The rule has been modified, are you sure to cancel ?" )
 				) {
 					_pageRules( altuiid );
 				}
@@ -957,6 +1048,8 @@ div.altui-rule-acknowledged { cursor: pointer; background: url("http://vosmont.g
 				$( "#altui-rule-export" ).toggleClass( "collapse", false );
 				Blockly.fireUiEvent(window, 'resize');
 			} );
+		// Draw the rule editor after having loaded all the xml rules 
+		// and eventually show the rule to edit
 		$.when( 
 			_loadDevicesActions(),
 			_loadBlocklyResourcesAsync( device )
@@ -966,17 +1059,20 @@ div.altui-rule-acknowledged { cursor: pointer; background: url("http://vosmont.g
 				if ( readOnly !== true ) {
 					_watchBlocklyChanges( device );
 				}
-				$.when( _loadRulesAsync( device, fileName ) )
-					.done( function( xmlRules ) {
-						_currentXmlRules = xmlRules;
-						_checkXmlRulesIds( _currentXmlRules, _currentRules );
+				$.when(
+					_loadRulesAsync( device, fileName ),
+					_getRulesInfosAsync( device, { fileName: fileName } )
+				)
+					.done( function( xmlRules, rulesInfos ) {
+						_currentXmlRules = xmlRules; // à enlever ?
+						_checkXmlRulesIds( xmlRules, rulesInfos );
 						if ( idx != null ) {
 							var workspace = Blockly.getMainWorkspace();
 							try {
-								Blockly.Xml.domToWorkspace(workspace, { childNodes: [ _currentXmlRules[ idx - 1 ] ] } );
+								Blockly.Xml.domToWorkspace(workspace, { childNodes: [ xmlRules[ idx - 1 ] ] } );
 								var topBlocks = workspace.getTopBlocks( true );
 								if ( ( topBlocks !== undefined ) && ( topBlocks.length > 0 ) ) {
-									// Move first top block
+									// Move first top block in the top-left corner
 									var coords = topBlocks[ 0 ].getRelativeToSurfaceXY();
 									topBlocks[ 0 ].moveBy( 10 - coords.x, 10 - coords.y );
 								}
@@ -993,9 +1089,31 @@ div.altui-rule-acknowledged { cursor: pointer; background: url("http://vosmont.g
 	function _importXml() {
 		var workspace = Blockly.getMainWorkspace();
 		var xml_text = $( "#altui-rule-xml-import" ).val();
+		if ( xml_text.trim() === "" ) {
+			return;
+		}
 		var xml = Blockly.Xml.textToDom( xml_text );
 		_decodeCarriageReturns( xml );
 		Blockly.Xml.domToWorkspace( workspace, xml );
+		var nbBlockWithId = 0;
+		$.each( workspace.topBlocks_, function( i, topBlock ) {
+			if (
+				( topBlock.type === "rule" )
+				&& ( topBlock.getFieldValue( "id" ) !== "" )
+			) {
+				nbBlockWithId++;
+			}
+		} );
+		if ( ( nbBlockWithId > 0 ) && confirm( "After the import, there are rule with id. Unless you exactly know what you are doing, would you like to erase these ids ?" ) ) {
+			$.each( workspace.topBlocks_, function( i, topBlock ) {
+				if (
+					( topBlock.type === "rule" )
+					&& ( topBlock.getFieldValue( "id" ) !== "" )
+				) {
+					topBlock.setFieldValue( "", "id" )
+				}
+			} );
+		}
 	}
 	function _exportXml( xml ) {
 		var workspace = Blockly.getMainWorkspace();
