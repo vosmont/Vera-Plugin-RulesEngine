@@ -94,6 +94,7 @@ var ALTUI_RulesEngine = ( function( window, undefined ) {
 	function _getStyle() {
 		var style = '\
 div.altui-rule-icon { width: 60px; height: 60px; }\
+div.altui-rule-disabled { cursor: auto; background: url("http://vosmont.github.io/icons/virtual_alarm_panel_disabled.png")}\
 div.altui-rule-ko { cursor: auto; background: url("http://vosmont.github.io/icons/virtual_alarm_panel_ko.png")}\
 div.altui-rule-inactive { cursor: auto; background: url("http://vosmont.github.io/icons/virtual_alarm_panel_off.png")}\
 div.altui-rule-active { cursor: pointer; background: url("http://vosmont.github.io/icons/virtual_alarm_panel_on.png")}\
@@ -271,6 +272,7 @@ div.blocklyToolboxDiv { height: auto !important; }\
 			// Icon status
 			var $icon = $rule.find( ".altui-rule-icon" );
 			$icon
+				.toggleClass( "altui-rule-disabled", ( ruleInfos.status === -2 ) )
 				.toggleClass( "altui-rule-ko", ( ruleInfos.status === -1 ) )
 				.toggleClass( "altui-rule-inactive", ( ruleInfos.status === 0 ) )
 				.toggleClass( "altui-rule-active", ( ( ruleInfos.status === 1 ) && !ruleInfos.isAcknowledged ) )
@@ -290,7 +292,8 @@ div.blocklyToolboxDiv { height: auto !important; }\
 			var statusText = {
 				"1": "ON",
 				"0": "OFF",
-				"-1": "KO"
+				"-1": "KO",
+				"-2": "Disabled"
 			};
 			var html = "";
 			if ( ( ruleInfos.errors ) && ( ruleInfos.errors.length > 0 ) ) {
@@ -836,6 +839,9 @@ div.blocklyToolboxDiv { height: auto !important; }\
 		$(".altui-mainpanel .timeline").empty();
 		$(".altui-mainpanel .timeline").append( '<div> History: </div>' );
 		$.each( timeline.history, function( idx, item ) {
+			if ( item.eventType === "ERROR" ) {
+				item.eventType = '<font color="red">' + item.eventType + '</font>';
+			}
 			$(".altui-mainpanel .timeline").append( '<div>' + _convertTimestampToLocaleString( item.timestamp ) + ' - ' + item.eventType + ' - ' + item.event + '</div>' );
 		} );
 		$(".altui-mainpanel .timeline").append( '<div> Schedule: </div>' );

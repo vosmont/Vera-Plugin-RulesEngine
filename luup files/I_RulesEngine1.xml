@@ -20,10 +20,10 @@
 			<name>SetTarget</name>
 			<job>
 				if (RulesEngine ~= nil) then
-					if ((lul_settings.newTargetValue == "1") and not RulesEngine.isStarted()) then
-						RulesEngine.start()
-					elseif ((lul_settings.newTargetValue == "0") and RulesEngine.isStarted()) then
-						RulesEngine.stop()
+					if ((lul_settings.newTargetValue == "1") and not RulesEngine.isEnabled()) then
+						RulesEngine.enable()
+					elseif ((lul_settings.newTargetValue == "0") and RulesEngine.isEnabled()) then
+						RulesEngine.disable()
 					end
 				end
 				return 4, nil
@@ -44,7 +44,7 @@
 			<name>RemoveRule</name>
 			<job>
 				if (RulesEngine ~= nil) then
-					RulesEngine.Rules.remove(lul_settings.fileName, lul_settings.ruleIdx, lul_settings.ruleId)
+					RulesEngine.Rules.remove(lul_settings.fileName, lul_settings.ruleIdx, lul_settings.ruleId, true)
 				end
 				return 4, nil
 			</job>
