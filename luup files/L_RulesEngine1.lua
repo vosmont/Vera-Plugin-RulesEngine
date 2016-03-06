@@ -69,6 +69,7 @@ local VARIABLE = {
 	TOOLBOX_CONFIG = { "urn:upnp-org:serviceId:RulesEngine1", "ToolboxConfig", true },
 	STARTUP_FILES = { "urn:upnp-org:serviceId:RulesEngine1", "StartupFiles", true },
 	RULES_FILES = { "urn:upnp-org:serviceId:RulesEngine1", "RuleFiles", true },
+	STORE_PATH = { "urn:upnp-org:serviceId:RulesEngine1", "StorePath", true }
 }
 local indexVariable = {}
 for _, variable in pairs(VARIABLE) do
@@ -547,26 +548,56 @@ local function _getDeviceIdByName (deviceName)
 	return id
 end
 
+-- **************************************************
+-- Store
+-- **************************************************
+
 local _storePath
-local function _getStorePath ()
-	if (_storePath ~= nil) then
+
+Store = {
+	setPath = function (path)
+		if (Store.checkPath(path)) then
+			warning("Path is set to '" .. tostring(path) .. "'", "Store.setPath")
+			_storePath = path
+		else
+		end
+	end,
+
+	getDefaultPath = function ()
+		local lfs = require("lfs")
+		local storePath = ""
+		if (lfs.attributes("/tmp/log/cmh", "mode") == "directory") then
+			-- Directory "/tmp/log/cmh" is stored on sda1 in Vera box
+			storePath = "/tmp/log/cmh/"
+		elseif (lfs.attributes("/tmp", "mode") == "directory") then
+			-- Directory "/tmp" is stored in memory in Vera box (lost on reboot)
+			storePath = "/tmp/"
+		else
+			-- Use current directory ("./etc/cmh-ludl" in openLuup)
+			storePath = ""
+		end
+		log("Path to store datas : '" .. storePath .. "'", "Store.getDefaultPath")
+		return storePath
+	end,
+
+	getPath = function ()
+		if (_storePath == nil) then
+			_storePath = Store.getDefaultPath()
+		end
+		print(_storePath)
 		return _storePath
+	end,
+
+	checkPath = function (path)
+		local lfs = require("lfs")
+		if (lfs.attributes(path, "mode") == "directory") then
+			return true
+		else
+			warning("'" .. tostring(path) .. "' is not a valid folder", "Store.checkPath")
+			return false
+		end
 	end
-	local lfs = require("lfs")
-	_storePath = ""
-	if (lfs.attributes("/tmp/log/cmh", "mode") == "directory") then
-		-- Directory "/tmp/log/cmh" is stored on sda1 in Vera box
-		_storePath = "/tmp/log/cmh/"
-	elseif (lfs.attributes("/tmp", "mode") == "directory") then
-		-- Directory "/tmp" is stored in memory in Vera box
-		_storePath = "/tmp/"
-	else
-		-- Use current directory ("./etc/cmh-ludl" in openLuup)
-		_storePath = ""
-	end
-	log("Path to store datas : '" .. _storePath .. "'", "getStorePath", 4)
-	return _storePath
-end
+}
 
 -- **************************************************
 -- Messages
@@ -760,11 +791,14 @@ Events = {
 
 	removeRule = function (rule)
 		local ruleId = tostring(rule.id)
-		for indexItemsByRule, eventName in pairs(_indexRulesByEvent) do
+		local nbRemoved = 0
+		for eventName, indexItemsByRule in pairs(_indexRulesByEvent) do
 			if (indexItemsByRule[ruleId] ~= nil) then
+				nbRemoved = nbRemoved + 1
 				indexItemsByRule[ruleId] = nil
 			end
 		end
+		log("Unregister events for rule #" .. ruleId .. ": " .. tostring(nbRemoved) .. " event(s) unregistered", "Events.removeRule", 2)
 	end,
 
 	setIsWatched = function (eventName)
@@ -988,24 +1022,28 @@ ScheduledTasks = {
 	end,
 
 	-- Remove all scheduled actions for optionaly rule / level / item
-	remove = function (rule, level, item)
+	remove = function (params)
+		params = params or {}
 		local msg = "Remove scheduled tasks"
-		if (rule ~= nil) then
-			msg = msg .. " for rule #" .. tostring(rule.id)
+		if (params.rule ~= nil) then
+			msg = msg .. " for rule #" .. tostring(params.rule.id)
 		end
-		if (level ~= nil) then
-			msg = msg .. " and level " .. tostring(level)
+		if (params.event ~= nil) then
+			msg = msg .. " and event " .. tostring(params.event)
 		end
-		if (item ~= nil) then
-			msg = msg .. " and item \"" .. _getItemSummary(item) .. "\""
+		if (params.level ~= nil) then
+			msg = msg .. " and level " .. tostring(params.level)
 		end
-		log(msg, "ScheduledTasks.remove", 4)
+		if (params.item ~= nil) then
+			msg = msg .. " and item \"" .. _getItemSummary(params.item) .. "\""
+		end
 		local nbTaskRemoved = 0
 		for i = #_scheduledTasks, 1, -1 do
 			if (
-					((rule == nil)  or (_scheduledTasks[i].ruleId == rule.id))
-				and ((level == nil) or (_scheduledTasks[i].level == level))
-				and ((item == nil)  or (_scheduledTasks[i].item == item))
+					((params.rule == nil)  or (_scheduledTasks[i].ruleId == params.rule.id))
+				and ((params.event == nil) or (_scheduledTasks[i].event == params.event))
+				and ((params.level == nil) or (_scheduledTasks[i].level == params.level))
+				and ((params.item == nil)  or (_scheduledTasks[i].item == params.item))
 			) then
 				if (_scheduledTasks[i].item.isCritical) then
 					log("Can not remove task #" .. tostring(i) .. "/" .. tostring(#_scheduledTasks) .. " because the item is critical: " .. ScheduledTasks.getTaskInfo(_scheduledTasks[i]), "ScheduledTasks.remove", 2)
@@ -1489,7 +1527,7 @@ do
 			log(msg, "ConditionValue.updateStatus", 3)
 			if hasToRemoveFormerScheduledTasks then
 				log(_getItemSummary(condition) .. " has a 'since' condition : remove its former schedule if exist", "ConditionValue.updateStatus", 4)
-				ScheduledTasks.remove(Rules.get(condition.ruleId), nil, condition)
+				ScheduledTasks.remove({ rule = Rules.get(condition.ruleId), condition = condition })
 			end
 			if hasToCheckConditionStatusLater then
 				local remainingSeconds = condition.sinceInterval - currentInterval
@@ -1698,7 +1736,9 @@ do
 end
 
 -- **************************************************
--- RulesEngine.Condition (rule condition, action condition)
+-- RulesEngine.Condition
+--  Conditions of a rule
+--  Conditions of group of actions
 -- **************************************************
 
 Condition = {
@@ -2037,7 +2077,7 @@ local _history = {}
 
 History = {
 	load = function ()
-		local path = _getStorePath()
+		local path = Store.getPath()
 		local fileName = "C_RulesEngine_History.csv"
 
 		_history = {}
@@ -2060,7 +2100,7 @@ History = {
 	end,
 
 	append = function (entry)
-		local path = _getStorePath()
+		local path = Store.getPath()
 		local fileName = "C_RulesEngine_History.csv"
 		log("Append entry of history in file '" .. path .. fileName .. "'", "History.append")
 		local file = io.open(path .. fileName, "a")
@@ -2469,7 +2509,7 @@ local _rulesInfos = {}
 RulesInfos = {
 	load = function ()
 		_rulesInfos = {}
-		local _path = _getStorePath()
+		local _path = Store.getPath()
 		local _fileName = "C_RulesEngine_RulesInfos.json"
 		log("Load rules infos from file '" .. _path .. _fileName .. "'", "RulesInfos.load")
 		local file = io.open(_path .. _fileName)
@@ -2491,7 +2531,7 @@ RulesInfos = {
 		if (RulesEngine._params.deviceId == nil) then
 			return false
 		end
-		local _path = _getStorePath()
+		local _path = Store.getPath()
 		local _fileName = "C_RulesEngine_RulesInfos.json"
 		log("Save rules infos in file '" .. _path .. _fileName .. "'", "RulesInfos.save")
 		local file = io.open(_path .. _fileName, "w")
@@ -2703,7 +2743,6 @@ Rule = {
 		else
 			log(msg .. " is not active on start", "Rule.start", 2)
 		end
-		--Rule.updateContext(rule)
 
 		-- Start conditions
 		Conditions.start(rule.conditions)
@@ -2726,9 +2765,6 @@ Rule = {
 
 		rule.context.isStarted = true
 
-		-- Update rule infos
-		--updateRulesInfos(rule.id)
-
 		-- Update rule status
 		-- Start actions won't be done again if status is still activated (no change)
 		Event.onRuleStatusIsUpdated(rule.name, rule.context.status)
@@ -2736,12 +2772,15 @@ Rule = {
 		debugLogEnd("Rule.start")
 	end,
 
-	-- Stop a rule
-	stop = function (rule)
+	-- Stop a rule (without doing "end" events)
+	stop = function (rule, status)
 		local msg = Rule.getSummary(rule)
 		log(Rule.getSummary(rule) .. " is stoping", "Rule.stop", 2)
-		ScheduledTasks.remove(rule)
-		rule.context.status = -1
+		ScheduledTasks.remove({ rule = rule })
+		if ((status ~= nil) and (status >= 0)) then
+			log("WARNING - " .. msg .. " - Status is not negative", "Rule.stop")
+		end
+		rule.context.status = status or -1
 		rule.context.isStarted = false
 	end,
 
@@ -2784,6 +2823,16 @@ Rule = {
 		return (Rule.getStatus(ruleId) == "1")
 	end,
 
+	-- Is rule started
+	isStarted = function (ruleId)
+		local rule = Rules.get(ruleId)
+		if (rule == nil) then
+			return false
+		end
+		return (rule.context.isStarted == true)
+
+	end,
+
 	-- Get rule level
 	getLevel = function (ruleId)
 		local rule = Rules.get(ruleId)
@@ -2802,11 +2851,13 @@ Rule = {
 		end
 		local msg = Rule.getSummary(rule)
 		if ((arming == "1") or (arming == true)) then
+			-- Arm the rule
 			if not rule.context.isArmed then
 				if (rule.areSettingsOk) then
 					rule.context.isArmed = true
 					log(msg .. " is now armed", "Rule.setArming")
 					Hooks.execute("onRuleIsArmed", rule)
+					Rule.start(rule)
 					RulesInfos.save()
 				else
 					log(msg .. " can not be armed - Settings are not ok", "Rule.setArming")
@@ -2817,10 +2868,12 @@ Rule = {
 				return false, msg
 			end
 		else
+			-- Disarm the rule
 			if rule.context.isArmed then
 				rule.context.isArmed = false
 				log(msg .. " is now disarmed", "Rule.setArming")
 				Hooks.execute("onRuleIsDisarmed", rule)
+				Rule.stop(rule, -2)
 				RulesInfos.save()
 			else
 				msg = msg .. " was already disarmed"
@@ -2888,13 +2941,14 @@ Rule = {
 			rule.context.level = level
 			rule.context.lastLevelUpdateTime = os.time()
 			hasRuleLevelChanged = true
-			log(msg .. " level has changed (oldLevel:'" .. tostring(oldLevel).. "', newLevel:'" .. tostring(level) .. "')", "Rule.setStatus", 2)
+			log(msg .. " Level has changed (oldLevel:'" .. tostring(oldLevel).. "', newLevel:'" .. tostring(level) .. "')", "Rule.setStatus", 2)
 		end
 
 		local hasRuleStatusChanged = false
 
 		-- Check if rule is armed
 		if (not rule.context.isArmed) then
+			--[[
 			if (rule.context.status == 1) then
 				log(msg .. " is disarmed and is now inactive", "Rule.setStatus")
 				status = 0
@@ -2902,9 +2956,14 @@ Rule = {
 				log(msg .. " is disarmed - Do nothing ", "Rule.setStatus")
 				return
 			end
+			--]]
+			if (status == 1) then
+				log(msg .. " is disarmed - Do nothing ", "Rule.setStatus")
+				return
+			end
 		end
 
-		if ((rule.context.status == 0) and (status == 1)) then
+		if ((rule.context.status < 1) and (status == 1)) then
 			-- The rule has just been activated
 			log(msg .. " is now active", "Rule.setStatus")
 			rule.context.status = 1
@@ -2914,8 +2973,9 @@ Rule = {
 
 			hasRuleStatusChanged = true
 			Hooks.execute("onRuleIsActivated", rule)
-			-- Cancel all scheduled actions for this rule
-			ScheduledTasks.remove(rule)
+			-- Cancel all scheduled actions for this rule (of type 'end')
+			ScheduledTasks.remove({ rule = rule, event = "conditionEnd" })
+			ScheduledTasks.remove({ rule = rule, event = "end" })
 			-- Execute actions linked to activation, if possible
 			if Hooks.execute("beforeDoingActionsOnRuleIsActivated", rule) then
 				ActionGroups.execute(rule, "start")
@@ -2929,16 +2989,18 @@ Rule = {
 				History.add(os.time(), "RuleStatus", Rule.getSummary(rule) .. " is now active, but a hook prevents from doing actions")
 			end
 
-		elseif ((rule.context.status == 1) and (status == 0)) then
+		elseif ((rule.context.status == 1) and (status < 1)) then
 			-- The rule has just been deactivated
 			log(msg .. " is now inactive", "Rule.setStatus")
-			rule.context.status = 0
+			rule.context.status = status
 			rule.context.lastStatusUpdateTime = os.time()
 
 			hasRuleStatusChanged = true
 			Hooks.execute("onRuleIsDeactivated", rule)
-			-- Cancel all scheduled actions for this rule
-			ScheduledTasks.remove(rule)
+			-- Cancel all scheduled actions for this rule (for event start)
+			ScheduledTasks.remove({ rule = rule, event = "start" })
+			ScheduledTasks.remove({ rule = rule, event = "startCondition" })
+			ScheduledTasks.remove({ rule = rule, event = "reminder" })
 			-- Execute actions linked to deactivation, if possible
 			if Hooks.execute("beforeDoingActionsOnRuleIsDeactivated", rule) then
 				if (hasRuleLevelChanged) then
@@ -2958,7 +3020,8 @@ Rule = {
 			if (hasRuleLevelChanged) then
 				log(msg .. " is still active but its level has changed", "Rule.setStatus")
 				-- Cancel scheduled actions for this rule and for old level
-				ScheduledTasks.remove(rule, oldLevel)
+				ScheduledTasks.remove({ rule = rule, event = "start", level = oldLevel })
+				ScheduledTasks.remove({ rule = rule, event = "reminder", level = oldLevel })
 				-- Execute actions linked to level change
 				ActionGroups.execute(rule, "end", oldLevel)
 				ActionGroups.execute(rule, "start", level)
@@ -3126,7 +3189,7 @@ Rules = {
 
 		-- Check settings
 		if Rule.checkSettings(rule) then
-			if (isEnabled()) then
+			if (isStarted()) then
 				-- If the RulesEngine is already started, then start the rule just after adding
 				Rule.start(rule)
 			end
@@ -3135,7 +3198,7 @@ Rules = {
 			end
 		else
 			--rule.context.isArmed = false
-			log("ERROR : " .. msg .. " has at least one error in settings", "Rules.add")
+			error(msg .. " has at least one error in settings", "Rules.add")
 		end
 
 		debugLogEnd("Rules.add")
@@ -3159,7 +3222,7 @@ Rules = {
 	remove = function (fileName, ruleIdx, ruleId, updateOtherRuleIdxes)
 		ruleIdx, ruleId = tonumber(ruleIdx), tonumber(ruleId)
 		if ((fileName == nil) or (ruleIdx == nil) or (ruleId == nil)) then
-			log("ERROR : fileName(" .. tostring(fileName) .. "), ruleIdx(" .. tostring(ruleIdx) .. ") and ruleId(" .. tostring(ruleId) .. ") are mandatory", "Rules.remove")
+			error("fileName(" .. tostring(fileName) .. "), ruleIdx(" .. tostring(ruleIdx) .. ") and ruleId(" .. tostring(ruleId) .. ") are mandatory", "Rules.remove")
 			return
 		end
 		local rule = Rules.get(ruleId)
@@ -3167,8 +3230,8 @@ Rules = {
 			log("Remove rule #" .. rule.id .. "(" .. rule.name .. ")", "Rules.remove")
 			-- Remove events on the rule
 			Events.removeRule(rule)
-			if (rule.isStarted) then
-				ScheduledTasks.remove(rule)
+			if (Rule.isStarted(rule)) then
+				ScheduledTasks.remove({ rule = rule })
 			end
 			-- Remove informations of the rule
 			RulesInfos.remove(rule)
@@ -3183,7 +3246,7 @@ Rules = {
 				end
 			end
 			rule = nil
-			
+
 			if (updateOtherRuleIdxes == true) then
 				for _, rule in ipairs(_rules) do
 					if ((rule.fileName == fileName) and (rule.idx > ruleIdx)) then
@@ -3194,7 +3257,7 @@ Rules = {
 			end
 
 		else
-			log("ERROR : Can not remove rule #" .. rule.id .. "(" .. rule.name .. ") because fileName(" .. tostring(fileName) .. "-" .. tostring(rule.fileName) .. ") and ruleIdx(" .. tostring(ruleIdx) .. "-" .. tostring(rule.idx) .. ") do not match", "Rules.remove")
+			error("Can not remove rule #" .. rule.id .. "(" .. rule.name .. ") because fileName(" .. tostring(fileName) .. "-" .. tostring(rule.fileName) .. ") and ruleIdx(" .. tostring(ruleIdx) .. "-" .. tostring(rule.idx) .. ") do not match", "Rules.remove")
 		end
 	end,
 
@@ -3554,6 +3617,10 @@ function isEnabled()
 	return (RulesEngine._isEnabled == true)
 end
 
+function isStarted()
+	return (RulesEngine._isStarted == true)
+end
+
 function isInitialized()
 	return (RulesEngine._isInitialized == true)
 end
@@ -3573,6 +3640,7 @@ function start ()
 	--updatePanel()
 	RulesInfos.save()
 	--RulesEngine.dump()
+	RulesEngine._isStarted = true
 
 	debugLogEnd("start")
 end
@@ -3589,7 +3657,8 @@ function stop ()
 	log("Stop RulesEngine", "stop")
 	History.add(os.time(), "General", "Stop engine")
 	Rules.stop()
-	RulesInfos.save() -- ???
+	RulesInfos.save()
+	RulesEngine._isStarted = false
 
 	debugLogEnd("stop")
 end
@@ -3856,6 +3925,13 @@ local function _initPluginInstance (lul_device)
 		rulesFiles = _getVariableOrInit(lul_device, VARIABLE.RULES_FILES, "C_RulesEngine_Rules.xml") or ""
 	}
 
+	--[[
+	-- Store path
+	if (not Store.setPath(_getVariableOrInit(lul_device, VARIABLE.STORE_PATH, "/tmp/log/cmh/rules"))) then
+		-- critical error
+	end
+	--]]
+
 	-- Get debug mode
 	setVerbosity(_getVariableOrInit(lul_device, VARIABLE.DEBUG_MODE, "0"))
 
@@ -3917,7 +3993,6 @@ end
 -- Startup
 function startup (lul_device)
 	log("Start plugin '" .. _NAME .. "' (v" .. _VERSION .. ")", "startup")
-	History.add(os.time(), "General", "Start plugin '" .. _NAME .. "' (v" .. _VERSION .. ")")
 
 	-- Update static JSON file
 	if _updateStaticJSONFile(lul_device, _NAME .. "1") then
