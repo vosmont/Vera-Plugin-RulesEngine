@@ -1041,7 +1041,7 @@ ScheduledTasks = {
 		for i = #_scheduledTasks, 1, -1 do
 			if (
 					((params.rule == nil)  or (_scheduledTasks[i].ruleId == params.rule.id))
-				and ((params.event == nil) or (_scheduledTasks[i].event == params.event))
+				and ((params.event == nil) or (_scheduledTasks[i].item.event == params.event))
 				and ((params.level == nil) or (_scheduledTasks[i].level == params.level))
 				and ((params.item == nil)  or (_scheduledTasks[i].item == params.item))
 			) then
