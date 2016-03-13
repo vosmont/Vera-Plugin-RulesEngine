@@ -45,8 +45,8 @@ local SID = {
 local VARIABLE = {
 	TEMPERATURE = { "urn:upnp-org:serviceId:TemperatureSensor1", "CurrentTemperature", true },
 	HUMIDITY = { "urn:micasaverde-com:serviceId:HumiditySensor1", "CurrentLevel", true },
-	SWITCH_STATUS = { "urn:upnp-org:serviceId:SwitchPower1", "Status", true },
-	DIMMER_ = { "urn:upnp-org:serviceId:Dimming1", "LoadLevelStatus", true },
+	SWITCH_POWER = { "urn:upnp-org:serviceId:SwitchPower1", "Status", true },
+	DIMMER_LEVEL = { "urn:upnp-org:serviceId:Dimming1", "LoadLevelStatus", true },
 
 	-- Security
 	ARMED = { "urn:micasaverde-com:serviceId:SecuritySensor1", "Armed", true },
@@ -122,7 +122,7 @@ end
 -- **************************************************
 
 -- Merges (deeply) the contents of one table (t2) into another (t1)
-function table_extend (t1, t2)
+local function table_extend (t1, t2)
 	if ((t1 == nil) or (t2 == nil)) then
 		return
 	end
@@ -268,102 +268,102 @@ compress_lzo_file_in_tmp() {
 }
 ]]
 
--- Get variable timestamp
-local function _getVariableTimestamp (deviceId, variable)
-	if ((type(variable) == "table") and (type(variable[4]) == "string")) then
-		local variableTimestamp = VARIABLE[variable[4]]
-		if (variableTimestamp ~= nil) then
-			return luup.variable_get(variableTimestamp[1], variableTimestamp[2], deviceId)
+------------------------------------------------------------------------------------------------------------------------
+-- Variable managment functions
+------------------------------------------------------------------------------------------------------------------------
+
+Variable = {
+	-- Get variable timestamp
+	getTimestamp = function (deviceId, variable)
+		if ((type(variable) == "table") and (type(variable[4]) == "string")) then
+			local variableTimestamp = VARIABLE[variable[4]]
+			if (variableTimestamp ~= nil) then
+				return luup.variable_get(variableTimestamp[1], variableTimestamp[2], deviceId)
+			end
 		end
-	end
-	return nil
-end
--- Set variable timestamp
-local function _setVariableTimestamp (deviceId, variable, timestamp)
-	if (variable[4] ~= nil) then
-		local variableTimestamp = VARIABLE[variable[4]]
-		if (variableTimestamp ~= nil) then
-			luup.variable_set(variableTimestamp[1], variableTimestamp[2], (timestamp or os.time()), deviceId)
+		return nil
+	end,
+
+	-- Set variable timestamp
+	setTimestamp = function (deviceId, variable, timestamp)
+		if (variable[4] ~= nil) then
+			local variableTimestamp = VARIABLE[variable[4]]
+			if (variableTimestamp ~= nil) then
+				luup.variable_set(variableTimestamp[1], variableTimestamp[2], (timestamp or os.time()), deviceId)
+			end
 		end
-	end
-end
+	end,
 
--- Get variable value (can deal with unknown variable)
-local function _getVariable (deviceId, variable)
-	deviceId = tonumber(deviceId)
-	if ((deviceId == nil) or (variable == nil)) then
-		return
-	end
-	local value, timestamp = luup.variable_get(variable[1], variable[2], deviceId)
-	local storedTimestamp = _getVariableTimestamp(deviceId, variable)
-	if (storedTimestamp ~= nil) then
-		timestamp = storedTimestamp
-	end
-	return value, timestamp
-end
-local function _getUnknownVariable (deviceId, serviceId, variableName)
-	local variable = indexVariable[tostring(serviceId) .. ";" .. tostring(variableName)]
-	if (variable ~= nil) then
-		return _getVariable(deviceId, variable)
-	else
-		return luup.variable_get(serviceId, variableName, deviceId)
-	end
-end
--- Set variable value
-local function _setVariable (deviceId, variable, value)
-	deviceId = tonumber(deviceId)
-	if ((deviceId == nil) or (variable == nil) or (value == nil)) then
-		return
-	end
-	if (type(value) == "number") then
-		value = tostring(value)
-	end
-	local doChange = true
-	--[[
-	if (
-		(
-			luup.devices[deviceId].device_type == DEVICE_TYPES.MOTION_SENSOR[1]
-			or (luup.devices[deviceId].device_type == DEVICE_TYPES.DOOR_SENSOR[1])
-			or luup.devices[deviceId].device_type == DEVICE_TYPES.SMOKE_SENSOR[1]
-		)
-		and (variable == VARIABLE.TRIPPED)
-		and (luup.variable_get(variable[1], variable[2], deviceId) == value)
-		and (luup.variable_get(VARIABLE.REPEAT_EVENT[1], VARIABLE.REPEAT_EVENT[2], deviceId) == "0")
-	) then
-		doChange = false
-	elseif (
-			(luup.devices[deviceId].device_type == tableDeviceTypes.LIGHT[1])
-		and (variable == VARIABLE.LIGHT)
-		and (luup.variable_get(variable[1], variable[2], deviceId) == value)
-		and (luup.variable_get(VARIABLE.VAR_REPEAT_EVENT[1], VARIABLE.VAR_REPEAT_EVENT[2], deviceId) == "1")
-	) then
-		luup.variable_set(variable[1], variable[2], "-1", deviceId)
-	elseif (
-			(luup.variable_get(variable[1], variable[2], deviceId) == value)
-		and variable[5] == true
-	) then
-		doChange = false
-	end
-	--]]
+	-- Get variable value (can deal with unknown variable)
+	get = function (deviceId, variable)
+		deviceId = tonumber(deviceId)
+		if (deviceId == nil) then
+			error("deviceId is nil", "Variable.get")
+			return
+		elseif (variable == nil) then
+			error("variable is nil", "Variable.get")
+			return
+		end
+		local value, timestamp = luup.variable_get(variable[1], variable[2], deviceId)
+		local storedTimestamp = Variable.getTimestamp(deviceId, variable)
+		if (storedTimestamp ~= nil) then
+			timestamp = storedTimestamp
+		end
+		return value, timestamp
+	end,
 
-	if (doChange) then
-		luup.variable_set(variable[1], variable[2], value, deviceId)
-	end
+	getUnknown = function (deviceId, serviceId, variableName)
+		local variable = indexVariable[tostring(serviceId) .. ";" .. tostring(variableName)]
+		if (variable ~= nil) then
+			return Variable.get(deviceId, variable)
+		else
+			return luup.variable_get(serviceId, variableName, deviceId)
+		end
+	end,
 
-	-- Updates linked variable for timestamp
-	_setVariableTimestamp(deviceId, variable, os.time())
-end
+	-- Set variable value
+	set = function (deviceId, variable, value)
+		deviceId = tonumber(deviceId)
+		if (deviceId == nil) then
+			error("deviceId is nil", "Variable.get")
+			return
+		elseif (variable == nil) then
+			error("variable is nil", "Variable.get")
+			return
+		elseif (value == nil) then
+			error("value is nil", "Variable.get")
+			return
+		end
+		if (type(value) == "number") then
+			value = tostring(value)
+		end
+		local doChange = true
+		local currentValue = luup.variable_get(variable[1], variable[2], deviceId)
+		local deviceType = luup.devices[deviceId].device_type
+		if ((currentValue == value) and variable[3] == true) then
+			-- Variable is not updated when the value is unchanged
+			doChange = false
+		end
+	
+		if (doChange) then
+			luup.variable_set(variable[1], variable[2], value, deviceId)
+		end
 
--- Get variable value and init if value is nil
-local function _getVariableOrInit (deviceId, variable, defaultValue)
-	local value, timestamp = _getVariable(deviceId, variable)
-	if (value == nil) then
-		_setVariable(deviceId, variable, defaultValue)
-		value = defaultValue
-		timestamp = os.time()
+		-- Updates linked variable for timestamp
+		Variable.setTimestamp(deviceId, variable, os.time())
+	end,
+
+	-- Get variable value and init if value is nil
+	getOrInit = function (deviceId, variable, defaultValue)
+		local value, timestamp = Variable.get(deviceId, variable)
+		if (value == nil) then
+			Variable.set(deviceId, variable, defaultValue)
+			value = defaultValue
+			timestamp = os.time()
+		end
+		return value, timestamp
 	end
-	return value, timestamp
-end
+}
 
 -- **************************************************
 -- Helpers
@@ -1346,6 +1346,9 @@ do
 				if ((condition.variable == nil) and (condition.mutation.variable ~= nil)) then
 					condition.variable = condition.mutation.variable
 				end
+				if ((condition.operator == nil) and (condition.mutation.operator ~= nil)) then
+					condition.operator = condition.mutation.operator
+				end
 				if ((condition.value == nil) and (condition.mutation.value ~= nil)) then
 					condition.value = condition.mutation.value
 				end
@@ -1438,7 +1441,7 @@ do
 			if (condition.mainType == "Trigger") then
 				if (context.lastUpdateTime == nil) then
 					-- The value has not yet been updated
-					context.value, context.lastUpdateTime = _getUnknownVariable(deviceId, condition.service, condition.variable)
+					context.value, context.lastUpdateTime = Variable.getUnknown(deviceId, condition.service, condition.variable)
 					msg = msg .. " (value retrieved, last change " .. tostring(os.difftime(os.time(), (context.lastUpdateTime or os.time()))) .. "s ago)"
 				end
 			else
@@ -1446,7 +1449,7 @@ do
 				if (os.difftime(os.time(), (context.lastUpdateTime or 0)) > 0) then
 					msg = msg .. " (value retrieved)"
 					if (condition.action == nil) then
-						context.value, context.lastUpdateTime = _getUnknownVariable(deviceId, condition.service, condition.variable)
+						context.value, context.lastUpdateTime = Variable.getUnknown(deviceId, condition.service, condition.variable)
 					else
 						local resultCode, resultString, job, returnArguments = luup.call_action(condition.service, condition.action, condition.arguments, deviceId)
 						context.value = returnArguments[ condition.variable ]
@@ -1555,7 +1558,6 @@ do
 		end,
 
 		check = function (condition)
---print(json.encode(condition))
 			if not _checkParameters(condition, {{"rule", "ruleId", "ruleName"}, "status"}) then
 				return false
 			else
@@ -1600,8 +1602,7 @@ do
 			if (type(condition.daysOfWeek) == "string") then
 				condition.timerType = 2
 				condition.days = string.split(condition.daysOfWeek, ",")
-			end
-			if (type(condition.daysOfMonth) == "string") then
+			elseif (type(condition.daysOfMonth) == "string") then
 				condition.timerType = 3
 				condition.days = string.split(condition.daysOfMonth, ",")
 			end
@@ -1998,7 +1999,7 @@ do
 		execute = function (action, context)
 			for _, deviceId in ipairs(action.deviceIds) do
 				-- Check first device com status
-				if (not luup.is_ready(deviceId) or _getVariable(deviceId, VARIABLE.COMM_FAILURE) == "1") then
+				if (not luup.is_ready(deviceId) or Variable.get(deviceId, VARIABLE.COMM_FAILURE) == "1") then
 					error("Device #" .. tostring(deviceId) .. " is not ready or has a com failure", "ActionType.action_device.execute")
 				end
 				-- Call luup action
@@ -2525,6 +2526,10 @@ RulesInfos = {
 		else
 			_rulesInfos = infos
 		end
+		-- Mark the loaded rules
+		for _, ruleInfos in ipairs(_rulesInfos) do
+			ruleInfos.isFormer = true
+		end
 	end,
 
 	save = function ()
@@ -2539,11 +2544,11 @@ RulesInfos = {
 			log("File '" .. _path .. _fileName .. "' can not be written or created", "RulesInfos.save")
 			return
 		end
-		_rulesInfos = {}
+		local rulesInfos = {}
 		for _, rule in pairs(Rules.getAll()) do
-			table.insert(_rulesInfos, rule.context)
+			table.insert(rulesInfos, rule.context)
 		end
-		file:write(json.encode(_rulesInfos))
+		file:write(json.encode(rulesInfos))
 		file:close()
 
 		-- Notify a change to the client
@@ -2567,24 +2572,18 @@ RulesInfos = {
 		return rulesInfos
 	end,
 
-	update = function (params, newRuleInformations)
-		local rulesInfos = RulesInfos.get(params)
-		if (#rulesInfos == 1) then
-			-- Security to update only one entry
-			table.extend(rulesInfos[1], newRuleInformations)
-		else
-			-- TODO : msg
-		end
-	end,
-
 	add = function (ruleInfos)
 		log("Add informations for rule #" .. tostring(ruleInfos.id), "RulesInfos.add")
 		table.insert(_rulesInfos, ruleInfos)
 	end,
 
 	remove = function (params)
-		for i, ruleInfos in ipairs(_rulesInfos) do
-			if ((ruleInfos.id == params.id) and (ruleInfos.fileName == params.fileName) and (ruleInfos.idx == params.idx)) then
+		for i = #_rulesInfos, 1, -1 do
+			local ruleInfos = _rulesInfos[i]
+			if ((params.isFormer == true) and (ruleInfos.isFormer == true)) then
+				log("Remove former informations for rule #" .. tostring(ruleInfos.id), "RulesInfos.remove")
+				table.remove(_rulesInfos, i)
+			elseif ((ruleInfos.id == params.id) and (ruleInfos.fileName == params.fileName) and (ruleInfos.idx == params.idx)) then
 				log("Remove informations for rule #" .. tostring(ruleInfos.id), "RulesInfos.remove")
 				table.remove(_rulesInfos, i)
 				return true
@@ -3149,6 +3148,7 @@ Rules = {
 
 		-- Get former informations of the rule
 		local formerRuleInformations = RulesInfos.get(rule)[1]
+		RulesInfos.remove(rule)
 
 		-- Check if a rule already exists with this id (it must be a change on the rule)
 		local formerRule = _indexRulesById[tostring(rule.id)]
@@ -3180,12 +3180,13 @@ Rules = {
 		if (formerRuleInformations ~= nil) then
 			-- TODO : checksum
 			log(msg .. " - Update context of the rule with former informations", "Rules.add")
+			formerRuleInformations.isFormer = nil
 			formerRuleInformations.name = nil
 			formerRuleInformations.status = nil
 			formerRuleInformations.errors = nil
 			table.extend(rule.context, formerRuleInformations)
 		end
-		RulesInfos.add(rule)
+		RulesInfos.add(rule.context)
 
 		-- Check settings
 		if Rule.checkSettings(rule) then
@@ -3673,8 +3674,7 @@ function enable ()
 	RulesEngine._isEnabled = true
 	History.add(os.time(), "General", "Enable engine")
 	start()
-	_setVariable (RulesEngine._params.deviceId, VARIABLE.SWITCH_POWER, "1")
-	--luup.variable_set(SID.SwitchPower, "Status", "1", RulesEngine._params.deviceId)
+	Variable.set(RulesEngine._params.deviceId, VARIABLE.SWITCH_POWER, "1")
 end
 
 -- Disable engine
@@ -3687,8 +3687,7 @@ function disable ()
 	RulesEngine._isEnabled = false
 	History.add(os.time(), "General", "Disable engine")
 	stop()
-	_setVariable (RulesEngine._params.deviceId, VARIABLE.SWITCH_POWER, "0")
-	--luup.variable_set(SID.SwitchPower, "Status", "0", RulesEngine._params.deviceId)
+	Variable.set(RulesEngine._params.deviceId, VARIABLE.SWITCH_POWER, "0")
 end
 
 -- Dump for debug
@@ -3914,26 +3913,26 @@ local function _initPluginInstance (lul_device)
 	log("initPluginInstance", "Init")
 
 	-- Get plugin params for this device
-	RulesEngine._isEnabled = (_getVariableOrInit(lul_device, VARIABLE.SWITCH_STATUS, "0") == "1")
-	_getVariableOrInit(lul_device, VARIABLE.MESSAGE, "")
-	_getVariableOrInit(lul_device, VARIABLE.LAST_UPDATE, "")
+	RulesEngine._isEnabled = (Variable.getOrInit(lul_device, VARIABLE.SWITCH_POWER, "0") == "1")
+	Variable.getOrInit(lul_device, VARIABLE.MESSAGE, "")
+	Variable.getOrInit(lul_device, VARIABLE.LAST_UPDATE, "")
 	RulesEngine._params = {
 		deviceId = lul_device,
-		modules = _getVariableOrInit(lul_device, VARIABLE.MODULES, "") or "",
-		toolboxConfig = _getVariableOrInit(lul_device, VARIABLE.TOOLBOX_CONFIG, "") or "",
-		startupFiles = _getVariableOrInit(lul_device, VARIABLE.STARTUP_FILES, "C_RulesEngine_Startup.lua") or "",
-		rulesFiles = _getVariableOrInit(lul_device, VARIABLE.RULES_FILES, "C_RulesEngine_Rules.xml") or ""
+		modules = Variable.getOrInit(lul_device, VARIABLE.MODULES, "") or "",
+		toolboxConfig = Variable.getOrInit(lul_device, VARIABLE.TOOLBOX_CONFIG, "") or "",
+		startupFiles = Variable.getOrInit(lul_device, VARIABLE.STARTUP_FILES, "C_RulesEngine_Startup.lua") or "",
+		rulesFiles = Variable.getOrInit(lul_device, VARIABLE.RULES_FILES, "C_RulesEngine_Rules.xml") or ""
 	}
 
 	--[[
 	-- Store path
-	if (not Store.setPath(_getVariableOrInit(lul_device, VARIABLE.STORE_PATH, "/tmp/log/cmh/rules"))) then
+	if (not Store.setPath(Variable.getOrInit(lul_device, VARIABLE.STORE_PATH, "/tmp/log/cmh/rules"))) then
 		-- critical error
 	end
 	--]]
 
 	-- Get debug mode
-	setVerbosity(_getVariableOrInit(lul_device, VARIABLE.DEBUG_MODE, "0"))
+	setVerbosity(Variable.getOrInit(lul_device, VARIABLE.DEBUG_MODE, "0"))
 
 	if (type(json) == "string") then
 		--showErrorOnUI("initPluginInstance", lul_device, "No JSON decoder")
@@ -3954,6 +3953,7 @@ local function _deferredStartup (lul_device)
 	History.load()
 	RulesInfos.load()
 	loadRulesFiles()
+	RulesInfos.remove({ isFormer = true })
 
 	RulesEngine._isInitialized = true
 

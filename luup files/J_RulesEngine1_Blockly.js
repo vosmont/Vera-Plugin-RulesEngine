@@ -376,14 +376,14 @@ Blockly.Blocks[ "lua_code" ] = {
 };
 
 // ****************************************************************************
-// Blockly - Rule
+// Rule
 // ****************************************************************************
 
 goog.provide( "Blockly.Blocks.rules" );
 Blockly.Blocks.rules.HUE = 140;
 
 Blockly.Msg.RULE_TITLE = "Rule";
-Blockly.Msg.RULE_TOOLTIP = "A LUA code.";
+Blockly.Msg.RULE_TOOLTIP = "Define a rule.";
 
 Blockly.Blocks[ "rule" ] = {
 	hasToCheckDevice: false,
@@ -421,7 +421,7 @@ Blockly.Blocks[ "rule" ] = {
 		this.appendDummyInput()
 			.appendField( "Do" );
 		this.appendStatementInput( "actions" )
-			.setCheck( "Action" );
+			.setCheck( "ActionGroup" );
 
 		this.setInputsInline(false);
 		this.setTooltip( Blockly.Msg.RULE_TITLE );
@@ -445,13 +445,13 @@ Blockly.Blocks[ "rule" ] = {
 };
 
 // ****************************************************************************
-// Blockly - Rule properties
+// Rule properties
 // ****************************************************************************
 
 goog.provide( "Blockly.Blocks.properties" );
 Blockly.Blocks.properties.HUE = 160;
 
-Blockly.Msg.LIST_PROPERTY_TOOLTIP = "A LUA code.";
+Blockly.Msg.LIST_PROPERTY_TOOLTIP = "List of the properties of the rule.";
 Blockly.Msg.LIST_RULE_PROPERTY_TOOLTIP = "List of rule properties";
 Blockly.Msg.LIST_RULE_PROPERTY_CREATE_EMPTY_TITLE = "no property";
 Blockly.Msg.RULE_PROPERTY_AUTO_UNTRIP_TOOLTIP = "Define the time after which the rule is switched off automatically.";
@@ -488,6 +488,8 @@ Blockly.Blocks[ "list_property" ].updateShape_ = function() {
 	} else {
 		this.outputConnection.setCheck( "Properties" );
 	}
+};
+Blockly.Blocks[ "list_property" ].validate = function() {
 	this.setTooltip(Blockly.Msg.LIST_RULE_PROPERTY_TOOLTIP);
 };
 
@@ -563,6 +565,8 @@ Blockly.Blocks[ "list_device" ].updateShape_ = function() {
 	} else {
 		this.outputConnection.setCheck( "Devices" );
 	}
+};
+Blockly.Blocks[ "list_device" ].validate = function() {
 	this.setTooltip(Blockly.Msg.LIST_DEVICE_TOOLTIP);
 };
 
@@ -812,9 +816,10 @@ function _updateDeviceFilterInput( inputName, params ) {
 		case "device_id":
 			endFunc = function( devices ) {
 				$.each( devices, function( i, device ) {
-					if ( !indexValues[ device.device_type ] ) {
-						indexValues[ device.id.toString() ] = true;
-						options.push( [ device.name, device.id.toString() ] );
+					var deviceId = device.id.toString();
+					if ( !indexValues[ deviceId ] ) {
+						indexValues[ deviceId ] = true;
+						options.push( [ device.name, deviceId ] );
 					}
 				} );
 			};
@@ -941,6 +946,17 @@ function _updateDeviceFilterInput( inputName, params ) {
 				$.each( devices, function( i, device ) {
 					MultiBox.getDeviceActions( device, function ( services ) {
 						$.each( services, function ( j, service ) {
+							if ( !_isEmpty( params.action ) ) {
+								var isActionFound = false;
+								$.each( service.Actions, function ( k, action ) {
+									if ( action.name === params.action ) {
+										isActionFound = true;
+									}
+								} );
+								if ( ! isActionFound ) {
+									return;
+								}
+							}
 							if ( !indexValues[ service.ServiceId ] ) {
 								indexValues[ service.ServiceId ] = true;
 								options.push( [ service.ServiceId.substr( service.ServiceId.lastIndexOf( ":" ) + 1 ), service.ServiceId ] );
@@ -1157,15 +1173,15 @@ function _compose( containerBlock ) {
 
 
 // ****************************************************************************
-// Blockly - Device
+// Device
 // ****************************************************************************
 
 goog.require('goog.array');
 
 goog.provide( "Blockly.Blocks.device" );
 
-Blockly.Msg.DEVICE_TOOLTIP = "{0} device(s) matching";
-Blockly.Msg.DEVICE_NO_FILTER_TOOLTIP = "No filter is selected.";
+Blockly.Msg.DEVICE_TOOLTIP = "{0} device(s) matching.";
+Blockly.Msg.DEVICE_NO_FILTER_TOOLTIP = "No device is selected.";
 
 Blockly.Msg.CONTROLS_DEVICE_TITLE = "device";
 Blockly.Msg.CONTROLS_DEVICE_TOOLTIP = "TODO";
@@ -1194,6 +1210,7 @@ Blockly.Blocks[ "device" ] = {
 
 		this.setInputsInline( false );
 		this.setOutput( true, "Device" );
+		this.setTooltip( Blockly.Msg.DEVICE_NO_FILTER_TOOLTIP );
 	},
 
 	mutationToDom: function() {
@@ -1358,7 +1375,7 @@ Blockly.Blocks[ "controls_device_category" ] = {
 };
 
 // ****************************************************************************
-// Blockly - Rule conditions
+// List of conditions
 // ****************************************************************************
 
 goog.require( "Blockly.Blocks" );
@@ -1367,12 +1384,14 @@ goog.provide( "Blockly.Blocks.conditions" );
 Blockly.Blocks.conditions.HUE1 = 40;
 Blockly.Blocks.conditions.HUE2 = 40;
 
+Blockly.Msg.LIST_CONDITION_WITH_OPERATOR_TITLE = "List of conditions.";
 Blockly.Msg.LIST_CONDITION_EMPTY_TITLE = "no condition";
 
 Blockly.Blocks[ "list_with_operator_condition" ] = function() {};
 goog.mixin( Blockly.Blocks[ "list_with_operator_condition" ], Blockly.Blocks[ "lists_create_with" ] );
 Blockly.Blocks[ "list_with_operator_condition" ].updateShape_ = function() {
 	this.setColour( Blockly.Blocks.conditions.HUE1 );
+	
 	// Delete everything.
 	if ( this.getInput( "EMPTY" ) ) {
 		this.removeInput( "EMPTY" );
@@ -1408,11 +1427,24 @@ Blockly.Blocks[ "list_with_operator_condition" ].updateShape_ = function() {
 		this.outputConnection.setCheck( "Boolean" );
 	}
 };
+Blockly.Blocks[ "list_with_operator_condition" ].validate = function() {
+	this.setTooltip(Blockly.Msg.LIST_CONDITION_WITH_OPERATOR_TITLE);
+}
 
 // ****************************************************************************
-// Blockly - Rule conditions - Types
+// Conditions - Types
 // ****************************************************************************
 
+Blockly.Msg.CONDITION_DEVICE_VALUE_TOOLTIP = "Condition on the value of a device's variable.";
+Blockly.Msg.CONDITION_TIME_TOOLTIP = "Condition on time.";
+Blockly.Msg.CONDITION_RULE_TOOLTIP = "Condition on the status of another rule.";
+
+Blockly.Msg.CONTROLS_CONDITION_TITLE = "condition";
+Blockly.Msg.CONTROLS_CONDITION_TOOLTIP = "Condition.";
+Blockly.Msg.CONTROLS_CONDITION_TIMER_TYPE_TITLE = "days";
+Blockly.Msg.CONTROLS_CONDITION_TIMER_TYPE_TOOLTIP = "Days of week or month during which the condition is valid.";
+Blockly.Msg.CONTROLS_CONDITION_PARAMS_TITLE = "parameters";
+Blockly.Msg.CONTROLS_CONDITION_PARAMS_TOOLTIP = "Parameters that modify the condition.";
 function _updateConditionValueShape() {
 	// Device type
 	this.getField( "deviceLabel" ).text_ = ( this.params_.device_label != null ? this.params_.device_label : "device" );
@@ -1581,6 +1613,7 @@ Blockly.Blocks[ "condition_value" ] = {
 
 		this.setInputsInline( false );
 		this.setOutput( true, "Boolean" );
+		this.setTooltip( Blockly.Msg.CONDITION_DEVICE_VALUE_TOOLTIP );
 	},
 
 	mutationToDom: function() {
@@ -1676,6 +1709,7 @@ Blockly.Blocks[ "condition_time" ] = {
 
 		this.setInputsInline( true );
 		this.setOutput( true, "Boolean" );
+		this.setTooltip( Blockly.Msg.CONDITION_TIME_TOOLTIP );
 	},
 
 	onchange: function() {
@@ -1762,11 +1796,12 @@ Blockly.Blocks[ "condition_rule" ] = {
 
 		this.setInputsInline( true );
 		this.setOutput( true, "Boolean" );
+		this.setTooltip( Blockly.Msg.CONDITION_RULE_TOOLTIP );
 	}
 };
 
 // ****************************************************************************
-// Blockly - Rule conditions - Params
+// Conditions - Params
 // ****************************************************************************
 
 Blockly.Msg.LIST_CONDITION_PARAM_TITLE = "list of condition parameters";
@@ -1802,6 +1837,8 @@ Blockly.Blocks[ "list_condition_param" ].updateShape_ = function() {
 	} else {
 		this.outputConnection.setCheck( "ConditionParams" );
 	}
+};
+Blockly.Blocks[ "list_condition_param" ].validate = function() {
 	this.setTooltip(Blockly.Msg.LIST_CONDITION_PARAM_TITLE);
 };
 
@@ -1833,7 +1870,7 @@ Blockly.Blocks[ "condition_param_since" ] = {
 };
 
 // ****************************************************************************
-// Blockly - Rule actions
+// Group of actions
 // ****************************************************************************
 
 goog.require( "Blockly.Blocks" );
@@ -1882,8 +1919,6 @@ Blockly.Blocks[ "action_group" ] = {
 				"event"
 			);
 
-		//this.appendDummyInput( "end" );
-
 		this.appendStatementInput( "do" )
 			.setCheck( "ActionType" )
 			.appendField( "do" );
@@ -1892,8 +1927,8 @@ Blockly.Blocks[ "action_group" ] = {
 		this.setMutator( new Blockly.Mutator( [ "controls_action_group_description", "controls_action_group_params", "controls_action_group_conditions" ] ) );
 
 		this.setInputsInline( false );
-		this.setPreviousStatement( true, "Action" );
-		this.setNextStatement( true, "Action" );
+		this.setPreviousStatement( true, "ActionGroup" );
+		this.setNextStatement( true, "ActionGroup" );
 		this.setTooltip( Blockly.Msg.ACTION_GROUP_TOOLTIP );
 	},
 
@@ -1986,7 +2021,7 @@ Blockly.Blocks[ "controls_action_group_conditions" ] = {
 
 
 // ****************************************************************************
-// Blockly - Rule actions - Types
+// Rule actions - Types
 // ****************************************************************************
 
 Blockly.Msg.ACTION_WAIT_TOOLTIP = "Wait a defined time.";
@@ -2078,7 +2113,7 @@ Blockly.Blocks['action_device'] = {
 };
 
 // ****************************************************************************
-// Blockly - Rule actions - Params
+// Rule actions - Params
 // ****************************************************************************
 
 Blockly.Msg.LIST_ACTION_PARAM_TOOLTIP = "List of action parameters";
@@ -2102,7 +2137,7 @@ Blockly.Blocks['list_action_param'].updateShape_ = function() {
 		}
 	}
 	// Rebuild block.
-	if (this.itemCount_ == 0) {
+	if (this.itemCount_ === 0) {
 		this.appendDummyInput('EMPTY')
 			.appendField( Blockly.Msg.LIST_ACTION_PARAM_CREATE_EMPTY_TITLE );
 	} else {
@@ -2117,7 +2152,9 @@ Blockly.Blocks['list_action_param'].updateShape_ = function() {
 	} else {
 		this.outputConnection.setCheck('ActionParams');
 	}
-	this.setTooltip( Blockly.Msg.LIST_ACTION_PARAM_TOOLTIP );
+};
+Blockly.Blocks[ "list_action_param" ].validate = function() {
+	this.setTooltip(Blockly.Msg.LIST_ACTION_PARAM_TOOLTIP);
 };
 
 Blockly.Blocks['action_param_level'] = {
