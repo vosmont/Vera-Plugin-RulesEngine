@@ -1973,7 +1973,6 @@ Blockly.Blocks[ "condition_rule" ] = {
 		this.prefix_ = "condition";
 		this.inputs_ = [ "params" ];
 
-		// TODO : get the rules
 		var options = [ [ "...", "" ] ];
 		var rules = ALTUI_RulesEngine.getRules();
 		for ( var i = 0; i < rules.length; i++ ) {
@@ -1983,16 +1982,9 @@ Blockly.Blocks[ "condition_rule" ] = {
 			.appendField( "rule" )
 			.appendField( new Blockly.FieldDropdown( options ), "ruleId" );
 
-		// Old way (by name)
-		/*
-		this.appendDummyInput()
-			.appendField( "rule" )
-			.appendField( new Blockly.FieldTextInput( "" ), "rule" );
-		*/
-
 		this.appendDummyInput()
 			.appendField( "is" )
-			.appendField( new Blockly.FieldDropdown( [ [ "active", "1" ], [ "inactive", "0" ] ] ), "status" );
+			.appendField( new Blockly.FieldDropdown( [ [ "active", "1" ], [ "inactive", "0" ] ] ), "ruleStatus" );
 
 		_setMutator.call( this );
 
