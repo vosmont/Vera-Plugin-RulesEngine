@@ -854,15 +854,18 @@ Event = {
 			return false
 		end
 		-- Update status of the linked conditions for this event
+		local context = {
+			lastUpdateTime = os.time()
+		}
 		for _, condition in ipairs(linkedConditions) do
 			log("This event is linked to rule #" .. tostring(condition._ruleId) .. " and condition #" .. tostring(condition.id), "Event.onTimerIsTriggered", 2)
 			-- Update the context of the condition
 			--condition.status = 1
 			--condition._context.status     = 1
-			condition._context.lastUpdateTime = os.time()
+			--condition._context.lastUpdateTime = os.time()
 		end
 		-- Update the status of the conditions (asynchronously to release the lock the fatest possible)
-		ScheduledTasks.add(nil, Conditions.updateStatus, 0, { linkedConditions })
+		ScheduledTasks.add(nil, Conditions.updateStatus, 0, { linkedConditions, { context = context } })
 	end,
 
 	-- Callback on rule status update (inside call)
@@ -890,8 +893,10 @@ Event = {
 			--condition._context.ruleStatus = newStatus
 			--condition._context.lastUpdateTime = os.time()
 			-- Update the status of the condition
-			Condition.updateStatus(condition, { context = context })
+			--Condition.updateStatus(condition, { context = context })
 		end
+		-- Update the status of the conditions (asynchronously to release the lock the fatest possible)
+		ScheduledTasks.add(nil, Conditions.updateStatus, 0, { linkedConditions, { context = context } })
 	end,
 
 	-- Change debug level log
@@ -1565,10 +1570,13 @@ do
 			if not _checkParameters(condition, { "ruleId", "ruleStatus"}) then
 				return false
 			else
+				-- If the rule is after in the XML file, the id does not exist for the moment
+				--[[
 				if not Rules.get(condition.ruleId) then
 					error(_getItemSummary(condition) .. " - Rule #" .. tostring(condition.ruleId) .. "' is unknown", "ConditionRule.check")
 					return false
 				end
+				--]]
 			end
 			return true
 		end,
@@ -1828,7 +1836,7 @@ do
 					status = 0
 					level = 0
 				end
-			else
+			elseif (#(condition.items) == 1) then
 				status = Condition.getStatus(condition.items[1])
 				level  = Condition.getLevel(condition.items[1])
 			end
@@ -1898,7 +1906,7 @@ do
 			local isActive, lastStatusUpdateTime = true, 0
 			local msg = ""
 
-			if (#(sequence.items) > 1) then
+			if (#(sequence.items) > 0) then
 				for i, item in ipairs(sequence.items) do
 					condition = item.condition
 					if ((item.mainType == "SequenceItem") and (condition ~= nil)) then
@@ -1940,9 +1948,6 @@ do
 					status = 0
 					level = 0
 				end
-			else
-				status = Condition.getStatus(sequence.items[1])
-				level  = Condition.getLevel(sequence.items[1])
 			end
 
 			log(_getItemSummary(sequence) .. " - " .. msg, "Condition.updateStatus", 4)
@@ -3025,6 +3030,7 @@ Rule = {
 		-- Init the status of the rule
 		if (not rule.areSettingsOk) then
 			log(msg .. " - Can not start the rule - Settings are not correct", "Rule.start", 1)
+			debugLogEnd("Rule.start")
 			return
 		end
 		log(msg .. " - Init rule status", "Rule.start", 2)
