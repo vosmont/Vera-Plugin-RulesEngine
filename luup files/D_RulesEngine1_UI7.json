@@ -109,10 +109,21 @@
 		},
 		{
 			"Label": {
+				"lang_tag": "donate",
+				"text": "Donate"
+			},
+			"Position": 1,
+			"top_navigation_tab": "1",
+			"TabType": "javascript",
+			"ScriptName": "J_RulesEngine1.js",
+			"Function": "RulesEngine.showDonate"
+		},
+		{
+			"Label": {
 				"lang_tag": "advanced",
 				"text": "Advanced"
 			},
-			"Position": 1,
+			"Position": 2,
 			"TabType": "javascript",
 			"ScriptName": "shared.js",
 			"Function": "advanced_device"

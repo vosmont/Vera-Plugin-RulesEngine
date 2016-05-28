@@ -10,6 +10,8 @@
 
 window.ALTUI_RulesEngineResourcesAreLoaded = true;
 
+( function( $ ) {
+
 goog.require( "Blockly.Blocks" );
 goog.require( "Blockly.Msg" );
 
@@ -565,6 +567,16 @@ var _CATEGORIES = {
 	"18": "Light Sensor"
 };
 
+var _OPERATORS = {
+	"=" : "EQ",
+	"==": "EQ",
+	"<>": "NEQ",
+	"<" : "LT",
+	"<=": "LTE",
+	">" : "GT",
+	">=": "GTE"
+}
+
 var _INPUTS = {
 	"device": {
 		"id"      : { "type": "deviceFilter", "isRemovable": true, "isMainField": true, "field": "deviceId", "label": "name", "before": [ "room", "type", "category" ] },
@@ -573,15 +585,16 @@ var _INPUTS = {
 		"category": { "type": "deviceFilter", "isRemovable": true, "isMainField": true, "field": "category", "label": "category" }
 	},
 	"condition": {
-		"actions"      : { "type": "statement", "isRemovable": true, "label": "do", "align": "ALIGN_RIGHT", "check": [ "ConditionActionGroup" ] },
-		"params"       : { "type": "value", "isRemovable": true, "label": "with params", "align": "ALIGN_RIGHT", "check": [ "ConditionParams", "ConditionParam" ], "before": [ "actions" ] },
-		"variable"     : { "type": "deviceFilter", "field": "variable", "label": "variable", "before": [ "params", "actions" ] },
-		"service"      : { "type": "deviceFilter", "field": "service", "label": "service", "before": [ "variable" ] },
-		"time_operator": { "type": "dropdown", "isMainField": true, "field": "operator", "options": [ [ "is", "EQ" ], [ "is between", "BW" ] ], "label": "time" },
-		"timer_type"   : { "type": "dropdown", "isMainField": true, "isRemovable": true, "field": "timerType", "options": [ [ "on days of week", "2" ], [ "on days of month", "3" ] ], "label": "", "before": [ "params" ] }
-	},
-	"condition_sequence": {
-		
+		"ADD"           : { "type": "value", "autoCreate": false, "isRemovable": true, "isMultiple": true, "counter": "items", "label": "", "align": "ALIGN_RIGHT", "check": [ "Boolean" ], "before": [ "actions" ] },
+		"actions"       : { "type": "statement", "isRemovable": true, "label": "do", "align": "ALIGN_RIGHT", "check": [ "ConditionActionGroup" ] },
+		"params"        : { "type": "value", "isRemovable": true, "label": "with params", "align": "ALIGN_RIGHT", "check": [ "ConditionParams", "ConditionParam" ], "before": [ "actions" ] },
+		"device_type"   : { "type": "deviceFilter", "isMainField": true, "field": "deviceType", "label": "type" },
+		"event"         : { "type": "dropdown", "isMainField": true, "field": "eventId", "options": [], "label": "event" },
+		"variable"      : { "type": "deviceFilter", "field": "variable", "label": "variable", "before": [ "params", "actions" ] },
+		"service"       : { "type": "deviceFilter", "field": "service", "label": "service", "before": [ "variable" ] },
+		"time_operator" : { "type": "dropdown", "isMainField": true, "field": "operator", "options": [ [ "is", "EQ" ], [ "is between", "BW" ] ], "label": "time" },
+		"timer_type"    : { "type": "dropdown", "isMainField": true, "isRemovable": true, "field": "timerType", "options": [ [ "on days of week", "2" ], [ "on days of month", "3" ] ], "label": "", "before": [ "params" ] },
+		"timer_relative": { "type": "dropdown", "isMainField": true, "isRemovable": true, "field": "timerRelative", "options": [ [ "before sunrise", "1" ], [ "after sunrise", "2" ], [ "before sunset", "3" ], [ "after sunset", "4" ] ], "label": "", "before": [ "params" ] }
 	},
 	"action": {
 		"service": { "type": "deviceFilter", "isMainField": true, "field": "service", "label": "service", "before": [ "action", "action_params", "device" ] },
@@ -591,7 +604,7 @@ var _INPUTS = {
 	"action_group": {
 		"description": { "type": "value", "isRemovable": true, "label": "description", "align": "ALIGN_RIGHT", "check": [ "String" ], "before": [ "params", "conditions", "do" ] },
 		"params"     : { "type": "value", "isRemovable": true, "label": "with params", "align": "ALIGN_RIGHT", "check": [ "ActionParams", "ActionParam" ], "before": [ "conditions", "do" ] },
-		"condition" : { "type": "value", "isRemovable": true, "label": "if", "align": "ALIGN_RIGHT", "check": "Boolean", "before": [ "do" ] }
+		"condition"  : { "type": "value", "isRemovable": true, "label": "if", "align": "ALIGN_RIGHT", "check": "Boolean", "before": [ "do" ] }
 	}
 };
 
@@ -877,6 +890,7 @@ function _updateDeviceFilterInput( inputName, params, filteredDevices ) {
 			sortFunc = _sortOptionsByName;
 			break;
 		case "device_type":
+		case "condition_device_type":
 			endFunc = function( devices ) {
 				$.each( devices, function( i, device ) {
 					var deviceType = device.device_type;
@@ -1063,7 +1077,7 @@ function _updateDeviceFilterInputs( params ) {
 	filteredDevices = null;
 }
 
-function _createInput( inputName, params, onChange ) {
+function _createInput( inputName, params, onChange, index ) {
 	if ( this.getInput( inputName ) ) {
 		return;
 	}
@@ -1076,6 +1090,9 @@ function _createInput( inputName, params, onChange ) {
 			break;
 
 		case "value":
+			if ( inputParams.isMultiple ) {
+				inputName = inputName + ( index || "0" );
+			}
 			var input = this.appendValueInput( inputName );
 			var check = ( params.check ? params.check : inputParams.check );
 			if ( !_isEmpty( check ) ) {
@@ -1107,9 +1124,11 @@ function _createInput( inputName, params, onChange ) {
 				} ),
 				inputParams.field
 			);
+			/*
 			if ( typeof( onChange ) === "function" ) {
 				onChange.call( thatBlock, inputName );
 			}
+			*/
 			break;
 
 		case "statement":
@@ -1132,6 +1151,22 @@ function _createInput( inputName, params, onChange ) {
 		_moveInputBefore.call( this, inputName, inputParams.before );
 	}
 }
+/*
+function _refreshInput( inputName ) {
+	if ( !this.getInput( inputName ) ) {
+		return;
+	}
+	var inputParams = _getInputParam.call( this, inputName );
+	var object = this.getField( inputParams.field );
+	if ( object ) {
+		if ( object.getValue && object.setValue ) {
+			object.setValue( object.getValue() );
+		} else if ( object.setText ) {
+			object.setText( object.text_ );
+		}
+	}
+}
+*/
 
 function _checkDeviceFilterConnection( criterias ) {
 	// Check if connected devices are matching criterias
@@ -1280,13 +1315,24 @@ function _decompose( workspace ) {
 	var connection = containerBlock.getInput( "STACK" ).connection;
 	for ( var i = 0; i < this.inputs_.length; i++ ) {
 		var inputName = this.inputs_[ i ];
-		if ( this.getInput( inputName ) && Blockly.Blocks[ "controls_" + this.prefix_ + "_" + inputName ] ) {
-			var block = Blockly.Block.obtain( workspace, "controls_" + this.prefix_ + "_" + inputName );
-			if ( block ) {
-				block.initSvg();
-				connection.connect( block.previousConnection );
-				connection = block.nextConnection;
+		var inputParams = _getInputParam.call( this, inputName );
+		if ( Blockly.Blocks[ "controls_" + this.prefix_ + "_" + inputName ] ) {
+			var nbBlocksToCreate = 1;
+			if ( inputParams.isMultiple ) {
+				nbBlocksToCreate = this.params_[ inputParams.counter ] || 1;
+			} else if ( this.getInput( inputName ) == null ) {
+				continue;
 			}
+			var j = 0;
+			do {
+				var block = Blockly.Block.obtain( workspace, "controls_" + this.prefix_ + "_" + inputName );
+				if ( block ) {
+					block.initSvg();
+					connection.connect( block.previousConnection );
+					connection = block.nextConnection;
+				}
+				j++;
+			} while ( j < nbBlocksToCreate );
 		}
 	}
 	return containerBlock;
@@ -1296,9 +1342,13 @@ function _compose( containerBlock, onChange ) {
 	var block = containerBlock.getInputTargetBlock( "STACK" );
 	var controlsPrefix = "controls_" + this.prefix_ + "_";
 	while ( block ) {
-		if (block.type.indexOf(controlsPrefix) === 0) {
-			var inputName = block.type.substring(controlsPrefix.length); // Remove prefix from the type
-			isInputPresent[ inputName ] = true;
+		if ( block.type.indexOf( controlsPrefix ) === 0 ) {
+			var inputName = block.type.substring( controlsPrefix.length ); // Remove prefix from the type
+			if ( isInputPresent[ inputName ] ) {
+				isInputPresent[ inputName ]++;
+			} else {
+				isInputPresent[ inputName ] = 1;
+			}
 		}
 		block = block.nextConnection && block.nextConnection.targetBlock();
 	}
@@ -1306,14 +1356,25 @@ function _compose( containerBlock, onChange ) {
 		var inputName = this.inputs_[ i ];
 		var inputParams = _getInputParam.call( this, inputName );
 		if ( isInputPresent[ inputName ] ) {
+			if ( inputParams.isMultiple ) {
+				this.params_[ inputParams.counter ] = isInputPresent[ inputName ];
+			}
+			if ( inputParams.autoCreate === false) {
+				continue;
+			}
 			_createInput.call( this, inputName, {}, onChange );
 			if ( inputParams.before ) {
 				_moveInputBefore.call( this, inputName, inputParams.before );
 			}
 			// Update
 			_updateDeviceFilterInput.call( this, inputName, {} );
-		} else if ( inputParams.isRemovable ) {
-			_removeInput.call( this, inputName );
+		} else {
+			if ( inputParams.isMultiple ) {
+				this.params_[ inputParams.counter ] = 0;
+			}
+			if ( inputParams.isRemovable ) {
+				_removeInput.call( this, inputName );
+			}
 		}
 	}
 }
@@ -1594,92 +1655,152 @@ Blockly.Blocks.conditions.HUE3 = 50;
 Blockly.Msg.LIST_CONDITION_WITH_OPERATOR_TITLE = "List of conditions.";
 Blockly.Msg.LIST_CONDITION_EMPTY_TITLE = "no condition";
 
-Blockly.Blocks[ "list_with_operator_condition" ] = function() {};
-goog.mixin( Blockly.Blocks[ "list_with_operator_condition" ], Blockly.Blocks[ "lists_create_with" ] );
-Blockly.Blocks[ "list_with_operator_condition" ].updateShape_ = function() {
-	this.setColour( Blockly.Blocks.conditions.HUE1 );
-	// Delete everything.
-	if ( this.getInput( "EMPTY" ) ) {
-		this.removeInput( "EMPTY" );
-	} else {
-		var i = 0;
-		while ( this.getInput( "ADD" + i ) ) {
-			this.removeInput( "ADD" + i );
-			i++;
+Blockly.Blocks[ "list_with_operator_condition" ] = {
+	init: function() {
+		this.setHelpUrl( Blockly.Msg.LISTS_CREATE_WITH_HELPURL );
+		this.setColour( Blockly.Blocks.conditions.HUE1 );
+		this.prefix_ = "condition";
+		this.params_ = { "items": 3 };
+		this.inputs_ = [ "ADD", "actions" ];
+		_setMutator.call( this );
+
+		this.updateShape_();
+		this.setInputsInline( false );
+		this.setOutput(true, 'Boolean');
+		this.setTooltip(Blockly.Msg.LIST_CONDITION_WITH_OPERATOR_TITLE);
+	},
+
+	mutationToDom: function() {
+		var container = document.createElement( "mutation" );
+		_updateMutationWithRemovableInputs.call( this, container );
+		_updateMutationWithParams.call( this, [ "items" ], container );
+		this.params_[ "items" ] = parseInt( this.params_[ "items" ], 10 );
+		return container;
+	},
+
+	domToMutation: function( xmlElement ) {
+		_loadParamsFromMutation.call( this, xmlElement, [ "items" ] );
+		this.updateShape_();
+		_createInputsFromMutation.call( this, xmlElement );
+	},
+
+	decompose: function( workspace ) {
+		return _decompose.call( this, workspace );
+	},
+
+	compose: function( containerBlock ) {
+		_compose.call( this, containerBlock );
+		this.updateShape_();
+	},
+
+	updateShape_: function() {
+		// Clean
+		if (this.getInput('EMPTY')) {
+			this.removeInput('EMPTY');
+		} else {
+			var i = 0;
+			while (this.getInput('ADD' + i)) {
+				this.removeInput('ADD' + i);
+				i++;
+			}
 		}
-	}
-	// Rebuild block.
-	if ( this.itemCount_ === 0 ) {
-		this.appendDummyInput( "EMPTY" )
-			.appendField( Blockly.Msg.LIST_CONDITION_EMPTY_TITLE );
-	} else {
-		for ( var i = 0; i < this.itemCount_; i++ ) {
-			var input = this.appendValueInput( "ADD" + i )
-				.setCheck( "Boolean" );
-			if ( ( i === 0 ) && ( this.itemCount_ > 1 ) ) {
-				input.appendField( new Blockly.FieldDropdown( [
-						[ "one is true", "OR" ],
-						[ "all are true", "AND" ]
-					] ),
-					"operator"
-				);
+		// Rebuild block.
+		if ( this.params_[ "items" ] === 0 ) {
+			this.appendDummyInput( "EMPTY" )
+				.appendField( Blockly.Msg.LIST_CONDITION_EMPTY_TITLE );
+			_moveInputBefore.call( this, "EMPTY", [ "actions" ] );
+		} else {
+			for ( var i = 0; i < this.params_[ "items" ]; i++ ) {
+				var input = this.appendValueInput( "ADD" + i )
+					.setCheck( "Boolean" );
+				if ( ( i === 0 ) && ( this.params_[ "items" ] > 1 ) ) {
+					input.appendField( new Blockly.FieldDropdown( [
+							[ "one is true", "OR" ],
+							[ "all are true", "AND" ]
+						] ),
+						"operator"
+					);
+				}
+				_moveInputBefore.call( this, "ADD" + i, [ "actions" ] );
 			}
 		}
 	}
-	this.setInputsInline( false );
-	if ( !this.outputConnection ) {
-		this.setOutput( true, "Boolean" );
-	} else {
-		this.outputConnection.setCheck( "Boolean" );
-	}
+
 };
-Blockly.Blocks[ "list_with_operator_condition" ].validate = function() {
-	this.setTooltip(Blockly.Msg.LIST_CONDITION_WITH_OPERATOR_TITLE);
-}
 
+Blockly.Blocks[ "list_with_operators_condition" ] = {
+	init: function() {
+		this.setHelpUrl( Blockly.Msg.LISTS_CREATE_WITH_HELPURL );
+		this.setColour( Blockly.Blocks.conditions.HUE1 );
+		this.prefix_ = "condition";
+		this.params_ = { "items": 3 };
+		this.inputs_ = [ "ADD", "actions" ];
+		_setMutator.call( this );
 
-Blockly.Blocks[ "list_with_operators_condition" ] = function() {};
-goog.mixin( Blockly.Blocks[ "list_with_operators_condition" ], Blockly.Blocks[ "lists_create_with" ] );
-Blockly.Blocks[ "list_with_operators_condition" ].updateShape_ = function() {
-	this.setColour( Blockly.Blocks.conditions.HUE1 );
-	// Delete everything.
-	if ( this.getInput( "EMPTY" ) ) {
-		this.removeInput( "EMPTY" );
-	} else {
-		var i = 0;
-		while ( this.getInput( "ADD" + i ) ) {
-			this.removeInput( "ADD" + i );
-			i++;
+		this.updateShape_();
+		this.setInputsInline( false );
+		this.setOutput(true, 'Boolean');
+		this.setTooltip(Blockly.Msg.LIST_CONDITION_WITH_OPERATOR_TITLE);
+	},
+
+	mutationToDom: function() {
+		var container = document.createElement( "mutation" );
+		_updateMutationWithRemovableInputs.call( this, container );
+		_updateMutationWithParams.call( this, [ "items" ], container );
+		this.params_[ "items" ] = parseInt( this.params_[ "items" ], 10 );
+		return container;
+	},
+
+	domToMutation: function( xmlElement ) {
+		_loadParamsFromMutation.call( this, xmlElement, [ "items" ] );
+		this.updateShape_();
+		_createInputsFromMutation.call( this, xmlElement );
+	},
+
+	decompose: function( workspace ) {
+		return _decompose.call( this, workspace );
+	},
+
+	compose: function( containerBlock ) {
+		_compose.call( this, containerBlock );
+		this.updateShape_();
+	},
+
+	updateShape_: function() {
+		// Clean
+		if (this.getInput('EMPTY')) {
+			this.removeInput('EMPTY');
+		} else {
+			var i = 0;
+			while (this.getInput('ADD' + i)) {
+				this.removeInput('ADD' + i);
+				i++;
+			}
 		}
-	}
-	// Rebuild block.
-	if ( this.itemCount_ === 0 ) {
-		this.appendDummyInput( "EMPTY" )
-			.appendField( Blockly.Msg.LIST_CONDITION_EMPTY_TITLE );
-	} else {
-		for ( var i = 0; i < this.itemCount_; i++ ) {
-			var input = this.appendValueInput( "ADD" + i )
-				.setCheck( "Boolean" );
-			if ( i > 0 ) {
-				input.appendField( new Blockly.FieldDropdown( [
-						[ "or", "OR" ],
-						[ "and", "AND" ]
-					] ),
-					"operator" + i
-				);
+		// Rebuild block.
+		if ( this.params_[ "items" ] === 0 ) {
+			this.appendDummyInput( "EMPTY" )
+				.appendField( Blockly.Msg.LIST_CONDITION_EMPTY_TITLE );
+			_moveInputBefore.call( this, "EMPTY", [ "actions" ] );
+		} else {
+			for ( var i = 0; i < this.params_[ "items" ]; i++ ) {
+				var input = this.appendValueInput( "ADD" + i )
+					.setCheck( "Boolean" );
+				if ( i > 0 ) {
+					input.appendField( new Blockly.FieldDropdown( [
+							[ "or", "OR" ],
+							[ "and", "AND" ]
+						] ),
+						"operator" + i
+					);
+				}
+				_moveInputBefore.call( this, "ADD" + i, [ "actions" ] );
 			}
 		}
 	}
-	this.setInputsInline( false );
-	if ( !this.outputConnection ) {
-		this.setOutput( true, "Boolean" );
-	} else {
-		this.outputConnection.setCheck( "Boolean" );
-	}
+
 };
-Blockly.Blocks[ "list_with_operators_condition" ].validate = function() {
-	this.setTooltip(Blockly.Msg.LIST_CONDITION_WITH_OPERATOR_TITLE);
-}
+
 
 // ****************************************************************************
 // Conditions - Types
@@ -1692,19 +1813,34 @@ Blockly.Msg.CONDITION_MQTT_TOOLTIP = "(TODO)Condition on a received message from
 
 Blockly.Msg.CONTROLS_CONDITION_TITLE = "condition";
 Blockly.Msg.CONTROLS_CONDITION_TOOLTIP = "Condition.";
+Blockly.Msg.CONTROLS_CONDITION_ADD_TITLE = "subcondition";
+Blockly.Msg.CONTROLS_CONDITION_ADD_TOOLTIP = "Subcondition.";
 Blockly.Msg.CONTROLS_CONDITION_TIMER_TYPE_TITLE = "days";
 Blockly.Msg.CONTROLS_CONDITION_TIMER_TYPE_TOOLTIP = "Days of week or month during which the condition is valid.";
+Blockly.Msg.CONTROLS_CONDITION_TIMER_RELATIVE_TITLE = "relative";
+Blockly.Msg.CONTROLS_CONDITION_TIMER_RELATIVE_TOOLTIP = "Time is relative to sunrise/sunset.";
 Blockly.Msg.CONTROLS_CONDITION_PARAMS_TITLE = "parameters";
 Blockly.Msg.CONTROLS_CONDITION_PARAMS_TOOLTIP = "Parameters that modify the condition.";
 Blockly.Msg.CONTROLS_CONDITION_ACTIONS_TITLE = "actions";
 Blockly.Msg.CONTROLS_CONDITION_ACTIONS_TOOLTIP = "Actions to do on condition changes.";
 
 function _updateConditionValueShape() {
+	_removeInput.call( this, "variable" );
+	_removeInput.call( this, "service" );
+
 	// Device type
 	this.getField( "deviceLabel" ).text_ = ( this.params_.device_label ? this.params_.device_label : "device" );
 
+	// Event
+	if ( this.params_.condition_type === "event" ) {
+		var thatBlock = this;
+		_createDeviceFilterInput.call( this, "device_type", {}, function( inputName, newDeviceType ) {
+			_updateConditionEventShape.call( thatBlock, newDeviceType );
+		} );
+		return;
+	}
+
 	// Variable
-	_removeInput.call( this, "variable" );
 	if ( ( this.params_.variable == null ) || ( this.params_.operator == null ) || ( this.params_.value == null ) ) {
 		var variableInput;
 		if ( this.params_.variable == null ) {
@@ -1774,8 +1910,155 @@ function _updateConditionValueShape() {
 	if ( this.params_.service == null ) {
 		_createDeviceFilterInput.call( this, "service" );
 		//_moveInputBefore.call( this, "service", [ "variable", "params" ] );
-	} else {
-		_removeInput.call( this, "service" );
+		_moveInputBefore.call( this, "service" );
+	}
+}
+
+function _getEventList( deviceType ) {
+	var eventList = {};
+	var devicetypesDB = MultiBox.getDeviceTypesDB( "0" ); // TODO : controller_id
+	var dt = devicetypesDB[ deviceType ];
+	$.each( dt, function( key, value ) {
+		if ( value.ui_static_data && value.ui_static_data.eventList2 ) {
+			for ( var i = 0; i < value.ui_static_data.eventList2.length; i++ ) {
+				var event = value.ui_static_data.eventList2[ i ];
+				eventList[ event.id.toString() ] = event;
+			}
+		}
+	} );
+	return eventList;
+}
+
+function _getCleanText( label ) {
+	if ( ( label == null ) || ( label.text == null ) ) {
+		return "unknown";
+	}
+	return label.text.replace( "_DEVICE_NAME_", "device" ).replace( "_ARGUMENT_VALUE_", "value" );
+}
+
+function _updateConditionEventShape( deviceType, eventId, value ) {
+	var thatBlock = this;
+	// Clean
+	_removeInput.call( this, "event" );
+	for ( var i = 0; i < 10; i++ ) {
+		_removeInput.call( this, "and" + i );
+		_removeInput.call( this, "value" + i );
+	}
+
+	// Device condition event
+	if ( deviceType ) {
+
+		// Get the list of events
+		var eventList = _getEventList( deviceType )
+		var inputParams = _getInputParam.call( this, "event" );
+		inputParams.options = [];
+		$.each( eventList, function( eventId, event ) {
+			inputParams.options.push( [ _getCleanText( event.label ), eventId ] );
+		} );
+
+		if ( inputParams.options.length > 0 ) {
+			inputParams.options.sort( _sortOptionsById );
+			if ( eventId == null ) {
+				eventId = inputParams.options[0][1];
+			}
+
+			var _setVariable = function( multiVariables ) {
+				if ( multiVariables.length > 1 ) {
+					// MultiVariable: Armed;EQ;1|Tripped;EQ;1
+					thatBlock.params_.variable = $.map( multiVariables, function( multiVariable ) { return multiVariable.join( ";" ); } ).join( "|" );
+					thatBlock.params_.operator = null;
+					thatBlock.params_.value    = null;
+				} else if ( multiVariables.length === 1 ) {
+					// One variable
+					thatBlock.params_.variable = multiVariables[0][0];
+					thatBlock.params_.operator = multiVariables[0][1];
+					thatBlock.params_.value    = multiVariables[0][2];
+				}
+			};
+
+			var _onEventChange = function( inputName, newEventId ) {
+				for ( var i = 0; i < 10; i++ ) {
+					_removeInput.call( thatBlock, "and" + i );
+					_removeInput.call( thatBlock, "value" + i );
+				}
+				var event = eventList[ newEventId ];
+				if ( event == null ) {
+					return;
+				}
+				// Service
+				thatBlock.params_.service = event.serviceId;
+				// Variable(s)
+				var multiVariables = [];
+
+				if ( event.serviceStateTable ) {
+					// Predefined variable/operator/value
+					$.each( event.serviceStateTable, function( variableName, serviceState ) {
+						multiVariables.push( [ variableName , _OPERATORS[ serviceState.comparisson ], serviceState.value ] );
+					} );
+
+				} else if ( event.argumentList ) {
+					var initialValues = [];
+					if ( value ) {
+						// Get initial values
+						initialValues = $.map( value.split( "|" ), function( multiVariable ) {
+							var items = multiVariable.split( ";" );
+							return ( items[2] != null ? items[2] : "" );
+						} );
+					}
+
+					// List of arguments
+					$.each( event.argumentList, function( i, argument ) {
+						if ( i > 0 ) {
+							thatBlock
+								.appendDummyInput( "and" + i )
+								.appendField( "AND" );
+						}
+
+						var _onValueChange = function( newValue ) {
+							// TODO : check value (dataType, minValue, maxValue)
+							multiVariables[ i ] = [ argument.name, _OPERATORS[ argument.comparisson ], newValue ];
+							_setVariable( multiVariables );
+							return newValue;
+						};
+
+						var variableInput = thatBlock.appendDummyInput( "value" + i );
+						var initialValue = initialValues[i] || argument.defaultValue || "";
+						if ( argument.allowedValueList ) {
+							// List of allowed values
+							var options = [];
+							$.each( argument.allowedValueList, function( j, allowedValue ) {
+								options.push( [
+									_getCleanText( allowedValue.HumanFriendlyText ),
+									( allowedValue.value || allowedValue.On || allowedValue.Off || "0" )
+								] );
+							} );
+							var dropdown = new Blockly.FieldDropdown( options, _onValueChange );
+							dropdown.setValue( initialValue );
+							variableInput.appendField( dropdown, "value" + i );
+						} else {
+							// Value has to be set by user
+							if ( argument.prefix && argument.prefix.text ) {
+								variableInput.appendField( argument.prefix.text );
+							}
+							variableInput
+								.appendField( argument.comparisson )
+								.appendField( new Blockly.FieldTextInput( "", _onValueChange ), "value" + i );
+							if ( argument.suffix && argument.suffix.text ) {
+								variableInput.appendField( argument.suffix.text );
+							}
+						}
+						// Initial value or default value
+						_onValueChange( initialValue );
+					} );
+				}
+
+				_setVariable( multiVariables );
+			};
+
+			_createInput.call( this, "event", {}, _onEventChange );
+			// Initial event
+			_onEventChange( "event", eventId );
+		}
 	}
 }
 
@@ -1784,7 +2067,7 @@ Blockly.Blocks[ "condition_value" ] = {
 		this.setColour( Blockly.Blocks.conditions.HUE2 );
 		this.prefix_ = "condition";
 		this.params_ = {};
-		this.inputs_ = [ "actions", "params", "variable", "service" ];
+		this.inputs_ = [ "actions", "params", "device_type", "variable", "service" ];
 
 		this.appendValueInput( "device" )
 			.appendField( "device", "deviceLabel" )
@@ -1803,9 +2086,9 @@ Blockly.Blocks[ "condition_value" ] = {
 		var container = document.createElement( "mutation" );
 		_updateMutationWithRemovableInputs.call( this, container );
 		if ( !_isEmpty( this.params_.condition_type ) ) {
-			_updateMutationWithParams.call( this, [ "condition_type", "service", "variable", "operator", "value" ], container );
+			_updateMutationWithParams.call( this, [ "condition_type", "device_type", "event", "service", "variable", "operator", "value" ], container );
 		} else {
-			_updateMutationWithParams.call( this, [ "icon", "device_label", "operators", "service", "variable_label", "variable", "operator", "value" ], container );
+			_updateMutationWithParams.call( this, [ "icon", "device_label", "device_type", "event", "operators", "service", "variable_label", "variable", "operator", "value" ], container );
 		}
 		return container;
 	},
@@ -1814,7 +2097,7 @@ Blockly.Blocks[ "condition_value" ] = {
 		this.params_ = {};
 		if ( xmlElement ) {
 			_createInputsFromMutation.call( this, xmlElement );
-			_loadParamsFromMutation.call( this, xmlElement, [ "condition_type", "icon", "device_label", "operators", "service", "variable_label", "variable", "operator", "value" ] );
+			_loadParamsFromMutation.call( this, xmlElement, [ "condition_type", "icon", "device_label", "device_type", "event", "operators", "service", "variable_label", "variable", "operator", "value" ] );
 			switch( this.params_.condition_type ) {
 				case "sensor_armed":
 					this.params_.device_label = "security sensor";
@@ -1838,6 +2121,14 @@ Blockly.Blocks[ "condition_value" ] = {
 					this.params_.variable_label = "temperature";
 					this.params_.operators = [ [ "", "EQ" ], [ "", "LTE" ], [ "", "GTE" ] ];
 					break;
+				case "sensor_brightness":
+					this.params_.device_label = "sensor";
+					//this.params_.icon = "/cmh/skins/default/img/devices/device_states/temperature_sensor_default.png";
+					this.params_.service = "urn:micasaverde-com:serviceId:LightSensor1";
+					this.params_.variable = "CurrentLevel";
+					this.params_.variable_label = "brightness";
+					this.params_.operators = [ [ "", "EQ" ], [ "", "LTE" ], [ "", "GTE" ] ];
+					break;
 				case "switch":
 					this.params_.service = "urn:upnp-org:serviceId:SwitchPower1";
 					this.params_.variable = "Status";
@@ -1847,6 +2138,11 @@ Blockly.Blocks[ "condition_value" ] = {
 			}
 		}
 		_updateConditionValueShape.call( this );
+		_updateConditionEventShape.call( this,
+			this.params_[ "device_type" ] || this.params_[ "input_device_type" ],
+			this.params_[ "event" ] || this.params_[ "input_event" ],
+			this.params_[ "value" ] || this.params_[ "variable" ]
+		);
 	},
 
 	decompose: function( workspace ) {
@@ -1858,19 +2154,35 @@ Blockly.Blocks[ "condition_value" ] = {
 	},
 
 	validate: function() {
-		var params = {
-			"condition_service" : this.params_[ "input_service" ],
-			"condition_variable": this.params_[ "input_variable" ]
-		};
-		_updateDeviceFilterInputs.call( this, params );
+		_updateDeviceFilterInputs.call( this,
+			(
+				( this.params_.condition_type === "event" ) ?
+				{
+					"condition_device_type": this.params_[ "input_device_type" ]
+				}
+				:
+				{
+					"condition_service"    : this.params_[ "input_service" ],
+					"condition_variable"   : this.params_[ "input_variable" ]
+				}
+			)
+		);
 	},
 
 	onchange: function() {
-		var criterias = {
-			"condition_service" : (this.getFieldValue( "service" )  || this.params_.service),
-			"condition_variable": (this.getFieldValue( "variable" ) || this.params_.variable)
-		};
-		_checkDeviceFilterConnection.call( this, criterias );
+		_checkDeviceFilterConnection.call( this,
+			(
+				( this.params_.condition_type === "event" ) ?
+				{
+					"device_type": ( this.getFieldValue( "deviceType" ) || this.params_.device_type )
+				}
+				:
+				{
+					"condition_service" : ( this.getFieldValue( "service" )     || this.params_.service ),
+					"condition_variable": ( this.getFieldValue( "variable" )    || this.params_.variable )
+				}
+			)
+		);
 	}
 };
 
@@ -1879,6 +2191,7 @@ Blockly.Blocks[ "condition_time" ] = {
 		this.setColour( Blockly.Blocks.conditions.HUE1 );
 		this.prefix_ = "condition";
 		this.params_ = {};
+		//this.inputs_ = [ "time_operator", "timer_type", "timer_relative", "params", "actions" ];
 		this.inputs_ = [ "time_operator", "timer_type", "params", "actions" ];
 
 		_setMutator.call( this );
@@ -1904,14 +2217,14 @@ Blockly.Blocks[ "condition_time" ] = {
 	mutationToDom: function() {
 		var container = document.createElement( "mutation" );
 		_updateMutationWithRemovableInputs.call( this, container );
-		_updateMutationWithParams.call( this, [ "time_operator", "timer_type" ], container );
+		_updateMutationWithParams.call( this, [ "time_operator", "timer_type", "timer_relative" ], container );
 		return container;
 	},
 
 	domToMutation: function( xmlElement ) {
 		_createInputsFromMutation.call( this, xmlElement, this.updateShape_ );
 		// TODO : remove 'operator'
-		_loadParamsFromMutation.call( this, xmlElement, [ "time_operator", "operator", "timer_type" ] );
+		_loadParamsFromMutation.call( this, xmlElement, [ "time_operator", "operator", "timer_type", "timer_relative" ] );
 		var timeOperator = this.params_[ "input_time_operator" ] || this.params_[ "time_operator" ] || this.params_[ "operator" ]; // Compliance with older versions
 		this.updateShape_( "time_operator", timeOperator );
 		var timerType = this.params_[ "input_timer_type" ] || this.params_[ "timer_type" ];
@@ -2044,6 +2357,18 @@ Blockly.Blocks[ "controls_condition" ] = {
 	}
 };
 
+Blockly.Blocks[ "controls_condition_ADD" ] = {
+	init: function() {
+		this.setColour(Blockly.Blocks.conditions.HUE1);
+		this.appendDummyInput()
+			.appendField(Blockly.Msg.CONTROLS_CONDITION_ADD_TITLE);
+		this.setPreviousStatement(true);
+		this.setNextStatement(true);
+		this.setTooltip(Blockly.Msg.CONTROLS_CONDITION_ADD_TOOLTIP);
+		this.contextMenu = false;
+	}
+};
+
 Blockly.Blocks[ "controls_condition_timer_type" ] = {
 	init: function() {
 		this.setColour(Blockly.Blocks.conditions.HUE1);
@@ -2052,6 +2377,18 @@ Blockly.Blocks[ "controls_condition_timer_type" ] = {
 		this.setPreviousStatement(true);
 		this.setNextStatement(true);
 		this.setTooltip(Blockly.Msg.CONTROLS_CONDITION_TIMER_TYPE_TOOLTIP);
+		this.contextMenu = false;
+	}
+};
+
+Blockly.Blocks[ "controls_condition_timer_relative" ] = {
+	init: function() {
+		this.setColour(Blockly.Blocks.conditions.HUE1);
+		this.appendDummyInput()
+			.appendField(Blockly.Msg.CONTROLS_CONDITION_TIMER_RELATIVE_TITLE);
+		this.setPreviousStatement(true);
+		this.setNextStatement(true);
+		this.setTooltip(Blockly.Msg.CONTROLS_CONDITION_TIMER_RELATIVE_TOOLTIP);
 		this.contextMenu = false;
 	}
 };
@@ -2090,6 +2427,11 @@ Blockly.Blocks[ "condition_sequence" ] = {
 	init: function() {
 		this.setColour( Blockly.Blocks.conditions.HUE3 );
 
+		this.prefix_ = "condition";
+		this.params_ = {};
+		this.inputs_ = [ "actions" ];
+		_setMutator.call( this );
+
 		this.appendDummyInput()
 			.appendField( "sequence of conditions" );
 
@@ -2099,6 +2441,24 @@ Blockly.Blocks[ "condition_sequence" ] = {
 		this.setInputsInline( false );
 		this.setOutput( true, "Boolean" );
 		this.setTooltip( Blockly.Msg.CONDITION_SEQUENCE_TITLE );
+	},
+
+	mutationToDom: function() {
+		var container = document.createElement( "mutation" );
+		_updateMutationWithRemovableInputs.call( this, container );
+		return container;
+	},
+
+	domToMutation: function( xmlElement ) {
+		_createInputsFromMutation.call( this, xmlElement );
+	},
+
+	decompose: function( workspace ) {
+		return _decompose.call( this, workspace );
+	},
+
+	compose: function( containerBlock ) {
+		_compose.call( this, containerBlock );
 	}
 };
 
@@ -2595,7 +2955,7 @@ Blockly.Blocks['action_device'] = {
 		// TODO : remove input_action_service
 		_updateDeviceFilterInputs.call(
 			this, {
-				"action_service": (this.params_[ "input_service" ] || this.params_[ "input_action_service" ]),
+				"action_service": ( this.params_[ "input_service" ] || this.params_[ "input_action_service" ] ),
 				"action_action": this.params_[ "input_action" ]
 			}
 		);
@@ -2720,3 +3080,5 @@ Blockly.Blocks['action_param_critical'] = {
 		this.setTooltip( Blockly.Msg.ACTION_PARAM_CRITICAL_TOOLTIP );
 	}
 };
+
+} ) ( jQuery );

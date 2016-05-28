@@ -82,19 +82,16 @@ end
 
 _NAME = "RulesEngine"
 _DESCRIPTION = "Rules Engine for the Vera with visual editor"
-_VERSION = "0.10"
+_VERSION = "0.11"
 _AUTHOR = "vosmont"
 
-local RulesEngine = {
-	_params = {},
-	_isInitialized = false,
-	_isEnabled = false,
-	_isStarted = false
-}
-
-
+local _params = {}
+local _isInitialized = false
+local _isEnabled = false
+local _isStarted = false
 local _verbosity = 0
 local _minRecurrentInterval = 60
+local _maxHistoryInterval = 30 * 24 * 60 * 60
 
 
 -- **************************************************
@@ -204,7 +201,7 @@ end
 local string = table_extend({}, string) -- do not pollute original "string"
 do -- Extend string
 	-- Pads string to given length with given char from left.
-	function string.lpad (s, len, c)
+	function string.lpad (s, length, c)
 		s = tostring(s)
 		length = length or 2
 		c = c or " "
@@ -1112,7 +1109,7 @@ local function _getIntervalInSeconds (interval, unit)
 	return interval
 end
 
-RulesEngine.Params = {}
+Params = {}
 
 local _addParam = {}
 setmetatable(_addParam, {
@@ -1322,19 +1319,19 @@ do
 
 	-- Condition of type 'value'
 	ConditionTypes["condition_value"] = {
-		init = function (condition, ruleContext)
+		init = function( condition, ruleContext )
 			-- Get properties from mutation
-			if (condition.mutation ~= nil) then
-				if ((condition.service == nil) and (condition.mutation.service ~= nil)) then
+			if ( condition.mutation ~= nil ) then
+				if ( ( condition.service == nil ) and ( condition.mutation.service ~= nil ) ) then
 					condition.service = condition.mutation.service
 				end
-				if ((condition.variable == nil) and (condition.mutation.variable ~= nil)) then
+				if ( ( condition.variable == nil ) and ( condition.mutation.variable ~= nil ) ) then
 					condition.variable = condition.mutation.variable
 				end
-				if ((condition.operator == nil) and (condition.mutation.operator ~= nil)) then
+				if ( ( condition.operator == nil ) and ( condition.mutation.operator ~= nil ) ) then
 					condition.operator = condition.mutation.operator
 				end
-				if ((condition.value == nil) and (condition.mutation.value ~= nil)) then
+				if ( ( condition.value == nil ) and ( condition.mutation.value ~= nil ) ) then
 					condition.value = condition.mutation.value
 				end
 				condition.mutation = nil
@@ -1347,19 +1344,56 @@ do
 				condition.mainType = "Trigger"
 			end
 
+			-- Multi-state (serviceStateTable in D_*.json)
+			-- Armed;EQ;1|Tripped;EQ;1
+			if ( condition.variable ) then
+				local multiVariables = string.split( condition.variable, "|" )
+				if ( #multiVariables > 1 ) then
+					-- List of variables - Transform condition into a group of conditions
+					log( _getItemSummary( condition ) .. " - Several variables : transform into a group of conditions", "Condition.init", 4 )
+					local parent, actions = condition._parent, condition.actions
+					condition._parent, condition.actions = nil, nil
+					local newConditionTemplate = table.extend( {}, condition )
+					--
+					condition._parent = parent
+					condition.actions = actions
+					condition.mainType = "ConditionGroup"
+					condition.type = "list_with_operator_condition"
+					condition.operator = "AND"
+					condition.items = {}
+					condition.isMainConditionValue = true
+					--
+					for i, multiVariable in ipairs( multiVariables ) do
+						local params = string.split( multiVariable, ";" )
+						local newCondition = table.extend( {}, newConditionTemplate )
+						newCondition.id = condition.id .. "." .. tostring( i )
+						newCondition._parent = condition
+						newCondition.variable = params[1]
+						newCondition.operator = params[2]
+						newCondition.value    = params[3]
+						newCondition.isChildConditionValue = true
+						log( "Create " .. _getItemSummary( newCondition ), "Condition.init", 4 )
+						table.insert( condition.items, newCondition )
+						-- Now, process device ids
+						ConditionTypes["condition_value"].init( newCondition, ruleContext )
+					end
+					return
+				end
+			end
+
 			-- Get device id(s)
-			if (type(condition.device) == "table") then
-				local deviceIds = _getDeviceIds(condition)
+			if ( type( condition.device ) == "table" ) then
+				local deviceIds = _getDeviceIds( condition )
 				condition.device = nil
-				if (#deviceIds == 1) then
+				if ( #deviceIds == 1 ) then
 					-- Just one device
 					condition.deviceId = deviceIds[1]
 				else
-					-- List of device - Transform condition into a group of conditions
-					log(_getItemSummary(condition) .. " - Several devices : transform into a group of conditions", "Condition.init", 4)
+					-- List of devices - Transform condition into a group of conditions
+					log( _getItemSummary( condition ) .. " - Several devices : transform into a group of conditions", "Condition.init", 4 )
 					local parent, actions = condition._parent, condition.actions
 					condition._parent, condition.actions = nil, nil
-					local newConditionTemplate = table.extend({}, condition)
+					local newConditionTemplate = table.extend( {}, condition )
 					--
 					condition._parent = parent
 					condition.actions = actions
@@ -1369,45 +1403,45 @@ do
 					condition.items = {}
 					condition.isMainConditionValue = true
 					-- 
-					for i, deviceId in ipairs(deviceIds) do
-						local newCondition = table.extend({}, newConditionTemplate)
-						newCondition.id = condition.id .. "." .. tostring(i)
+					for i, deviceId in ipairs( deviceIds ) do
+						local newCondition = table.extend( {}, newConditionTemplate )
+						newCondition.id = condition.id .. "." .. tostring( i )
 						newCondition._parent = condition
 						newCondition.deviceId = deviceId
 						newCondition.isChildConditionValue = true
-						log("Create " .. _getItemSummary(newCondition), "Condition.init", 4)
-						table.insert(condition.items, newCondition)
-						--if (ruleContext ~= nil) then
-						--	ruleContext.conditions[newCondition.id] = newCondition._context
+						log( "Create " .. _getItemSummary( newCondition ), "Condition.init", 4 )
+						table.insert( condition.items, newCondition )
+						--if ( ruleContext ~= nil ) then
+						--	ruleContext.conditions[ newCondition.id ] = newCondition._context
 						--end
 					end
-					--ConditionTypes["list_with_operator_condition"].init(condition)
-					--Condition.init(conditions, condition._ruleId, parent)
+					--ConditionTypes[ "list_with_operator_condition" ].init( condition )
+					--Condition.init( conditions, condition._ruleId, parent )
 				end
 			else
-				condition.deviceId = tonumber(condition.deviceId)
+				condition.deviceId = tonumber( condition.deviceId )
 			end
 		end,
 
-		check = function (condition)
-			if not _checkParameters(condition, {"deviceId", "service", "variable"}) then
+		check = function( condition )
+			if not _checkParameters( condition, { "deviceId", "service", "variable" } ) then
 				return false
 			end
 			-- Check if device exists
-			local luDevice = luup.devices[condition.deviceId]
-			if (luDevice == nil) then
-				Rule.addError(condition._ruleId, "Init condition", _getItemSummary(condition) .. " - Device #" .. tostring(condition.deviceId) .. " is unknown")
+			local luDevice = luup.devices[ condition.deviceId ]
+			if ( luDevice == nil ) then
+				Rule.addError( condition._ruleId, "Init condition", _getItemSummary( condition ) .. " - Device #" .. tostring( condition.deviceId ) .. " is unknown" )
 				-- TODO : check if device exposes the variable ?
 				return false
 			end
 			return true
 		end,
 
-		start = function (condition)
-			local msg = _getItemSummary(condition)
-			if (condition.action == nil) then
+		start = function( condition )
+			local msg = _getItemSummary( condition )
+			if ( condition.action == nil ) then
 				-- Register for event service/variable/device
-				Events.registerItem(condition.service .. "-" .. condition.variable .. "-" .. tostring(condition.deviceId), condition)
+				Events.registerItem( condition.service .. "-" .. condition.variable .. "-" .. tostring( condition.deviceId ), condition )
 				-- Register (and eventually watch) for event service/variable (optimisation)
 				if not Events.isWatched(condition.service .. "-" .. condition.variable) then
 					log(msg .. " - Watch device #" .. tostring(condition.deviceId) .. "(" .. luup.devices[condition.deviceId].description .. ")", "ConditionValue.start", 3)
@@ -1470,16 +1504,12 @@ do
 			}
 			if (condition.value ~= nil) then
 				-- a threshold or a pattern is defined
-				local conditionValue = tonumber(condition.value)
-				if (conditionValue == nil) then
-					conditionValue = condition.value
-				end
-				local contextValue = tonumber(context.value)
-				if (contextValue == nil) then
-					contextValue = context.value
-				end
+				local conditionValue = tonumber(condition.value) or condition.value
+				local contextValue   = tonumber(context.value)   or context.value
+				log("condition.operator:" .. tostring(condition.operator) .. ", conditionValue:" .. tostring(conditionValue) .. ", contextValue:" .. tostring(contextValue), "ConditionValue.updateStatus", 3)
 				if ((context.value == nil)
 					or (OPERATORS[condition.operator] == nil)
+					or (type(contextValue) ~= type(conditionValue))
 					or ((condition.operator == "EQ") and (contextValue ~= conditionValue))
 					or (((condition.operator == "LT") or (condition.operator == "LTE")) and (contextValue > conditionValue))
 					or (((condition.operator == "GT") or (condition.operator == "GTE")) and (contextValue < conditionValue))
@@ -1806,7 +1836,7 @@ do
 				if (itemStatus == 1) then
 					itemLevel  = Condition.getLevel(item)
 					level = itemLevel
-					msg = "{#" .. item.id .. ":" .. tostring(itemStatus) .. ":" .. tostring(itemLevel) .. "}"
+					msg = "{#" .. item.id .. ":" .. tostring(itemStatus) .. "/" .. tostring(itemLevel) .. "}"
 				else
 					msg = "{#" .. item.id .. ":" .. tostring(itemStatus) .. "}"
 				end
@@ -1826,7 +1856,7 @@ do
 						if (itemLevel > level) then
 							level = itemLevel
 						end
-						msg = msg .. ":" .. tostring(itemLevel)
+						msg = msg .. "/" .. tostring(itemLevel)
 					end
 					msg = msg .. "}) => " .. tostring(isActive) .. ")"
 				end
@@ -2291,23 +2321,38 @@ History = {
 		local path = Store.getPath()
 		local fileName = "C_RulesEngine_History.csv"
 
+		local hasToPurge = false
 		_history = {}
-		log("Load history from file '" .. path .. fileName .. "'", "History.load")
-		local file = io.open(path .. fileName)
-		if (file == nil) then
-			log("File '" .. path .. fileName .. "' does not exist", "History.load")
+		log( "Load history from file '" .. path .. fileName .. "'", "History.load" )
+		local file = io.open( path .. fileName, "r" )
+		if ( file == nil ) then
+			log( "File '" .. path .. fileName .. "' does not exist", "History.load" )
 			return
 		end
-		local entry
+		local now = os.time()
+		local params, entry
 		for line in file:lines() do
-			entry = string.split(line, ";")
-			table.insert(_history, {
-				timestamp = entry[1],
-				eventType = entry[2],
-				event     = entry[3]
-			})
+			params = string.split( line, ";" )
+			entry = {
+				timestamp = tonumber( params[1] ),
+				eventType = params[2],
+				event     = params[3]
+			}
+			if ( os.difftime( now, entry.timestamp ) <= _maxHistoryInterval ) then
+				table.insert( _history, entry )
+			else
+				hasToPurge = true
+			end
 		end
 		file:close()
+
+		if hasToPurge then
+			file = io.open( path .. fileName, "w+" )
+			for _, entry in ipairs( _history ) do
+				file:write( string.format( "%s;%s;%s\n", entry.timestamp, entry.eventType, entry.event ) )
+			end
+			file:close()
+		end
 	end,
 
 	append = function (entry)
@@ -2336,23 +2381,11 @@ History = {
 	end,
 
 	-- TODO : store ruleId
-	get = function (params)
-		--[[
+	get = function( params )
 		local history = {}
-		for _, item in ipairs(_history) do
-			if ((params.id == nil) or (item.ruleIid == params.id)) then
-				table.insert(history, item)
-			end
-		end
-		return history
-		--]]
-		-- Just return the last events
-		-- TODO : purge !!!!
-		local history = {}
-		for i = math.max(1, #_history - 100), #_history do
-			local item = _history[i]
-			if ((params.id == nil) or (item.ruleIid == params.id)) then
-				table.insert(history, item)
+		for _, item in ipairs( _history ) do
+			if ( ( params.id == nil ) or ( item.ruleIid == params.id ) ) then
+				table.insert( history, item )
 			end
 		end
 		return history
@@ -2360,11 +2393,11 @@ History = {
 }
 
 function notifyTimelineUpdate ()
-	if (RulesEngine._params.deviceId == nil) then
+	if (_params.deviceId == nil) then
 		return false
 	end
 	-- TODO : faind a way to notify changes on scheduled tasks
-	--luup.variable_set(SID.RulesEngine, "LastUpdate", os.time(), RulesEngine._params.deviceId)
+	--luup.variable_set(SID.RulesEngine, "LastUpdate", os.time(), _params.deviceId)
 end
 
 
@@ -2810,7 +2843,7 @@ RulesInfos = {
 	end,
 
 	save = function ()
-		if (RulesEngine._params.deviceId == nil) then
+		if (_params.deviceId == nil) then
 			return false
 		end
 		local _path = Store.getPath()
@@ -2837,7 +2870,7 @@ RulesInfos = {
 		-- Notify a change to the client
 		-- TODO : notifier que si changement effectif : voir sur ALTUI comment fonctionne les maj de variable
 		-- TODO : notify which rules have changed
-		luup.variable_set(SID.RulesEngine, "LastUpdate", tostring(os.time()), RulesEngine._params.deviceId)
+		luup.variable_set(SID.RulesEngine, "LastUpdate", tostring(os.time()), _params.deviceId)
 	end,
 
 	get = function (params)
@@ -2852,7 +2885,7 @@ RulesInfos = {
 			end
 		end
 		if (#rulesInfos == 0) then
-			log("Can not find rule infos for rule #" .. tostring(params.id), "RulesInfos.get", 4)
+			log("Can not find rule infos for params " .. tostring(json.encode(params)), "RulesInfos.get", 4)
 		end
 		return rulesInfos
 	end,
@@ -3138,7 +3171,7 @@ Rule = {
 
 	-- Is rule active
 	isActive = function (ruleId)
-		return (Rule.getStatus(ruleId) == "1")
+		return (Rule.getStatus(ruleId) == 1)
 	end,
 
 	-- Is rule started
@@ -3148,7 +3181,6 @@ Rule = {
 			return false
 		end
 		return (rule._context.isStarted == true)
-
 	end,
 
 	-- Get rule level
@@ -3836,6 +3868,11 @@ RulesFile = {
 
 		-- Parse the XML string into LOM (Lua Object Model from LuaExpat)
 		local content = RulesFile.getContent(fileName)
+		if (content == nil) then
+			RulesInfos.save()
+			debugLogEnd("RulesFile.load")
+			return
+		end
 		local lom = require("lxp.lom")
 		xmltable = lom.parse(content)
 	--log(json.encode(xmltable))
@@ -3894,8 +3931,8 @@ function updatePanel ()
 	end
 	panel = panel .. '<div style="color:gray;font-size:.7em;text-align:left;">' .. tostring(nbRules) .. ' rules</div>'
 --print(panel)
-	luup.variable_set(SID.RulesEngine, "RulePanel", panel, RulesEngine._params.deviceId)
-	luup.variable_set(SID.RulesEngine, "Status", status, RulesEngine._params.deviceId)
+	luup.variable_set(SID.RulesEngine, "RulePanel", panel, _params.deviceId)
+	luup.variable_set(SID.RulesEngine, "Status", status, _params.deviceId)
 end
 
 -- **************************************************
@@ -3905,7 +3942,7 @@ end
 function loadModules ()
 	debugLogBegin("loadModules")
 
-	local moduleNames = string.split(RulesEngine._params.modules, ",")
+	local moduleNames = string.split(_params.modules, ",")
 	for _, moduleName in ipairs(moduleNames) do
 		-- Load module
 		log("Load module '" .. tostring(moduleName) .. "'", "loadModules")
@@ -3926,7 +3963,7 @@ function loadStartupFiles ()
 	debugLogBegin("loadStartupFiles")
 
 	local lfs = require("lfs")
-	local fileNames = string.split(RulesEngine._params.startupFiles, ",")
+	local fileNames = string.split(_params.startupFiles, ",")
 	for _, fileName in ipairs(fileNames) do
 		-- Load and execute startup LUA file
 		local path = ""
@@ -3960,7 +3997,7 @@ end
 function loadRulesFiles ()
 	debugLogBegin("loadRulesFiles")
 
-	local fileNames = string.split(RulesEngine._params.rulesFiles, ",")
+	local fileNames = string.split(_params.rulesFiles, ",")
 	log("Load rules from files", "loadRulesFiles")
 	-- Add rules from XML files
 	for _, fileName in ipairs(fileNames) do
@@ -3972,22 +4009,22 @@ function loadRulesFiles ()
 end
 
 function isEnabled()
-	return (RulesEngine._isEnabled == true)
+	return (_isEnabled == true)
 end
 
 function isStarted()
-	return (RulesEngine._isStarted == true)
+	return (_isStarted == true)
 end
 
 function isInitialized()
-	return (RulesEngine._isInitialized == true)
+	return (_isInitialized == true)
 end
 
 -- Start engine
 function start ()
 	debugLogBegin("start")
 
-	if (RulesEngine._isStarted) then
+	if (_isStarted) then
 		log("RulesEngine already started", "start")
 		return
 	end
@@ -3998,7 +4035,7 @@ function start ()
 	--updatePanel()
 	RulesInfos.save()
 	--RulesEngine.dump()
-	RulesEngine._isStarted = true
+	_isStarted = true
 
 	debugLogEnd("start")
 end
@@ -4007,7 +4044,7 @@ end
 function stop ()
 	debugLogBegin("stop")
 
-	if (not RulesEngine._isStarted) then
+	if (not _isStarted) then
 		log("RulesEngine already stopped", "stop")
 		return
 	end
@@ -4016,7 +4053,7 @@ function stop ()
 	History.add(os.time(), "General", "Stop engine")
 	Rules.stop()
 	RulesInfos.save()
-	RulesEngine._isStarted = false
+	_isStarted = false
 
 	debugLogEnd("stop")
 end
@@ -4024,27 +4061,27 @@ end
 -- Enable engine
 function enable ()
 	log("Enable RulesEngine", "enable")
-	if (RulesEngine._isEnabled) then
-		log("RulesEngine isalready enabled", "enable")
+	if (_isEnabled) then
+		log("RulesEngine is already enabled", "enable")
 		return
 	end
-	RulesEngine._isEnabled = true
+	_isEnabled = true
 	History.add(os.time(), "General", "Enable engine")
 	start()
-	Variable.set(RulesEngine._params.deviceId, VARIABLE.SWITCH_POWER, "1")
+	Variable.set(_params.deviceId, VARIABLE.SWITCH_POWER, "1")
 end
 
 -- Disable engine
 function disable ()
 	log("Disable RulesEngine", "disable")
-	if (not RulesEngine._isEnabled) then
+	if (not _isEnabled) then
 		log("RulesEngine is already disabled", "disable")
 		return
 	end
-	RulesEngine._isEnabled = false
+	_isEnabled = false
 	History.add(os.time(), "General", "Disable engine")
 	stop()
-	Variable.set(RulesEngine._params.deviceId, VARIABLE.SWITCH_POWER, "0")
+	Variable.set(_params.deviceId, VARIABLE.SWITCH_POWER, "0")
 end
 
 -- Dump for debug
@@ -4079,19 +4116,18 @@ function reset ()
 	-- for ruleId, rule in pairs(_rules) do
 		-- Rule.init(rule)
 	-- end
-	_rules  = {}
+	_rules = {}
 	_indexRulesById = {}
 	_indexRulesByName = {}
 	_indexRulesByEvent = {}
-
-	RulesEngine._params = {}
+	_params = {}
 
 	_scheduledTasks = {}
 	_nextWakeUps = {}
 end
 
 -------------------------------------------
--- Handler
+-- HTTP request handler
 -------------------------------------------
 
 local _handlerCommands = {
@@ -4159,7 +4195,7 @@ local _handlerCommands = {
 		if (path == "/system") then
 			log("Get system info", "handleCommand.ISS", 2)
 			result = {
-				id = "RulesEngine-" .. tostring(luup.pk_accesspoint) .. "-" .. RulesEngine._params.deviceId,
+				id = "RulesEngine-" .. tostring(luup.pk_accesspoint) .. "-" .. _params.deviceId,
 				apiversion = 1
 			}
 
@@ -4271,10 +4307,10 @@ local function _initPluginInstance (lul_device)
 
 	-- Get plugin params for this device
 	Variable.set(lul_device, VARIABLE.PLUGIN_VERSION, _VERSION)
-	RulesEngine._isEnabled = (Variable.getOrInit(lul_device, VARIABLE.SWITCH_POWER, "0") == "1")
+	_isEnabled = (Variable.getOrInit(lul_device, VARIABLE.SWITCH_POWER, "0") == "1")
 	Variable.getOrInit(lul_device, VARIABLE.MESSAGE, "")
 	Variable.getOrInit(lul_device, VARIABLE.LAST_UPDATE, "")
-	RulesEngine._params = {
+	_params = {
 		deviceId = lul_device,
 		modules = Variable.getOrInit(lul_device, VARIABLE.MODULES, "") or "",
 		toolboxConfig = Variable.getOrInit(lul_device, VARIABLE.TOOLBOX_CONFIG, "") or "",
@@ -4313,7 +4349,7 @@ local function _deferredStartup (lul_device)
 	loadRulesFiles()
 	RulesInfos.remove({ isFormer = true })
 
-	RulesEngine._isInitialized = true
+	_isInitialized = true
 
 	if (isEnabled()) then
 		start()
@@ -4384,10 +4420,23 @@ end
 
 ScheduledTasks.createIndexFunctionNames()
 
--- Expose the RulesEngine in the Global Name Space for custom scripts
-_G["RulesEngine"] = {
+
+local RulesEngine = {
 	log = log,
+	--
+	Rule = Rule,
+	Rules = Rules,
+	RulesFile = RulesFile,
+	--
+	start = start,
+	stop = stop,
+	enable = enable,
+	disable = disable,
+	isEnabled = isEnabled,
+	isStarted = isStarted,
+	--
 	getEnhancedMessage = getEnhancedMessage,
+	getDeviceIdByName = _getDeviceIdByName,
 	addHook = Hooks.add,
 	doHook = Hooks.execute,
 	addActionType = ActionTypes.add,
@@ -4395,8 +4444,13 @@ _G["RulesEngine"] = {
 	ActionGroups = ActionGroups,
 	doRuleActions = ActionGroups.execute,
 	setVerbosity = setVerbosity,
-	setMinRecurrentInterval = setMinRecurrentInterval
+	setMinRecurrentInterval = setMinRecurrentInterval,
+	--
+	startup = startup
 }
+-- Expose the RulesEngine in the Global Name Space for custom scripts
+_G["RulesEngine"] = RulesEngine
+
 _G["RulesEngine.Tools"] = {
 	formatMessage = getEnhancedMessage
 }
@@ -4413,4 +4467,7 @@ _G["RulesEngine.registerWithALTUI"] = _registerWithALTUI
 _G["RulesEngine.ScheduledTasks.execute"] = ScheduledTasks.execute
 --_G["RulesEngine.ActionGroup.execute"] = ActionGroup.execute
 --_G["RulesEngine.Condition.updateStatus"] = Condition.updateStatus
---_G["RulesEngine.Rule.updateStatus"] = Rule.updateStatus
+_G["RulesEngine.Rule.updateStatus"] = Rule.updateStatus
+
+-- TODO : to check
+return RulesEngine

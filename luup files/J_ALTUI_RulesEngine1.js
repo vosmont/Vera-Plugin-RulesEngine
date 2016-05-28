@@ -47,7 +47,7 @@ var ALTUI_RulesEngine = ( function( window, undefined ) {
 <sep></sep>\
 <category name="Device" colour="320">\
 	<block type="list_device"></block>\
-	<block type="device"><mutation inputs="device_id,device_room"></mutation><field name="roomId"></field></block>\
+	<block type="device"><mutation inputs="id,room"></mutation><field name="roomId"></field></block>\
 </category>\
 <sep></sep>\
 <category name="Conditions" colour="40">\
@@ -61,13 +61,17 @@ var ALTUI_RulesEngine = ( function( window, undefined ) {
 		<block type="condition_sequence_item"></block>\
 	</category>\
 	<category name="Type">\
+		<block type="condition_value"><mutation condition_type="event"></mutation></block>\
 		<block type="condition_value"></block>\
+		<!--\
 		<category name="Templates">\
 			<block type="condition_value"><mutation condition_type="sensor_armed"></mutation></block>\
 			<block type="condition_value"><mutation condition_type="sensor_tripped"></mutation></block>\
 			<block type="condition_value"><mutation condition_type="sensor_temperature"></mutation></block>\
+			<block type="condition_value"><mutation condition_type="sensor_brightness"></mutation></block>\
 			<block type="condition_value"><mutation condition_type="switch"></mutation></block>\
 		</category>\
+		-->\
 		<block type="condition_time"></block>\
 		<block type="condition_rule"></block>\
 	</category>\
@@ -1468,6 +1472,10 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 		$( "#altui-rule-export" ).toggleClass( "collapse", false );
 		Blockly.fireUiEvent(window, 'resize');
 	}
+
+	// *************************************************************************************************
+	// Main
+	// *************************************************************************************************
 
 	// explicitly return public methods when this object is instantiated
 	return {
