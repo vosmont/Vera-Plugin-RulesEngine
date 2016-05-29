@@ -1935,6 +1935,17 @@ function _getCleanText( label ) {
 	}
 	return label.text.replace( "_DEVICE_NAME_", "device" ).replace( "_ARGUMENT_VALUE_", "value" );
 }
+function _getAllowedValue( allowedValue ) {
+	// Vera implementation is a bit surprising
+	// value can be in "value", "on", "off", "m1", "m2", ...
+	var value = "0";
+	$.each( allowedValue, function( key, tmpValue ) {
+		if ( key !== "HumanFriendlyText" ) {
+			value = tmpValue;
+		}
+	} );
+	return value;
+}
 
 function _updateConditionEventShape( deviceType, eventId, value ) {
 	var thatBlock = this;
@@ -2029,7 +2040,7 @@ function _updateConditionEventShape( deviceType, eventId, value ) {
 							$.each( argument.allowedValueList, function( j, allowedValue ) {
 								options.push( [
 									_getCleanText( allowedValue.HumanFriendlyText ),
-									( allowedValue.value || allowedValue.On || allowedValue.Off || "0" )
+									_getAllowedValue( allowedValue )
 								] );
 							} );
 							var dropdown = new Blockly.FieldDropdown( options, _onValueChange );
