@@ -2228,7 +2228,8 @@ do
 			log("Action '" .. tostring(json.encode(action)), "ActionType.action_device.init", 4)
 		end,
 		check = function (action)
-			if not _checkParameters(action, {"deviceIds", "service", "action", "arguments"}) then
+			--if not _checkParameters(action, {"deviceIds", "service", "action", "arguments"}) then
+			if not _checkParameters( action, { "deviceIds", "service", "action" } ) then
 				return false
 			end
 			return true
