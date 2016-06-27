@@ -2012,8 +2012,12 @@ function _updateConditionEventShape( deviceType, eventId, value ) {
 					if ( value ) {
 						// Get initial values
 						initialValues = $.map( value.split( "|" ), function( multiVariable ) {
-							var items = multiVariable.split( ";" );
-							return ( items[2] != null ? items[2] : "" );
+							if ( multiVariable.indexOf( ";" ) > -1 ) {
+								var items = multiVariable.split( ";" );
+								return ( items[2] != null ? items[2] : "" );
+							} else {
+								return multiVariable;
+							}
 						} );
 					}
 
