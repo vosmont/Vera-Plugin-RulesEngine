@@ -475,6 +475,7 @@ Blockly.Msg.LIST_RULE_PROPERTY_TOOLTIP = "List of rule properties";
 Blockly.Msg.LIST_RULE_PROPERTY_CREATE_EMPTY_TITLE = "no property";
 Blockly.Msg.RULE_PROPERTY_AUTO_UNTRIP_TOOLTIP = "Define the time after which the rule is switched off automatically.";
 Blockly.Msg.RULE_PROPERTY_IS_ACKNOWLEDGEABLE_TOOLTIP = "Define if this rule is acknowledgeable.";
+Blockly.Msg.RULE_PROPERTY_ROOM_TOOLTIP = "Define the room of this rule.";
 
 
 Blockly.Blocks[ "list_property" ] = function() {};
@@ -539,6 +540,24 @@ Blockly.Blocks[ "property_is_acknowledgeable" ] = {
 		this.setInputsInline( true );
 		this.setOutput( true, "Property" );
 		this.setTooltip(Blockly.Msg.RULE_PROPERTY_IS_ACKNOWLEDGEABLE_TOOLTIP);
+	}
+};
+
+Blockly.Blocks[ "property_room" ] = {
+	init: function() {
+		this.setColour( Blockly.Blocks.properties.HUE );
+
+		var roomOptions = [ [ "No room", "" ] ];
+		$.each( ALTUI_RulesEngine.getRooms(), function( i, rule ) {
+			roomOptions.push( [ rule.name, rule.id.toString() ] );
+		} );
+		this.appendDummyInput()
+			.appendField( "room" )
+			.appendField( new Blockly.FieldDropdown( roomOptions ), "roomId" );
+
+		this.setInputsInline( true );
+		this.setOutput( true, "Property" );
+		this.setTooltip(Blockly.Msg.RULE_PROPERTY_ROOM_TOOLTIP);
 	}
 };
 

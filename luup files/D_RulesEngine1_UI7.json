@@ -24,7 +24,7 @@
 			]
 		}
 	],
-	"inScene": "1",
+	"inScene": 1,
 	"doc_url":{
 		"doc_forced_url":{
 			"text":"http://forum.micasaverde.com/"
@@ -38,7 +38,7 @@
 			},
 			"Position": 0,
 			"TabType": "flash",
-			"TopNavigationTab": 1,
+			"top_navigation_tab": 1,
 			"SceneGroup": [
 				{
 					"id": 1
@@ -56,7 +56,7 @@
 					"ControlType": "multi_state_button",
 					"states": [
 						{
-							"ControlCode": "RulesEngine_off",
+							"ControlCode": "rulesengine_off",
 							"Label": {
 								"lang_tag": "ui7_off",
 								"text": "OFF"
@@ -78,7 +78,7 @@
 							}
 						},
 						{
-							"ControlCode": "RulesEngine_on",
+							"ControlCode": "rulesengine_on",
 							"Label": {
 								"lang_tag": "ui7_on",
 								"text": "ON"
@@ -104,16 +104,139 @@
 						"Top": 0,
 						"Left": 10
 					}
+				},
+				{
+					"ControlGroup": 1,
+					"ControlType": "label",
+					"top": 0,
+					"left": 0,
+					"text_align": "left",
+					"Label": {
+						"lang_tag": "version",
+						"text": "Version"
+					},
+					"Display": {
+						"Top": 25,
+						"Left": 10
+					}
+				},
+				{
+					"ControlGroup": 1,
+					"ControlType": "variable",
+					"top": 0,
+					"left": 0,
+					"x": 1,
+					"text_align": "left",
+					"Display": {
+						"Service": "urn:upnp-org:serviceId:RulesEngine1",
+						"Variable": "PluginVersion",
+						"Top": 25,
+						"Left": 100
+					}
+				},
+				{
+					"ControlType": "label",
+					"text_align": "left",
+					"Label": {
+						"lang_tag": "ui7_last_update",
+						"text": "Last update"
+					},
+					"Display": {
+						"Top": 40,
+						"Left": 10
+					}
+				},
+				{
+					"ControlType": "variable",
+					"text_align": "left",
+					"Display": {
+						"Service": "urn:upnp-org:serviceId:RulesEngine1",
+						"Variable": "LastUpdate",
+						"Top": 40,
+						"Left": 100
+					}
+				},
+				{
+					"ControlType": "label",
+					"text_align": "left",
+					"Label": {
+						"lang_tag": "last_message",
+						"text": "Last message"
+					},
+					"Display": {
+						"Top": 55,
+						"Left": 10
+					}
+				},
+				{
+					"ControlGroup": 1,
+					"ControlType": "variable",
+					"text_align": "left",
+					"Display": {
+						"Service": "urn:upnp-org:serviceId:RulesEngine1",
+						"Variable": "LastMessage",
+						"Top": 55,
+						"Left": 100
+					}
+				},
+				{
+					"ControlGroup": 1,
+					"ControlType": "line_break"
+				},
+				{
+					"ControlType": "label",
+					"text_align": "left",
+					"Label": {
+						"lang_tag": "ui7_last_error",
+						"text": "Last error"
+					},
+					"Display": {
+						"Top": 70,
+						"Left": 10
+					}
+				},
+				{
+					"ControlGroup": 1,
+					"ControlType": "variable",
+					"text_align": "left",
+					"Display": {
+						"Service": "urn:upnp-org:serviceId:RulesEngine1",
+						"Variable": "LastError",
+						"Top": 70,
+						"Left": 100
+					}
 				}
 			]
+		},
+		{
+			"Label": {
+				"lang_tag": "rules",
+				"text": "Rules"
+			},
+			"Position": 1,
+			"top_navigation_tab": 1,
+			"TabType": "javascript",
+			"ScriptName": "J_RulesEngine1.js",
+			"Function": "RulesEngine.showRules"
+		},
+		{
+			"Label": {
+				"lang_tag": "errors",
+				"text": "Errors"
+			},
+			"Position": 2,
+			"top_navigation_tab": 1,
+			"TabType": "javascript",
+			"ScriptName": "J_RulesEngine1.js",
+			"Function": "RulesEngine.showErrors"
 		},
 		{
 			"Label": {
 				"lang_tag": "donate",
 				"text": "Donate"
 			},
-			"Position": 1,
-			"top_navigation_tab": "1",
+			"Position": 3,
+			"top_navigation_tab": 1,
 			"TabType": "javascript",
 			"ScriptName": "J_RulesEngine1.js",
 			"Function": "RulesEngine.showDonate"
@@ -123,7 +246,7 @@
 				"lang_tag": "advanced",
 				"text": "Advanced"
 			},
-			"Position": 2,
+			"Position": 4,
 			"TabType": "javascript",
 			"ScriptName": "shared.js",
 			"Function": "advanced_device"

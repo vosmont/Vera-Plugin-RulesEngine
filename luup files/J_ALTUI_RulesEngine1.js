@@ -15,6 +15,8 @@ var ALTUI_RulesEngine = ( function( window, undefined ) {
 	var _settings = {};
 	var _registerIsDone = false;
 	var _rulesInfos = {};
+	var _altuiid, _version, _debugMode;
+	var _lastUpdate = 0;
 
 	var htmlControlPanel = '\
 <div id="rulesengine-blockly-panel">\
@@ -31,6 +33,9 @@ var ALTUI_RulesEngine = ( function( window, undefined ) {
 		<value name="description">\
 			<block type="text_area"><field name="TEXT"></field></block>\
 		</value>\
+		<value name="properties">\
+			<block type="property_room"></block>\
+		</value>\
 		<value name="conditions">\
 			<block type="list_with_operator_condition">\
 				<mutation items="2"></mutation>\
@@ -43,6 +48,7 @@ var ALTUI_RulesEngine = ( function( window, undefined ) {
 	<block type="list_property"></block>\
 	<block type="property_auto_untrip"></block>\
 	<block type="property_is_acknowledgeable"></block>\
+	<block type="property_room"></block>\
 </category>\
 <sep></sep>\
 <category name="Device" colour="320">\
@@ -124,9 +130,11 @@ div.altui-rule-acknowledged { cursor: pointer; background: url("http://vosmont.g
 .altui-rule-toolbar { margin:5px 15px;  }\
 .altui-rule-arm { padding-right: 3px; cursor: pointer; } \
 .altui-rule-ack { padding-right: 3px; cursor: pointer; } \
-.altui-rule-warning { color: orange; } \
-.altui-rule-errors { cursor: pointer; } \
-.altui-rule-title-name { margin-left: 5px; }\
+.altui-rule-warning { color:orange; } \
+.altui-rule-errors { cursor:pointer; } \
+.altui-rule-title-name { margin-left:5px; }\
+.altui-rule-body table { width:100%; }\
+.altui-rule-body .altui-rule-summary { vertical-align:top; text-align:right; }\
 .altui-rule-body .altui-rule-infos { margin-left:5px; }\
 .altui-rule-body .altui-rule-errors { color:red; font-size:0.8em; }\
 .altui-rule-xml .panel-body { padding: 0px; }\
@@ -150,17 +158,16 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 	}
 
 	function _onDeviceStatusChanged( event, device ) {
+		if ( !device ) {
+			return;
+		}
 		if ( device.device_type === "urn:schemas-upnp-org:device:RulesEngine:1" ) {
-			var mySettings = _settings[ device.altuiid ];
-			if ( mySettings == null ) {
-				return;
-			}
 			// Seems to be called at each change in the system, not just our device
 			for ( var i = 0; i < device.states.length; i++ ) {
 //console.log("onDeviceStatusChanged", device.states[ i ].variable, device.states[ i ].value);
 				if ( device.states[ i ].variable === "LastUpdate" ) {
-					if ( mySettings.lastUpdate !== device.states[ i ].value ) {
-						mySettings.lastUpdate = device.states[ i ].value;
+					if ( _lastUpdate !== device.states[ i ].value ) {
+						_lastUpdate = device.states[ i ].value;
 						if ( $( "#rulesengine-blockly-workspace" ).length > 0 ) {
 							// Update the rule currently displayed (readonly mode)
 							var ruleId = $( "#rulesengine-blockly-workspace" ).data( "rule_id" );
@@ -183,6 +190,11 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 				}
 			}
 		}
+	}
+
+	function _init( device ) {
+		_version = MultiBox.getStatus( device, "urn:upnp-org:serviceId:RulesEngine1", "PluginVersion" );
+		_debugMode = MultiBox.getStatus( device, "urn:upnp-org:serviceId:RulesEngine1", "Debug" );
 	}
 
 	// *************************************************************************************************
@@ -278,6 +290,21 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 			rules.push( { "id": ruleInfos.id, "name": ruleInfos.name } );
 		} );
 		return rules;
+	}
+
+	function _getRooms() {
+		var result = [];
+		var deviceController = MultiBox.controllerOf( _altuiid ).controller;
+		MultiBox.getRooms( null, function( room, idx ) {
+			return ( MultiBox.controllerOf( room.altuiid ).controller == deviceController );
+		}, function( rooms ) {
+			if ( rooms ) {
+				$.each( rooms, function( idx, room ) {
+					result.push( { "id": room.id, "name": room.name } );
+				} );
+			}
+		} );
+		return result;
 	}
 
 	function _updateDevice( device, timeline ) {
@@ -613,7 +640,7 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 		$.when( _loadResourcesAsync( [ "https://cdnjs.cloudflare.com/ajax/libs/ace/1.2.2/ace.js" ] ) )
 			.done( function() {
 				var html = '<div id="rulesengine-lua-editor">' + code + '</div>'; // TODO : escape
-				$(dialog).find( ".row-fluid" ).append( html );
+				$( dialog ).find( ".row-fluid" ).append( html );
 				// ACE - https://ace.c9.io/
 				var editor = ace.edit( "rulesengine-lua-editor" );
 				//editor.setTheme( "ace/theme/monokai" );
@@ -753,7 +780,7 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 				"-2": "Disabled"
 			};
 			var html = "";
-			if ( ( ruleInfos.errors ) && ( ruleInfos.errors.length > 0 ) ) {
+			if ( ruleInfos.hasError ) {
 				html += '<span class="glyphicon glyphicon-alert altui-rule-errors" aria-hidden="true" title="' + _T( "See rule's errors") + '"></span> ';
 			}
 			html += ( status == "0" ? "engine stopped" : statusText[ ruleInfos.status.toString() ] || "UNKNOWN" ) 
@@ -785,23 +812,28 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 				"modal-lg"
 			)
 		);
-		$.when( _getRulesInfosAsync( device, params ) )
-			.done( function( rulesInfos ) {
+		$.ajax( {
+			url: window.location.pathname + "?id=lr_RulesEngine&command=getErrors&type=RuleError&ruleId=" + params.ruleId + "&output_format=json#",
+			dataType: "json"
+		} )
+		.done( function( errors ) {
+			if ( $.isArray( errors ) && ( errors.length > 0 ) ) {
 				var html = '<div class="panel panel-default">'
 					+			'<small><table class="table">'
 					+				'<thead>'
-					+					('<tr><th>{0}</th><th>{1}</th><th>{2}</th></tr>'.format( _T( "Date" ), _T( "Event" ), _T( "Error" ) ) )
+					+					('<tr><th>{0}</th><th>{1}</th></tr>'.format( _T( "Date" ), _T( "Error" ) ) )
 					+				'</thead>'
 					+				'<tbody>';
-				$.each(rulesInfos[0].errors, function( i, e ) {
-					html +=				'<tr><td>{0}</td><td>{1}</td><td>{2}</td></tr>'.format( _convertTimestampToLocaleString( e.timestamp ), e.event, e.message);
+				$.each( errors, function( i, error ) {
+					html +=				'<tr><td>{0}</td><td>{1}</td></tr>'.format( _convertTimestampToLocaleString( error.timestamp ), error.event );
 				});
 				html +=				'</tbody>'
 					+			'</table></small>'
 					+		'</div>';
 				dialog.find( ".row-fluid" ).append(html);
 				dialog.modal();
-			} );
+			}
+		} );
 	}
 
 	function _showRuleTimeline() {
@@ -822,11 +854,11 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 				var html = '<div class="panel panel-default">'
 					+			'<small><table class="table">'
 					+				'<thead>'
-					+					('<tr><th>{0}</th><th>{1}</th><th>{2}</th></tr>'.format( _T( "Date" ), _T( "Event" ), _T( "Error" ) ) )
+					+					('<tr><th>{0}</th><th>{1}</th><th>{2}</th></tr>'.format( _T( "Date" ), _T( "Type" ), _T( "Event" ) ) )
 					+				'</thead>'
 					+				'<tbody>';
 				$.each( timeline.history, function( i, e ) {
-					html +=				'<tr><td>{0}</td><td>{1}</td><td>{2}</td></tr>'.format( _convertTimestampToLocaleString( e.timestamp ), e.event, e.message);
+					html +=				'<tr><td>{0}</td><td>{1}</td><td>{2}</td></tr>'.format( _convertTimestampToLocaleString( e.timestamp ), e.eventType, e.event);
 				});
 				html +=				'</tbody>'
 					+			'</table></small>'
@@ -837,9 +869,97 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 			} );
 	}
 
+	function _drawRules( device ) {
+		$.when( _getRulesInfosAsync( device ) )
+			.done( function( rulesInfos ) {
+				// Sort by rule name
+				rulesInfos.sort( function( a, b ) {
+					if ( a.name < b.name ) {
+						return -1;
+					} else if ( a.name > b.name ) {
+						return 1;
+					}
+					return 0;
+				} );
+				$.each( rulesInfos, function( idx, ruleInfos) {
+					var infoVersion = ( !ruleInfos.version ? "EDIT THIS RULE" : ( ruleInfos.version !== _version ? " (v" + ruleInfos.version + ")": "") );
+					$(".altui-mainpanel .altui-rules").append(
+							'<div class="col-sm-6 col-md-4 col-lg-3">'
+						+		'<div class="panel panel-default altui-rule" data-altuiid="' + device.altuiid + '"'
+						+				' data-ruleid="' + ruleInfos.id + '"'
+						+				' data-ruleidx="' + ruleInfos.idx + '"'
+						+				' data-rulefilename="' + ruleInfos.fileName + '"'
+						+				' data-ruleacknowledgeable="' + ruleInfos.isAcknowledgeable + '"'
+						+				' data-ruleacknowledged="0"'
+						+			'>'
+						+			'<div class="panel-heading altui-device-heading">'
+						+				'<button type="button" class="altui-rule-remove pull-right btn btn-default btn-xs" title="' + _T( "Remove" ) + '">'
+						+					'<span class="glyphicon glyphicon-trash text-danger"></span>'
+						+				'</button>'
+						+				'<div class="pull-right text-muted"><small>#' + ruleInfos.id + '</small></div>'
+						+				'<div class="panel-title altui-device-title" data-toggle="tooltip" data-placement="left">'
+						+					'<span class="altui-rule-arm glyphicon glyphicon-off" aria-hidden="true"></span>'
+						+					'<small class="altui-rule-title-name">' + ruleInfos.name + '</small>'
+						+				'</div>'
+						+			'</div>'
+						+			'<div class="panel-body altui-rule-body" title="' + _T( "View rule" ) + '">'
+						
+						+				'<table height="70px">'
+						+					'<tr>'
+						+						'<td width="25px">'
+						+							'<div class="altui-device-icon altui-rule-icon pull-left img-rounded"></div>'
+						+						'</td>'
+						+						'<td width="25px">'
+						+							'<button type="button" class="altui-rule-edit pull-left btn btn-xs btn-default" style="width: 25px;" title="' + _T( "Edit" ) + '">'
+						+								'<span class="glyphicon glyphicon-pencil" aria-hidden="true"></span>'
+						+							'</button>'
+						+							'<button type="button" class="altui-rule-timeline pull-left btn btn-xs btn-default" style="width: 25px;" title="' + _T( "Timeline" ) + '">'
+						+								'<span class="glyphicon glyphicon-calendar" aria-hidden="true"></span>'
+						+							'</button>'
+
+						+							( ruleInfos.isAcknowledgeable ?
+													'<button type="button" class="altui-rule-ack pull-left btn btn-xs btn-default" style="width: 25px;">'
+						+								'<span class="glyphicon glyphicon glyphicon-ok" aria-hidden="true"></span>'
+						+							'</button>' : '' )
+
+						+						'</td>'
+						+						'<td class="altui-rule-summary">'
+						+							'<div>'
+						+								'<small class="altui-rule-infos text-muted"></small>'
+						+								'<small class="">' + infoVersion + '</small>'
+						+							'</div>'
+						+							'<div>'
+
+						+								( ruleInfos.lastStatusUpdateTime > 0 ?
+														'<small class="">' + _convertTimestampToLocaleString( ruleInfos.lastStatusUpdateTime ) + '</small>' : '' )
+						
+						+							'</div>'
+						+						'</td>'
+						+					'</tr>'
+						+				'</table>'
+						+			'</div>'
+						+		'</div>'
+						+	'</div>'
+					);
+				} );
+				_updatePageRules( device, rulesInfos );
+			} );
+	}
+
 	function _pageRules( altuiid ) {
+		if ( altuiid ) {
+			_altuiid = altuiid;
+		} else {
+			altuiid = _altuiid;
+		}
 		var device = MultiBox.getDeviceByAltuiID( altuiid );
+		_init( device );
+
+		// Page preparation
 		UIManager.clearPage( _T( "Control Panel" ), "Rules - {0} <small>#{1}</small>".format( device.name , altuiid ), UIManager.oneColumnLayout );
+		$( "#altui-pagetitle" )
+			.css( "display", "inline" )
+			.after( "<div class='altui-device-toolbar'></div>" );
 
 		// TODO : select the default xml file where to create new rules
 		var fileNames = MultiBox.getStatus( device, "urn:upnp-org:serviceId:RulesEngine1", "RuleFiles" ).split( "," );
@@ -894,68 +1014,7 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 
 		// Draw the rules
 		$(".altui-mainpanel").append( '<div class="altui-rules"></div>' );
-		$.when( _getRulesInfosAsync( device ) )
-			.done( function( rulesInfos ) {
-				// Sort by rule name
-				rulesInfos.sort( function( a, b ) {
-					if ( a.name < b.name ) {
-						return -1;
-					} else if ( a.name > b.name ) {
-						return 1;
-					}
-					return 0;
-				} );
-				var version = _settings[ altuiid ].version;
-				$.each( rulesInfos, function( idx, ruleInfos) {
-					var infoVersion = ( !ruleInfos.version ? "EDIT THIS RULE" : ( ruleInfos.version !== version ? " (v" + ruleInfos.version + ")": "") );
-					$(".altui-mainpanel .altui-rules").append(
-							'<div class="col-sm-6 col-md-4 col-lg-3">'
-						+		'<div class="panel panel-default altui-rule" data-altuiid="' + device.altuiid + '"'
-						+				' data-ruleid="' + ruleInfos.id + '"'
-						+				' data-ruleidx="' + ruleInfos.idx + '"'
-						+				' data-rulefilename="' + ruleInfos.fileName + '"'
-						+				' data-ruleacknowledgeable="' + ruleInfos.isAcknowledgeable + '"'
-						+				' data-ruleacknowledged="0"'
-						+			'>'
-						+			'<div class="panel-heading altui-device-heading">'
-						+				'<button type="button" class="altui-rule-remove pull-right btn btn-default btn-xs" title="' + _T( "Remove" ) + '">'
-						+					'<span class="glyphicon glyphicon-trash text-danger"></span>'
-						+				'</button>'
-						+				'<div class="pull-right text-muted"><small>#' + ruleInfos.id + '</small></div>'
-						+				'<div class="panel-title altui-device-title" data-toggle="tooltip" data-placement="left">'
-						+					'<span class="altui-rule-arm glyphicon glyphicon-off" aria-hidden="true"></span>'
-						+					'<small class="altui-rule-title-name">' + ruleInfos.name + '</small>'
-						+				'</div>'
-						+			'</div>'
-						+			'<div class="panel-body altui-rule-body" title="' + _T( "View rule" ) + '">'
-						+				'<small class="altui-rule-infos text-muted pull-right"></small>'
-						+				'<span class="pull-right">' + infoVersion + '</span>'
-						+				'<table height="70px">'
-						+					'<tr>'
-						+						'<td>'
-						+							'<div class="altui-device-icon altui-rule-icon pull-left img-rounded"></div>'
-						+						'</td>'
-						+						'<td width="25px">'
-						+							'<button type="button" class="altui-rule-edit pull-left btn btn-xs btn-default" style="width: 25px;" title="' + _T( "Edit" ) + '">'
-						+								'<span class="glyphicon glyphicon-pencil" aria-hidden="true"></span>'
-						+							'</button>'
-						+							'<button type="button" class="altui-rule-timeline pull-left btn btn-xs btn-default" style="width: 25px;" title="' + _T( "Timeline" ) + '">'
-						+								'<span class="glyphicon glyphicon-calendar" aria-hidden="true"></span>'
-						+							'</button>'
-						+							( ruleInfos.isAcknowledgeable ?
-													'<button type="button" class="altui-rule-ack pull-left btn btn-xs btn-default" style="width: 25px;">'
-						+								'<span class="glyphicon glyphicon glyphicon-ok" aria-hidden="true"></span>'
-						+							'</button>' : '' )
-						+						'</td>'
-						+					'</tr>'
-						+				'</table>'
-						+			'</div>'
-						+		'</div>'
-						+	'</div>'
-					);
-				} );
-				_updatePageRules( device, rulesInfos );
-			} );
+		_drawRules( device );
 	}
 
 	// *************************************************************************************************
@@ -1079,8 +1138,6 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 	// par contre ça fait deux chargements de règles (un à l'affichage, un à la sauvegarde)
 	// (permet de récupérer d'éventuels changement fait dans une autre session sur les autres règles)
 	function _saveBlocklyChanges( altuiid, fileName, xmlRules, idx ) {
-		var version = _settings[ altuiid ].version;
-
 		/*
 		function _getHashCode( str ) {
 			var hash = 0;
@@ -1111,7 +1168,7 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 		$xmlBlockly.find( "block[type=\"rule\"]" )
 			.each( function( i, xmlNewRule ) {
 				xmlNewRule.setAttribute( "hashcode", _getHashCode( xmlNewRule.innerHTML ) );
-				xmlNewRule.setAttribute( "version", version );
+				xmlNewRule.setAttribute( "version", _version );
 				if ( ( idx !== undefined ) && ( i === 0 ) ) {
 					// the modified rule
 					modifiedRuleIdxes.push( idx );
@@ -1269,7 +1326,10 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 
 	function _pageRuleEdit( altuiid, fileName, idx, id, readOnly ) {
 		var device = MultiBox.getDeviceByAltuiID( altuiid );
-		UIManager.clearPage( _T( "Control Panel" ), ( readOnly ? _T( "View rule" ) : _T( "Edit rule" ) ) + " - {0} <small>#{1}</small>".format( device.name , altuiid ), UIManager.oneColumnLayout );
+
+		// Page preparation
+		//UIManager.clearPage( _T( "Control Panel" ), ( readOnly ? _T( "View rule" ) : _T( "Edit rule" ) ) + " - {0} <small>#{1}</small>".format( device.name , altuiid ), UIManager.oneColumnLayout );
+		UIManager.clearPage( _T( "Rule" ), ( readOnly ? _T( "View rule" ) : _T( "Edit rule" ) ) + " - {0} <small>#{1}</small>".format( device.name , altuiid ), UIManager.oneColumnLayout );
 		$(window).scrollTop(0);
 
 		// Rules in the XML file
@@ -1380,7 +1440,7 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 								.data( "rule_version", ruleInfos.version )
 						}
 						$( "#rulesengine-blockly-workspace" )
-							.data( "plugin_version", _settings[ altuiid ].version );
+							.data( "plugin_version", _version );
 
 						_currentXmlRules = xmlRules; // à enlever ?
 						_checkXmlRulesIds( xmlRules, rulesInfos );
@@ -1398,7 +1458,7 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 								// There's a critical error
 								// TODO : not be able to save and show XML code
 								PageMessage.message( "Blocky error : " + e, "danger");
-								console.log(e);
+								console.error( e );
 							}
 						}
 					} );
@@ -1478,43 +1538,33 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 	// *************************************************************************************************
 
 	// explicitly return public methods when this object is instantiated
-	return {
-		//---------------------------------------------------------
-		// PUBLIC  functions
-		//---------------------------------------------------------
-
+	var myModule = {
 		getStyle: _getStyle,
-
 		drawDevice: function( device ) {
-			if ( _settings[ device.altuiid ] == null ) {
-				_settings[ device.altuiid ] = {};
-			}
-			if ( !_registerIsDone ) {
-				EventBus.registerEventHandler("on_ui_deviceStatusChanged", ALTUI_RulesEngine, "onDeviceStatusChanged");
-				_registerIsDone = true;
-			}
+			_altuiid = device.altuiid;
 
 			var status = parseInt( MultiBox.getStatus( device, "urn:upnp-org:serviceId:SwitchPower1", "Status" ), 10 );
-			_settings[ device.altuiid ].version = MultiBox.getStatus( device, "urn:upnp-org:serviceId:RulesEngine1", "PluginVersion" );
+			_init( device );
 
 			return '<div class="panel-content">'
-				+		ALTUI_PluginDisplays.createOnOffButton( status, "altui-rulesengine-" + device.altuiid, _T( "OFF,ON" ), "pull-right" )
+				+		ALTUI_PluginDisplays.createOnOffButton( status, "altui-rulesengine-" + _altuiid, _T( "OFF,ON" ), "pull-right" )
 				+		'<div class="btn-group" role="group" aria-label="...">'
-				+			'<button class="btn btn-default pull-left" onclick="javascript:ALTUI_RulesEngine.pageRules(\'' + device.altuiid + '\');">'
+				+			'<button class="btn btn-default pull-left" onclick="javascript:ALTUI_RulesEngine.pageRules(\'' + _altuiid + '\');">'
 				+				'<span class="glyphicon glyphicon-th" title="' + _T( "Rules" ) + '"></span>'
 				+			'</button>'
-				+			'<button class="btn btn-default pull-left" onclick="javascript:ALTUI_RulesEngine.pageTimeline(\'' + device.altuiid + '\');">'
+				+			'<button class="btn btn-default pull-left" onclick="javascript:ALTUI_RulesEngine.pageTimeline(\'' + _altuiid + '\');">'
 				+				'<span class="glyphicon glyphicon-calendar" title="' + _T( "Timeline" ) + '"></span>'
 				+			'</button>'
-				+			'&nbsp;v' + _settings[ device.altuiid ].version
+				+			'&nbsp;v' + _version
 				+		'</div>'
-				+		'<div class="info"></div>'
+				+		'<div class="info">'
+				+			( _debugMode != "" ? '<small>Debug ON</small>' : '' )
+				+		'</div>'
 				+	'</div>'
 				+	'<script type="text/javascript">'
-				+		'$("div#altui-rulesengine-{0}").on("click touchend", function() { ALTUI_PluginDisplays.toggleOnOffButton("{0}", "div#altui-rulesengine-{0}"); } );'.format( device.altuiid )
+				+		'$("div#altui-rulesengine-{0}").on("click touchend", function() { ALTUI_PluginDisplays.toggleOnOffButton("{0}", "div#altui-rulesengine-{0}"); } );'.format( _altuiid )
 				+	'</script>';
 		},
-
 		drawControlPanel: function( device, domparent ) {
 			$( domparent ).html( '<div id="rulesengine-rule-list">TODO</div>' );
 			/*
@@ -1524,17 +1574,22 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 		},
 
 		onDeviceStatusChanged: _onDeviceStatusChanged,
-
 		pageRules: _pageRules,
 		pageTimeline: _pageTimeline,
-
 		showLuaEditor: _showLuaEditor,
-
 		hasDeviceActionService: _hasDeviceActionService,
 		getDeviceActionServiceNames: _getDeviceActionServiceNames,
 		getDeviceActionNames: _getDeviceActionNames,
 		getDeviceAction: _getDeviceAction,
-
+		getRooms: _getRooms,
 		getRules: _getRules
 	};
+
+	// Register
+	if ( !_registerIsDone ) {
+		EventBus.registerEventHandler("on_ui_deviceStatusChanged", myModule, "onDeviceStatusChanged");
+		_registerIsDone = true;
+	}
+
+	return myModule;
 })( window );

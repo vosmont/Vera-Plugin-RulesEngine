@@ -1,4 +1,4 @@
-//@ sourceURL=J_RulesEngine1.js
+//# sourceURL=J_RulesEngine1.js
 
 /**
  * This file is part of the plugin RulesEngine.
@@ -18,19 +18,20 @@
 	if ( !window.Utils ) {
 		window.Utils = {};
 	}
+	// UI7 fix
+	Utils.getDataRequestURL = function() {
+		var dataRequestURL = api.getDataRequestURL();
+		if ( dataRequestURL.indexOf( "?" ) === -1 ) {
+			dataRequestURL += "?";
+		}
+		return dataRequestURL;
+	};
 	Utils.injectCustomCSS = function( nameSpace, css ) {
-		if ( $( "style[title=\"" + nameSpace + " custom CSS\"]" ).size() === 0 ) {
+		if ( $( "#custom-css-" + nameSpace ).size() === 0 ) {
 			Utils.logDebug( "Injects custom CSS for " + nameSpace );
-			var pluginStyle = $( "<style>" );
-			if ($.fn.jquery === "1.5") {
-				pluginStyle.attr( "type", "text/css" )
-					.attr( "title", nameSpace + " custom CSS" );
-			} else {
-				pluginStyle.prop( "type", "text/css" )
-					.prop( "title", nameSpace + " custom CSS" );
-			}
+			var pluginStyle = $( '<style id="custom-css-' + nameSpace + '">' );
 			pluginStyle
-				.html( css )
+				.text( css )
 				.appendTo( "head" );
 		} else {
 			Utils.logDebug( "Injection of custom CSS has already been done for " + nameSpace );
@@ -41,12 +42,112 @@
 
 var RulesEngine = ( function( api, $ ) {
 	var _uuid = "3148380e-7c06-4b80-96fa-b849d90dc8f9";
+	var _deviceId;
 
 	// Inject plugin specific CSS rules
-	Utils.injectCustomCSS( "RulesEngine", '\
+	Utils.injectCustomCSS( "rulesengine", '\
+.rulesengine-panel { padding: 5px; }\
+.rulesengine-panel td { padding: 5px; }\
+.rulesengine-error { color:red; }\
 #rulesengine-donate { text-align: center; width: 70%; margin: auto; }\
 #rulesengine-donate form { height: 50px; }\
 	');
+
+	// *************************************************************************************************
+	// Tools
+	// *************************************************************************************************
+
+	/**
+	 * Convert a unix timestamp into date
+	 */
+	function _convertTimestampToLocaleString( timestamp ) {
+		if ( typeof( timestamp ) === "undefined" ) {
+			return "";
+		}
+		var t = new Date( parseInt( timestamp, 10 ) * 1000 );
+		var localeString = t.toLocaleString();
+		return localeString;
+	}
+	function _convertTimestampToIsoString( timestamp ) {
+		if ( typeof( timestamp ) === "undefined" ) {
+			return "";
+		}
+		var t = new Date( parseInt( timestamp, 10 ) * 1000 );
+		var isoString = t.toISOString();
+		return isoString;
+	}
+
+	// *************************************************************************************************
+	// Rules
+	// *************************************************************************************************
+
+	/**
+	 * Show rules tab
+	 */
+	function _showRules( deviceId ) {
+		_deviceId = deviceId;
+		try {
+			if ( typeof( ALTUI_RulesEngine ) === "undefined" ) {
+				api.setCpanelContent(
+					'<div class="rulesengine-panel">'
+				+		'<div class="rulesengine-error">'
+				+			'The rules can just be viewed and displayed on ALTUI'
+				+		'</div>'
+				+	'</div>'
+				);
+			} else {
+				var altuiid = $( ".altui-device-controlpanel" ).data( "altuiid" );
+				if ( altuiid ) {
+					ALTUI_RulesEngine.pageRules( altuiid );
+				} else {
+					console.error( "Can not retrieve the altuiid of the device" );
+				}
+			}
+		} catch ( err ) {
+			console.error( "Error in RulesEngine.showRules(): " + err );
+		}
+	}
+
+	// *************************************************************************************************
+	// Errors
+	// *************************************************************************************************
+
+	/**
+	 * Show errors tab
+	 */
+	function _showErrors( deviceId ) {
+		_deviceId = deviceId;
+		try {
+			api.setCpanelContent(
+					'<div class="rulesengine-panel">'
+				+		'<div id="rulesengine-errors">'
+				+		'</div>'
+				+	'</div>'
+			);
+			// Display the errors
+			$.ajax( {
+				url: Utils.getDataRequestURL() + "id=lr_RulesEngine&command=getErrors&output_format=json#",
+				dataType: "json"
+			} )
+			.done( function( errors ) {
+				if ( $.isArray( errors ) && ( errors.length > 0 ) ) {
+					var html = '<table><tr><th>Date</th><th>Error</th></tr>';
+					$.each( errors, function( i, error ) {
+						html += '<tr>'
+							+		'<td>' + _convertTimestampToLocaleString( error.timestamp ) + '</td>'
+							+		'<td>' + error.event + '</td>'
+							+	'</tr>';
+					} );
+					html += '</table>';
+					$("#rulesengine-errors").html( html );
+				} else {
+					$("#rulesengine-errors").html( "There's no error." );
+				}
+			} );
+		} catch ( err ) {
+			console.error( "Error in RulesEngine.showErrors(): " + err );
+		}
+	}
 
 	// *************************************************************************************************
 	// Donate
@@ -76,6 +177,8 @@ var RulesEngine = ( function( api, $ ) {
 
 	myModule = {
 		uuid: _uuid,
+		showRules : _showRules,
+		showErrors: _showErrors,
 		showDonate: _showDonate
 	};
 
