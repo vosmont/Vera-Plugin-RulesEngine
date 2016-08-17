@@ -869,7 +869,39 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 			} );
 	}
 
-	function _drawRules( device ) {
+	function _isRuleMatching( ruleInfos, filters ) {
+		var isMatching = true;
+		if ( filters == null ) {
+			return true;
+		}
+		if ( filters.room ) {
+			switch( filters.room ) {
+				case "-1":
+					break;
+				case "-2":
+					if ( !ruleInfos.isFavorite ) {
+						isMatching = false;
+					}
+					break;
+				default:
+					if ( $.isArray( filters.room ) ) {
+						if ( filters.room.length === 0 ) {
+							break;
+						}
+						if ( ruleInfos.roomId == 0 ) {
+							if ( filters.room.indexOf( "0" ) === -1 ) {
+								isMatching = false;
+							}
+						} else if ( filters.room.indexOf( "0-" + ruleInfos.roomId ) === -1 ) {
+							isMatching = false;
+						}
+					}
+			}
+		}
+		return isMatching;
+	}
+
+	function _drawRules( device, filters ) {
 		$.when( _getRulesInfosAsync( device ) )
 			.done( function( rulesInfos ) {
 				// Sort by rule name
@@ -881,7 +913,11 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 					}
 					return 0;
 				} );
+				$(".altui-mainpanel .altui-rules").empty();
 				$.each( rulesInfos, function( idx, ruleInfos) {
+					if ( !_isRuleMatching( ruleInfos, filters ) ) {
+						return;
+					}
 					var infoVersion = ( !ruleInfos.version ? "EDIT THIS RULE" : ( ruleInfos.version !== _version ? " (v" + ruleInfos.version + ")": "") );
 					$(".altui-mainpanel .altui-rules").append(
 							'<div class="col-sm-6 col-md-4 col-lg-3">'
@@ -955,11 +991,72 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 		var device = MultiBox.getDeviceByAltuiID( altuiid );
 		_init( device );
 
+		var roomAltuiid2Name = {};
+		var filters = {
+			room: MyLocalStorage.getSettings( "RuleRoomFilter" ) || -1
+		};
+
+		function _syncRoomNameFilter() {
+			if ( $.isArray( filters.room ) ) {
+				filters.roomName = [];
+				$.each( filters.room, function( i, roomAltuiid ) {
+					if ( roomAltuiid === "0" ) {
+						filters.roomName.push( "0" );
+					} else {
+						filters.roomName.push( roomAltuiid2Name[ roomAltuiid ] );
+					}
+				} );
+			} else {
+				filters.roomName = filters.room;
+			}
+		}
+
+		function _onClickRoomButton( htmlid, altuiid ) {
+			var room = altuiid ? altuiid : htmlid;
+			if ( ( room == "-2" ) || ( room == "-1" ) ) {
+				filters.room = room;
+			} else {
+				if ( $.isArray( filters.room ) ) {
+					var idx = filters.room.indexOf( room );
+					if ( idx > -1 ) {
+						filters.room.splice( idx, 1 );
+						if ( filters.room.length === 0 ) {
+							filters.room = "-1";
+						}
+					} else {
+						// TODO : is better to multiselect the rooms ?
+						//filters.room.push( room );
+						filters.room = [ room ];
+					}
+				} else {
+					filters.room = [ room ];
+				}
+			}
+			_syncRoomNameFilter();
+			UIManager.setLeftnavRoomsActive( filters.roomName );
+			MyLocalStorage.setSettings( "RuleRoomFilter", filters.room );
+			_drawRules( device, filters );
+		};
+
 		// Page preparation
-		UIManager.clearPage( _T( "Control Panel" ), "Rules - {0} <small>#{1}</small>".format( device.name , altuiid ), UIManager.oneColumnLayout );
+		UIManager.clearPage( _T( "Control Panel" ), "Rules - {0} <small>#{1}</small>".format( device.name , altuiid ) );
+		//UIManager.clearPage( _T( "Rules" ), "Rules - {0} <small>#{1}</small>".format( device.name , altuiid ) );
 		$( "#altui-pagetitle" )
 			.css( "display", "inline" )
 			.after( "<div class='altui-device-toolbar'></div>" );
+
+		// On the left, get the rooms
+		$(".altui-leftnav").empty();
+		UIManager.leftnavRooms(
+			_onClickRoomButton,
+			function( rooms ) {
+				$.each( rooms, function( i, room ) {
+					roomAltuiid2Name[ room.altuiid ] = room.name;
+				});
+				_syncRoomNameFilter();
+				UIManager.setLeftnavRoomsActive( filters.roomName );
+			}
+		);
 
 		// TODO : select the default xml file where to create new rules
 		var fileNames = MultiBox.getStatus( device, "urn:upnp-org:serviceId:RulesEngine1", "RuleFiles" ).split( "," );
@@ -1014,7 +1111,11 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 
 		// Draw the rules
 		$(".altui-mainpanel").append( '<div class="altui-rules"></div>' );
-		_drawRules( device );
+		if ( $( "div.altui-leftnav:visible" ).length === 1 ) {
+			_drawRules( device, filters );
+		} else {
+			_drawRules( device );
+		}
 	}
 
 	// *************************************************************************************************

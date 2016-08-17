@@ -22,7 +22,7 @@ end
 
 _NAME = "RulesEngine"
 _DESCRIPTION = "Rules Engine for the Vera with visual editor"
-_VERSION = "0.12.1"
+_VERSION = "0.12.2"
 _AUTHOR = "vosmont"
 
 -- **************************************************
@@ -379,31 +379,31 @@ local function _initMultiValueKey(object, multiValueKey, monoValueKey)
 	end
 end
 
-local function _checkParameters (input, parameters)
+local function _checkParameters( input, parameters )
 	local isOk = true
-	local msg = _getItemSummary(input)
+	local msg = _getItemSummary( input )
 	if (input == nil) then
 		Rule.addError( input._ruleId, "Check parameter", msg .. " - Input is not defined" )
 		isOk = false
 	else
-		for _, parameterAND in ipairs(parameters) do
+		for _, parameterAND in ipairs( parameters ) do
 			-- AND
-			if (type(parameterAND) == "string") then
-				if (input[parameterAND] == nil) then
+			if ( type( parameterAND ) == "string" ) then
+				if ( input[ parameterAND ] == nil ) then
 					Rule.addError( input._ruleId, "Check parameter", msg .. " - Parameter '" .. parameterAND .. "' is not defined" )
 					isOk = false
-				elseif ((type(input[parameterAND]) == "table") and (next(input[parameterAND]) == nil)) then
+				elseif ( ( type( input[ parameterAND ] ) == "table" ) and ( next( input[ parameterAND ] ) == nil ) ) then
 					Rule.addError( input._ruleId, "Check parameter", msg .. " - Parameter '" .. parameterAND .. "' is empty" )
 					isOk = false
 				end
-			elseif (type(parameterAND) == "table") then
+			elseif ( type( parameterAND ) == "table" ) then
 				-- OR
 				local isOk2 = false
-				for _, parameterOR in ipairs(parameterAND) do
-					if (input[parameterOR] ~= nil) then
+				for _, parameterOR in ipairs( parameterAND ) do
+					if ( input[ parameterOR ] ~= nil ) then
 						if (
-							(type(input[parameterOR]) ~= "table")
-							or ((type(input[parameterOR]) == "table") and (next(input[parameterOR]) ~= nil))
+							( type( input[ parameterOR ] ) ~= "table" )
+							or ( ( type( input[ parameterOR ] ) == "table" ) and ( next( input[ parameterOR ] ) ~= nil ) )
 						) then
 							isOk2 = true
 						end
@@ -418,7 +418,7 @@ local function _checkParameters (input, parameters)
 	end
 	if not isOk then
 		input._parent = nil
-		error(msg .. " - There's a problem with setting of input : " .. json.encode(input), "checkParameters")
+		error( msg .. " - There's a problem with setting of input : " .. json.encode( input ), "checkParameters" )
 	end
 	return isOk
 end
@@ -860,7 +860,7 @@ Events = {
 
 Event = {
 	-- Callback on device variable update (mios call)
-	onDeviceVariableIsUpdated = function (lul_device, lul_service, lul_variable, lul_value_old, lul_value_new)
+	onDeviceVariableIsUpdated = function( lul_device, lul_service, lul_variable, lul_value_old, lul_value_new )
 		local eventName = lul_service .. "-" .. lul_variable .. "-" .. tostring(lul_device)
 		log("Event '" .. eventName .. "'(" .. luup.devices[lul_device].description .. ") - New value:'" .. tostring(lul_value_new) .. "'", "Event.onDeviceVariableIsUpdated")
 		-- Check if engine is enabled
@@ -886,34 +886,38 @@ Event = {
 	end,
 
 	-- Callback on timer triggered (mios call)
-	onTimerIsTriggered = function (data)
-		log("Event '" .. tostring(data) .. "'", "Event.onTimerIsTriggered")
+	onTimerIsTriggered = function( data )
+		log( "Event '" .. tostring( data ) .. "'", "Event.onTimerIsTriggered" )
 		-- Check if engine is enabled
-		if (not isEnabled()) then
-			log("Engine is not enabled - Do nothing", "Event.onTimerIsTriggered")
-			return false
+		if isEnabled() then
+			local linkedConditions = Events.getRegisteredItems( data )
+			if ( linkedConditions == nil ) then
+				return false
+			end
+			-- Update status of the linked conditions for this event
+			local context = {
+				lastUpdateTime = os.time()
+			}
+			for _, condition in ipairs( linkedConditions ) do
+				log( "This event is linked to rule #" .. tostring( condition._ruleId ) .. " and condition #" .. tostring( condition.id ), "Event.onTimerIsTriggered", 2 )
+				-- Update the context of the condition
+				--condition.status = 1
+				--condition._context.status     = 1
+				--condition._context.lastUpdateTime = os.time()
+			end
+			-- Update the status of the conditions (asynchronously to release the lock the fatest possible)
+			ScheduledTasks.add( nil, Conditions.updateStatus, 0, { linkedConditions, { context = context } } )
+		else
+			log( "Engine is not enabled - Do nothing", "Event.onTimerIsTriggered" )
 		end
-		local linkedConditions = Events.getRegisteredItems(data)
-		if (linkedConditions == nil) then
-			return false
-		end
-		-- Update status of the linked conditions for this event
-		local context = {
-			lastUpdateTime = os.time()
-		}
-		for _, condition in ipairs(linkedConditions) do
-			log("This event is linked to rule #" .. tostring(condition._ruleId) .. " and condition #" .. tostring(condition.id), "Event.onTimerIsTriggered", 2)
-			-- Update the context of the condition
-			--condition.status = 1
-			--condition._context.status     = 1
-			--condition._context.lastUpdateTime = os.time()
-		end
-		-- Update the status of the conditions (asynchronously to release the lock the fatest possible)
-		ScheduledTasks.add(nil, Conditions.updateStatus, 0, { linkedConditions, { context = context } })
+		-- Schedule next call
+		local test = string.split( data, "-" )
+		log( "Restarts timer '" .. data .. "'", "Event.onTimerIsTriggered", 3 )
+		luup.call_timer( "RulesEngine.Event.onTimerIsTriggered", tonumber(test[2]), test[4], test[3], data )
 	end,
 
 	-- Callback on rule status update (inside call)
-	onRuleStatusIsUpdated = function (watchedRuleId, newStatus)
+	onRuleStatusIsUpdated = function( watchedRuleId, newStatus )
 		local eventName = "RuleStatus-" .. tostring(watchedRuleId)
 		log("Event '" .. eventName .. "' - New status:'" .. tostring(newStatus) .. "'", "Event.onRuleStatusIsUpdated")
 		-- Check if engine is enabled
@@ -967,14 +971,33 @@ ScheduledTasks = {
 	end,
 
 	getTaskInfo = function (task)
+		local ids = {}
+		function _getIds( params, depth )
+			if ( depth < 0 ) then
+				return
+			end
+			if ( type( params ) == "table" ) then
+				for k, v in pairs( params ) do
+					if ( k == "id" ) then
+						table.insert( ids, v )
+					else
+						_getIds( v, depth - 1 )
+					end
+				end
+			end
+		end
+		_getIds( task.callbackParams, 3 )
+
 		local taskInfo = {
-			timeout = os.date("%X", task.timeout),
-			duration = _getDuration(task.delay),
+			timeout = os.date( "%X", task.timeout ),
+			duration = _getDuration( task.delay ),
 			delay = task.delay,
-			callback = (_indexFunctionNames[ tostring(task.callback) ] or "Unknown name"),
+			callback = ( _indexFunctionNames[ tostring( task.callback ) ] or "Unknown name" ),
+			--callbackParams = task.callbackParams,
+			callbackParams_ids = ids,
 			attributes = task.attributes
 		}
-		return tostring(json.encode(taskInfo))
+		return tostring( json.encode( taskInfo ) )
 	end,
 
 	purgeExpiredWakeUp = function ()
@@ -1623,9 +1646,9 @@ do
 
 			-- Report the change of the child condition to the parent if needed
 			if (
-				hasStatusChanged and not hasParentStatusChanged
+				hasStatusChanged --and not hasParentStatusChanged
 				and condition.isChildConditionValue and condition._parent.isMainConditionValue
-				and (condition._parent.actions ~= nil)
+				and ( condition._parent.actions ~= nil )
 			) then
 				if ( ( status == 1 ) and ActionGroups.isMatchingEvent( condition._parent.actions, "conditionStart" ) ) then
 					ActionGroups.execute( condition._parent.actions, condition._ruleId, "conditionStart", nil, params )
@@ -1694,140 +1717,148 @@ do
 	-- See http://wiki.micasaverde.com/index.php/Luup_Lua_extensions#function:_call_timer
 	-- TODO sunset sunrise
 	ConditionTypes["condition_time"] = {
-		init = function (condition)
-			if (type(condition.daysOfWeek) == "string") then
+		init = function( condition )
+			if ( type( condition.daysOfWeek ) == "string" ) then
 				condition.timerType = 2
-				condition.days = string.split(condition.daysOfWeek, ",")
-			elseif (type(condition.daysOfMonth) == "string") then
+				condition.days = string.split( condition.daysOfWeek, "," )
+			elseif ( type( condition.daysOfMonth ) == "string" ) then
 				condition.timerType = 3
-				condition.days = string.split(condition.daysOfMonth, ",")
+				condition.days = string.split( condition.daysOfMonth, "," )
 			end
-			if ((condition.daysOfWeek == nil) and (condition.daysOfMonth == nil)) then
+			if ( ( condition.daysOfWeek == nil ) and ( condition.daysOfMonth == nil ) ) then
 				condition.timerType = 2
-				condition.days = {"1","2","3","4","5","6","7"}
+				condition.days = { "1","2","3","4","5","6","7" }
 			end
 			condition.mainType = "Trigger"
 		end,
 
-		check = function (condition)
-			if not _checkParameters(condition, {{"time", "time1", "time2"}, "timerType", "days"}) then
+		check = function( condition )
+			if not _checkParameters( condition, { { "time", "time1", "time2" }, "timerType", "days" } ) then
 				return false
 			end
 			return true
 		end,
 
-		start = function (condition)
-			local msg = _getItemSummary(condition)
+		start = function( condition )
+			local msg = _getItemSummary( condition )
 
 			local times
-			if (condition.time ~= nil) then
+			if ( condition.time ~= nil ) then
 				times = { condition.time }
 			else
 				times = { condition.time1, condition.time2 }
 			end
 
-			for _, day in ipairs(condition.days) do
-				for _, time in ipairs(times) do
-					local eventName = "timer-" .. tostring(condition.timerType) .. "-" .. tostring(day) .. "-" .. tostring(time)
-					Events.registerItem(eventName, condition)
-					if not Events.isWatched(eventName) then
-						log(msg .. " - Starts timer '" .. eventName .. "'", "ConditionTime.start", 3)
-						luup.call_timer("RulesEngine.Event.onTimerIsTriggered", condition.timerType, time, day, eventName)
-						Events.setIsWatched(eventName)
+			for _, day in ipairs( condition.days ) do
+				for _, time in ipairs( times ) do
+					local eventName = "timer-" .. tostring( condition.timerType ) .. "-" .. tostring( day ) .. "-" .. tostring( time )
+					Events.registerItem( eventName, condition )
+					if not Events.isWatched( eventName ) then
+						log( msg .. " - Starts timer '" .. eventName .. "'", "ConditionTime.start", 3 )
+						luup.call_timer( "RulesEngine.Event.onTimerIsTriggered", condition.timerType, time, day, eventName )
+						Events.setIsWatched( eventName )
 					else
-						log(msg .. " - Timer '" .. eventName .. "' is already started", "ConditionTime.start", 3)
+						log( msg .. " - Timer '" .. eventName .. "' is already started", "ConditionTime.start", 3 )
 					end
 				end
 			end
 		end,
 
-		updateStatus = function (condition)
-			local msg = _getItemSummary(condition)
+		updateStatus = function( condition, params )
+			local msg = _getItemSummary( condition )
 			local status = 1
 			local hasToTriggerOff = false
 
-			function getDayOfWeek (time)
-				local day = os.date('%w', time)
-				if (day == "0") then
+			--[[
+			if ( params and os.difftime( params.context.lastUpdateTime) then
+				
+			end
+			--]]
+
+			function getDayOfWeek( time )
+				local day = os.date( "%w", time )
+				if ( day == "0" ) then
 					day = "7"
 				end
 				return day
 			end
-			function getDayOfMonth (time)
-				return tostring(tonumber(os.date('%d', time)))
+			function getDayOfMonth( time )
+				return tostring( tonumber( os.date( "%d", time ) ) )
 			end
 
 			local now = os.time()
 			local currentDay, previousDay, typeOfDay
-			if (condition.timerType == 2) then
+			if ( condition.timerType == 2 ) then
 				typeOfDay = "week"
-				currentDay = getDayOfWeek(now)
-				previousDay = getDayOfWeek(now - 86400)
+				currentDay = getDayOfWeek( now )
+				previousDay = getDayOfWeek( now - 86400 )
 			else
 				typeOfDay = "month"
-				currentDay = getDayOfMonth(now)
-				previousDay = getDayOfMonth(now - 86400)
+				currentDay = getDayOfMonth( now )
+				previousDay = getDayOfMonth( now - 86400 )
 			end
 
-			if (condition.time == nil) then
+			if ( condition.time == nil ) then
 				-- Between
-				local currentTime = os.date('%H:%M:%S', os.time() + 1) -- add 1 second to pass the edge
-				local msgDay = "of " .. typeOfDay .. " '" .. tostring(currentDay) .. "'"
-				local msgTimeBetween = "between '" .. tostring(condition.time1) .. "' and '" .. tostring(condition.time2) .. "'"
-				if (condition.time1 <= condition.time2) then
+				local currentTime = os.date( "%H:%M:%S", os.time() + 1 ) -- add 1 second to pass the edge
+				local msgDay = "of " .. typeOfDay .. " '" .. tostring( currentDay ) .. "'"
+				local msgTimeBetween = "between '" .. tostring( condition.time1 ) .. "' and '" .. tostring( condition.time2 ) .. "'"
+				if ( condition.time1 <= condition.time2 ) then
 					-- The bounds are on the same day
-					if not table.contains(condition.days, currentDay) then
-						msg = msg .. " - Current day " .. msgDay .. " is not in " .. tostring(json.encode(condition.days))
+					if not table.contains( condition.days, currentDay ) then
+						msg = msg .. " - Current day " .. msgDay .. " is not in " .. tostring( json.encode( condition.days ) )
 						status = 0
-					elseif ((currentTime < condition.time1) or (currentTime > condition.time2)) then
-						msg = msg .. " - Current time '" .. tostring(currentTime) .. "' is not " .. msgTimeBetween
+					elseif ( ( currentTime < condition.time1 ) or ( currentTime > condition.time2 ) ) then
+						msg = msg .. " - Current time '" .. tostring( currentTime ) .. "' is not " .. msgTimeBetween
 						status = 0
 					else
-						msg = msg .. " - Current day " .. msgDay .. " is in " .. tostring(json.encode(condition.days)) .. " and current time '" .. tostring(currentTime) .. "' is " .. msgTimeBetween
+						msg = msg .. " - Current day " .. msgDay .. " is in " .. tostring( json.encode( condition.days ) ) .. " and current time '" .. tostring( currentTime ) .. "' is " .. msgTimeBetween
 					end
 				else
 					-- The bounds are on 2 days
-					if table.contains(condition.days, currentDay) then
+					if table.contains( condition.days, currentDay ) then
 						-- D
-						if (currentTime < condition.time1) then
-							msg = msg .. " - Current time '" .. tostring(currentTime) .. "' is not " .. msgTimeBetween
-							status = 0
-						end
-					elseif table.contains(condition.days, previousDay) then
-						-- D+1
-						if (currentTime < condition.time2) then
-							msg = msg .. " - Current time '" .. tostring(currentTime) .. "' is not between '" .. tostring(condition.time1) .. "' and '" .. tostring(condition.time2) .. "' (D+1)"
+						if ( currentTime < condition.time1 ) then
+							msg = msg .. " - Current time '" .. tostring( currentTime ) .. "' is not " .. msgTimeBetween
 							status = 0
 						else
-							msg = msg .. " - Current time '" .. tostring(currentTime) .. "' is between '" .. tostring(condition.time1) .. "' and '" .. tostring(condition.time2) .. "' (D+1)"
+							msg = msg .. " - Current day " .. msgDay .. " is in " .. tostring( json.encode( condition.days ) ) .. " and current time '" .. tostring( currentTime ) .. "' is " .. msgTimeBetween
+						end
+					elseif table.contains( condition.days, previousDay ) then
+						-- D+1
+						if ( currentTime < condition.time2 ) then
+							msg = msg .. " - Current time '" .. tostring( currentTime ) .. "' is not between '" .. tostring( condition.time1 ) .. "' and '" .. tostring( condition.time2 ) .. "' (D+1)"
+							status = 0
+						else
+							msg = msg .. " - Current day " .. msgDay .. " is in " .. tostring( json.encode( condition.days ) ) .. " and current time '" .. tostring( currentTime ) .. "' is " .. msgTimeBetween .. "(D+1)"
 						end
 					else
-						msg = msg .. " - Current day " .. msgDay .. " is not in " .. tostring(json.encode(condition.days))
+						msg = msg .. " - Current day " .. msgDay .. " is not in " .. tostring( json.encode( condition.days ) )
 						status = 0
 					end
 				end
 			else
 				hasToTriggerOff = true
-				local currentTime = os.date('%H:%M:%S', os.time())
-				if not table.contains(condition.days, currentDay) then
-					msg = msg .. " - Current day of " .. typeOfDay .. " '" .. tostring(currentDay) .. "' is not in " .. tostring(json.encode(condition.days))
+				local currentTime = os.date( "%H:%M:%S", os.time() )
+				if not table.contains( condition.days, currentDay ) then
+					msg = msg .. " - Current day of " .. typeOfDay .. " '" .. tostring( currentDay ) .. "' is not in " .. tostring( json.encode( condition.days ) )
 					status = 0
-				elseif (currentTime ~= condition.time) then
-					msg = msg .. " - Current time '" .. tostring(currentTime) .. "' is not equal to '" .. tostring(condition.time) .. "'"
+				elseif ( currentTime ~= condition.time ) then
+					msg = msg .. " - Current time '" .. tostring( currentTime ) .. "' is not equal to '" .. tostring( condition.time ) .. "'"
 					status = 0
 				end
 			end
 
-			log(msg, "ConditionTime.updateStatus", 3)
+			log( msg, "ConditionTime.updateStatus", 3 )
 
-			if Condition.setStatus(condition, status) then
-				luup.call_delay("RulesEngine.Rule.updateStatus", 0, condition._ruleId)
+			if Condition.setStatus( condition, status ) then
+				luup.call_delay( "RulesEngine.Rule.updateStatus", 0, condition._ruleId )
 			end
 
 			-- TODO time of untrip (like motion sensor)
-			if (hasToTriggerOff and (status == 1)) then
-				if Condition.setStatus(condition, 0) then
-					luup.call_delay("RulesEngine.Rule.updateStatus", 0, condition._ruleId)
+			if ( hasToTriggerOff and ( status == 1 ) ) then
+				if Condition.setStatus( condition, 0 ) then
+					luup.call_delay( "RulesEngine.Rule.updateStatus", 0, condition._ruleId )
 				end
 			end
 
@@ -2258,54 +2289,59 @@ do
 	}
 
 	_actionTypes["action_device"] = {
-		init = function (action)
-			action.deviceId = tonumber(action.deviceId)
+		init = function( action )
+			action.deviceId = tonumber( action.deviceId )
 			-- Get properties from mutation
-			if (action.mutation ~= nil) then
-				if ((action.service == nil) and (action.mutation.service ~= nil)) then
+			if ( action.mutation ~= nil ) then
+				if ( ( action.service == nil ) and ( action.mutation.service ~= nil ) ) then
 					action.service = action.mutation.service
 				end
-				if ((action.action == nil) and (action.mutation.action ~= nil)) then
+				if ( ( action.action == nil ) and ( action.mutation.action ~= nil ) ) then
 					action.action = action.mutation.action
+				end
+				if ( action.mutation.no_param ~= nil ) then
+					action.noArgument = true
 				end
 				action.mutation = nil
 			end
 			-- Get arguments
 			action.arguments = {}
-			for key, value in pairs(action) do
-				local paramName = string.match(key, "^param_(.*)$")
-				if (paramName ~= nil) then
-					action.arguments[paramName] = value
-				elseif (key == "actionParams") then
+			for key, value in pairs( action ) do
+				local paramName = string.match( key, "^param_(.*)$" )
+				if ( paramName ~= nil ) then
+					action.arguments[ paramName ] = value
+					action[ key ] = nil
+				elseif ( key == "actionParams" ) then
 					-- params are encoded into JSON
-					local decodeSuccess, arguments, strError = pcall(json.decode, value)
-					if ((not decodeSuccess) or (type(arguments) ~= "table")) then
-					-- error
+					local decodeSuccess, arguments, strError = pcall( json.decode, value )
+					if ( ( not decodeSuccess ) or ( type( arguments ) ~= "table" ) ) then
+						-- TODO error
 					else
-						table.extend(action.arguments, arguments)
+						table.extend( action.arguments, arguments )
+						action[ key ] = nil
 					end
 				end
 			end
 			-- Get device ids
-			action.deviceIds = _getDeviceIds(action)
+			action.deviceIds = _getDeviceIds( action )
 			action.device = nil
-			log("Action '" .. tostring(json.encode(action)), "ActionType.action_device.init", 4)
+			log( "Action '" .. tostring( json.encode( action ) ), "ActionType.action_device.init", 4 )
 		end,
-		check = function (action)
-			if not _checkParameters(action, {"deviceIds", "service", "action", "arguments"}) then
+		check = function( action )
+			if not _checkParameters( action, { "deviceIds", "service", "action", { "noArgument", "arguments" } } ) then
 				return false
 			end
 			return true
 		end,
-		execute = function (action, context)
-			for _, deviceId in ipairs(action.deviceIds) do
+		execute = function( action, context )
+			for _, deviceId in ipairs( action.deviceIds ) do
 				-- Check first device com status
-				if (not luup.is_ready(deviceId) or (Variable.get(deviceId, VARIABLE.COMM_FAILURE) == "1")) then
-					error("Device #" .. tostring(deviceId) .. " is not ready or has a com failure", "ActionType.action_device.execute")
+				if ( not luup.is_ready( deviceId ) or ( Variable.get( deviceId, VARIABLE.COMM_FAILURE ) == "1" ) ) then
+					error( "Device #" .. tostring( deviceId ) .. " is not ready or has a com failure", "ActionType.action_device.execute" )
 				end
 				-- Call luup action
-				log("Action '" .. action.action .. "' for device #" .. tostring(deviceId) .. " with " .. tostring(json.encode(action.arguments)), "ActionType.action_device.execute", 3)
-				luup.call_action(action.service, action.action, action.arguments, deviceId)
+				log( "Action '" .. action.action .. "' for device #" .. tostring( deviceId ) .. " with " .. tostring( json.encode( action.arguments ) ), "ActionType.action_device.execute", 3 )
+				luup.call_action( action.service, action.action, action.arguments, deviceId )
 			end
 		end
 	}
@@ -3152,8 +3188,12 @@ Rule = {
 		log(msg .. " - Init rule status", "Rule.start", 2)
 
 		-- Check if rule is acknowledgeable
-		if (rule.properties["property_is_acknowledgeable"] ~= nil) then
-			rule._context.isAcknowledgeable = (rule.properties["property_is_acknowledgeable"].isAcknowledgeable == "TRUE")
+		if ( rule.properties["property_is_acknowledgeable"] ~= nil ) then
+			rule._context.isAcknowledgeable = ( rule.properties["property_is_acknowledgeable"].isAcknowledgeable == "TRUE" )
+		end
+		-- Room
+		if ( rule.properties["property_room"] ~= nil ) then
+			rule._context.roomId = rule.properties["property_room"].roomId or "0"
 		end
 
 		Hooks.execute("onRuleStatusInit", rule)

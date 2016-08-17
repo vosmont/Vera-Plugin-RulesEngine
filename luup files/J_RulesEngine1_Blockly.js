@@ -815,21 +815,13 @@ function _createDeviceFilterInput( inputName, params, onChange ) {
 		input.appendField(
 			new Blockly.FieldDropdown( [ [ "...", "" ] ], function( newValue ) {
 				// Update the other filters
-				var filteredDevices;
-				var filters = {};
-				filters[ thatBlock.prefix_ + "_" + inputName ] = newValue;
-				for ( var i = 0; i < thatBlock.inputs_.length; i++ ) {
-					var otherInputName = thatBlock.inputs_[ i ];
-					if ( otherInputName !== inputName ) {
-						filteredDevices = _updateDeviceFilterInput.call( this.sourceBlock_, otherInputName, filters, filteredDevices );
-					}
-				}
-				filteredDevices = null
+				thatBlock.filters_[ thatBlock.prefix_ + "_" + inputName ] = newValue;
+				_updateDeviceFilterInputs.call( thatBlock, thatBlock.filters_, thatBlock.prefix_ + "_" + inputName );
 				if ( typeof( onChange ) === "function" ) {
 					onChange.call( thatBlock, inputName, newValue );
 				}
 				// Check matching after change
-				_checkDeviceFilterConnection.call( thatBlock, filters );
+				//_checkDeviceFilterConnection.call( thatBlock, thatBlock.filters_ );
 			} ),
 			fieldName
 		);
@@ -848,26 +840,12 @@ function _updateDeviceFilterInput( inputName, params, filteredDevices ) {
 	}
 	var options = dropdown.getOptions_();
 	var currentValue = dropdown.getValue();
+	var currentText = dropdown.text_;
 	options.splice( 1, options.length );
 
 	if ( !params ) {
-		params = {};
-	}
-	// TODO : stocker autre part le controllerId ?
-	params.controller_id = $( "#rulesengine-blockly-workspace" ).data( "controller_id" );
-	if ( !params.controller_id ) {
-		params.controller_id = parseInt( params.controller_id, 10 );
-	}
-	// Get all the other choosen values (or from params)
-	for ( var i = 0; i < this.inputs_.length; i++ ) {
-		var otherInputName = this.inputs_[ i ];
-		if ( ( otherInputName !== inputName ) && (params[ this.prefix_ + "_" + otherInputName ] === undefined)) {
-			var otherInputParams = _getInputParam.call( this, otherInputName );
-			var otherFieldValue = this.getFieldValue( otherInputParams.field );
-			if ( otherFieldValue ) {
-				params[ this.prefix_ + "_" + otherInputName ] = otherFieldValue;
-			}
-		}
+		//params = {};
+		params = this.filters_;
 	}
 
 	var endFunc, sortFunc;
@@ -880,7 +858,7 @@ function _updateDeviceFilterInput( inputName, params, filteredDevices ) {
 					var deviceId = device.id.toString();
 					if ( !indexValues[ deviceId ] ) {
 						indexValues[ deviceId ] = true;
-						options.push( [ device.name, deviceId ] );
+						options.push( [ device.name.trim(), deviceId ] );
 					}
 				} );
 			};
@@ -1069,7 +1047,12 @@ function _updateDeviceFilterInput( inputName, params, filteredDevices ) {
 	if ( sortFunc ) {
 		options.sort( sortFunc );
 	}
-	if ( currentValue && !indexValues[ currentValue ] ) {
+	if ( filteredDevices.length === 0 ) {
+		// No filtered device : add former value
+		if ( currentValue != "" ) {
+			options.push( [ currentText, currentValue ] );
+		}
+	} else if ( currentValue && !indexValues[ currentValue ] ) {
 		// The choosen value is no more in the dropdown values
 		dropdown.setValue( "" );
 	} else if ( currentValue !== "" ) {
@@ -1082,17 +1065,35 @@ function _updateDeviceFilterInput( inputName, params, filteredDevices ) {
 
 	return filteredDevices;
 }
-function _updateDeviceFilterInputs( params ) {
-	if ( params == null ) {
-		params = {};
+function _updateDeviceFilterInputs( filters, excludedInput ) {
+	if ( filters ) {
+		$.extend( this.filters_, filters );
 	}
+	// Apply filters on the inputs
+	var filters = $.extend( {}, this.filters_, this.externalFilters_ );
 	var filteredDevices;
 	for ( var i = 0; i < this.inputs_.length; i++ ) {
 		var inputName = this.inputs_[ i ];
 		if ( this.getInput( inputName ) ) {
-			filteredDevices = _updateDeviceFilterInput.call( this, inputName, params, filteredDevices );
+			if ( excludedInput && ( excludedInput === inputName ) ) {
+				continue;
+			}
+			filteredDevices = _updateDeviceFilterInput.call( this, inputName, filters, filteredDevices );
 		}
 	}
+
+	if ( ( this.getField( "deviceLabel" ) != null ) && ( this.getField( "deviceLabel" ).textElement_ != null ) ) {
+		var deviceLabel;
+		if ( ( filteredDevices == null ) || ( filteredDevices.length === 0 ) ) {
+			deviceLabel = "no device";
+		} else if ( filteredDevices.length > 1 ) {
+			deviceLabel = filteredDevices.length + " devices";
+		} else {
+			deviceLabel = "1 device";
+		}
+		this.getField( "deviceLabel" ).textElement_.innerHTML = deviceLabel;
+	}
+
 	filteredDevices = null;
 }
 
@@ -1187,8 +1188,8 @@ function _refreshInput( inputName ) {
 }
 */
 
-function _checkDeviceFilterConnection( criterias ) {
-	// Check if connected devices are matching criterias
+function _checkDeviceFilterConnection( filters ) {
+	// Check if connected devices are matching external filters
 	var inputDevice = this.getInput( "device" );
 	if ( !inputDevice ) {
 		return;
@@ -1203,11 +1204,11 @@ function _checkDeviceFilterConnection( criterias ) {
 			var subConnection = device.inputList[i].connection;
 			var subDevice = subConnection && subConnection.targetBlock();
 			if ( subDevice ) {
-				subDevice.isMatching( criterias );
+				subDevice.isMatching( filters );
 			}
 		}
 	} else {
-		device.isMatching( criterias );
+		device.isMatching( filters );
 	}
 }
 
@@ -1221,10 +1222,12 @@ function _sortOptionsById( a, b ) {
 	return 0;
 }
 function _sortOptionsByName( a, b ) {
-	if ( a[ 0 ] < b[ 0 ] ) {
+	var name1 = a[ 0 ].toUpperCase();
+	var name2 = b[ 0 ].toUpperCase();
+	if ( name1 < name2 ) {
 		return -1;
 	}
-	if ( a[ 0 ] > b[ 0 ] ) {
+	if ( name1 > name2 ) {
 		return 1;
 	}
 	return 0;
@@ -1238,7 +1241,7 @@ function _updateMutationWithParams( attributeNames, container ) {
 		} else {
 			var attributeParams = _getInputParam.call( this, attributeName );
 			if ( attributeParams && attributeParams.field && this.getField( attributeParams.field ) ) {
-				if ( attributeParams.isMainField) {
+				if ( attributeParams.isMainField ) {
 					// Attribute used for input construction
 					container.setAttribute( "input_" + attributeName, this.getFieldValue( attributeParams.field ) );
 				}
@@ -1385,9 +1388,10 @@ function _compose( containerBlock, onChange ) {
 			if ( inputParams.before ) {
 				_moveInputBefore.call( this, inputName, inputParams.before );
 			}
-			// Update
-			_updateDeviceFilterInput.call( this, inputName, {} );
 		} else {
+			if ( this.filters_ && this.filters_[ this.prefix_ + "_" + inputName ] ) {
+				delete this.filters_[ this.prefix_ + "_" + inputName ];
+			}
 			if ( inputParams.isMultiple ) {
 				this.params_[ inputParams.counter ] = 0;
 			}
@@ -1396,6 +1400,7 @@ function _compose( containerBlock, onChange ) {
 			}
 		}
 	}
+	_updateDeviceFilterInputs.call( this );
 }
 
 // ****************************************************************************
@@ -1453,9 +1458,7 @@ goog.require('goog.array');
 
 goog.provide( "Blockly.Blocks.device" );
 
-Blockly.Msg.DEVICE_TOOLTIP = "{0} device(s) matching.";
-Blockly.Msg.DEVICE_NO_FILTER_TOOLTIP = "No device is selected.";
-
+Blockly.Msg.DEVICE_TOOLTIP = "The number of device is the devices that are matching the selected criterias (included those implied by the connection).";
 Blockly.Msg.CONTROLS_DEVICE_TITLE = "device";
 Blockly.Msg.CONTROLS_DEVICE_TOOLTIP = "TODO";
 Blockly.Msg.CONTROLS_DEVICE_ID_TITLE = "id";
@@ -1472,6 +1475,8 @@ Blockly.Blocks[ "device" ] = {
 		this.setColour( Blockly.Blocks.devices.HUE );
 		this.prefix_ = "device";
 		this.params_ = {};
+		this.filters_ = {};
+		this.externalFilters_ = null;
 		this.checkedCriterias_ = null;
 		this.inputs_ = [ "id", "room", "type", "category" ];
 
@@ -1482,7 +1487,7 @@ Blockly.Blocks[ "device" ] = {
 
 		this.setInputsInline( false );
 		this.setOutput( true, "Device" );
-		this.setTooltip( Blockly.Msg.DEVICE_NO_FILTER_TOOLTIP );
+		this.setTooltip( Blockly.Msg.DEVICE_TOOLTIP );
 	},
 
 	mutationToDom: function() {
@@ -1506,6 +1511,22 @@ Blockly.Blocks[ "device" ] = {
 	},
 
 	validate: function() {
+		// TODO : stocker autre part le controllerId ?
+		this.filters_.controller_id = $( "#rulesengine-blockly-workspace" ).data( "controller_id" );
+		if ( !this.filters_.controller_id ) {
+			this.filters_.controller_id = parseInt( this.filters_.controller_id, 10 );
+		}
+		// Get all the other choosen values
+		for ( var i = 0; i < this.inputs_.length; i++ ) {
+			var inputName = this.inputs_[ i ];
+			if ( this.filters_[ this.prefix_ + "_" + inputName ] === undefined ) {
+				var inputParams = _getInputParam.call( this, inputName );
+				var fieldValue = this.getFieldValue( inputParams.field );
+				if ( fieldValue ) {
+					this.filters_[ this.prefix_ + "_" + inputName ] = fieldValue;
+				}
+			}
+		}
 		_updateDeviceFilterInputs.call( this );
 	},
 
@@ -1526,78 +1547,18 @@ Blockly.Blocks[ "device" ] = {
 				this.checkedCriterias_ = null;
 			}
 		}
-
-		// Get choosen filters
-		if ( filters == null ) {
-			for ( var i = 0; i < this.inputs_.length; i++ ) {
-				var inputName = this.inputs_[ i ];
-				var inputParams = _INPUTS[ this.prefix_ ][ inputName ];
-				if ( this.getInput( inputName ) ) {
-					var fieldName = inputParams.field;
-					var fieldValue = this.getFieldValue( fieldName ) || this.params_[ "input_" + inputName ];
-					if ( !_isEmpty( fieldValue ) ) {
-						if ( filters == null ) {
-							filters = {};
-						}
-						filters[ this.prefix_ + "_" + inputName ] = fieldValue;
-					}
-				}
-			}
-		}
-		if ( filters == null ) {
-			this.setTooltip( Blockly.Msg.DEVICE_NO_FILTER_TOOLTIP );
-			this.setWarningText();
-			return false;
-		}
-
-		// Apply the filters and then the criterias
-		var nbFilteredDevices = 0, nbMatchingDevices = 0, nbNotMatchingDevices = 0;
-		if ( criterias == null ) {
-			criterias = this.checkedCriterias_;
-		}
-		MultiBox.getDevices(
-			null,
-			function ( device ) {
-				return _filterDevice( device, filters );
-			},
-			function( devices ) {
-				// All the filtered devices have to match the given criterias
-				isMatching = true;
-				for ( var i = 0; i < devices.length; i++ ) {
-					nbFilteredDevices++;
-					if ( !_filterDevice( devices[ i ], criterias ) ) {
-						isMatching = false;
-						nbNotMatchingDevices++;
-					} else {
-						nbMatchingDevices++;
-					}
-				}
-			}
-		);
-
-		if ( isMatching ) {
-			this.checkedCriterias_ = criterias;
-			this.setWarningText();
-		} else {
-			this.checkedCriterias_ = null;
-			if (nbNotMatchingDevices > 1) {
-				this.setWarningText( nbNotMatchingDevices + " devices do not match the criterias\n" + JSON.stringify( criterias ) );
-			} else {
-				this.setWarningText( "1 device does not match criterias\n" + JSON.stringify( criterias ) );
-			}
-		}
-
-		var deviceLabel = ( nbMatchingDevices !== nbFilteredDevices ? nbMatchingDevices + "/" : "" );
-		if ( nbFilteredDevices === 0 ) {
-			deviceLabel = "no device";
-		} else if ( nbFilteredDevices > 1 ) {
-			deviceLabel += nbFilteredDevices + " devices";
-		} else {
-			deviceLabel += "1 device";
-		}
-		this.getField( "deviceLabel" ).textElement_.innerHTML = deviceLabel;
+		this.externalFilters_ = criterias;
+		_updateDeviceFilterInputs.call( this );
 
 		return isMatching;
+	},
+
+	onchange: function() {
+		if ( ( this.getParent() == null ) && this.externalFilters_ ) {
+			// Purge external filters if the connection if broken
+			this.externalFilters_ = null;
+			_updateDeviceFilterInputs.call( this );
+		}
 	}
 };
 
@@ -1848,7 +1809,7 @@ function _updateConditionValueShape() {
 	_removeInput.call( this, "service" );
 
 	// Device type
-	this.getField( "deviceLabel" ).text_ = ( this.params_.device_label ? this.params_.device_label : "device" );
+	this.getField( "conditionDeviceLabel" ).text_ = ( this.params_.device_label ? this.params_.device_label : "device" );
 
 	// Event
 	if ( this.params_.condition_type === "event" ) {
@@ -2100,11 +2061,12 @@ Blockly.Blocks[ "condition_value" ] = {
 	init: function() {
 		this.setColour( Blockly.Blocks.conditions.HUE2 );
 		this.prefix_ = "condition";
+		this.filters_ = {};
 		this.params_ = {};
 		this.inputs_ = [ "actions", "params", "device_type", "variable", "service" ];
 
 		this.appendValueInput( "device" )
-			.appendField( "device", "deviceLabel" )
+			.appendField( "device", "conditionDeviceLabel" )
 			.setAlign( Blockly.ALIGN_RIGHT )
 			.setCheck( [ "Devices", "Device" ] );
 
@@ -2189,33 +2151,33 @@ Blockly.Blocks[ "condition_value" ] = {
 
 	validate: function() {
 		_updateDeviceFilterInputs.call( this,
-			(
-				( this.params_.condition_type === "event" ) ?
+			//(
+				/*( this.params_.condition_type === "event" ) ?
 				{
 					"condition_device_type": this.params_[ "input_device_type" ]
 				}
-				:
+				:*/
 				{
 					"condition_service"    : this.params_[ "input_service" ],
 					"condition_variable"   : this.params_[ "input_variable" ]
 				}
-			)
+			//)
 		);
 	},
 
 	onchange: function() {
 		_checkDeviceFilterConnection.call( this,
-			(
+			/*(
 				( this.params_.condition_type === "event" ) ?
 				{
 					"device_type": ( this.getFieldValue( "deviceType" ) || this.params_.device_type )
 				}
-				:
+				:*/
 				{
 					"condition_service" : ( this.getFieldValue( "service" )     || this.params_.service ),
 					"condition_variable": ( this.getFieldValue( "variable" )    || this.params_.variable )
 				}
-			)
+			//)
 		);
 	}
 };
@@ -2243,6 +2205,8 @@ Blockly.Blocks[ "condition_time" ] = {
 			this.setWarningText("First time format must be 'hh:mm:ss'");
 		} else if ( this.getFieldValue( "time2" ) && ( this.getFieldValue( "time2" ).match( /^\d\d:\d\d:\d\d$/ ) == null ) ) {
 			this.setWarningText( "Second time format must be 'hh:mm:ss'" );
+		} else if ( this.getFieldValue( "daysOfWeek" ) && ( this.getFieldValue( "daysOfWeek" ).match( /^\d\d:\d\d:\d\d$/ ) == null ) ) {
+			this.setWarningText( "Days of week format must be '[1-7](,[1-7])*'" );
 		} else {
 			this.setWarningText();
 		}
@@ -2872,7 +2836,7 @@ Blockly.Blocks['action_function'] = {
 
 function _updateActionDeviceShape() {
 	// Device type
-	this.getField( "deviceLabel" ).text_ = ( this.params_.device_label ? this.params_.device_label : "device" );
+	this.getField( "actionDeviceLabel" ).text_ = ( this.params_.device_label ? this.params_.device_label : "device" );
 
 	// Action params selection
 	if ( this.params_.action_params ) {
@@ -2914,6 +2878,8 @@ function _updateActionDeviceShape() {
 }
 
 function _updateActionDeviceParamsShape( newAction ) {
+	delete this.params_.no_param;
+
 	if ( this.params_.action_params ) {
 		return;
 	}
@@ -2939,6 +2905,9 @@ function _updateActionDeviceParamsShape( newAction ) {
 				.appendField( new Blockly.FieldTextInput( "" ), "param_" + inputName );
 			_moveInputBefore.call( this, "action_params_" + i, [ "device" ] );
 		}
+	} else {
+		// No param
+		this.params_.no_param = true;
 	}
 }
 
@@ -2946,10 +2915,11 @@ Blockly.Blocks['action_device'] = {
 	init: function () {
 		this.setColour( Blockly.Blocks.actions.HUE2 );
 		this.prefix_ = "action";
+		this.filters_ = {};
 		this.params_ = {};
 
 		this.appendValueInput( "device" )
-			.appendField( "device", "deviceLabel" )
+			.appendField( "device", "actionDeviceLabel" )
 			.setAlign( Blockly.ALIGN_RIGHT )
 			.setCheck( [ "Devices", "Device" ] );
 
@@ -2964,7 +2934,7 @@ Blockly.Blocks['action_device'] = {
 
 	mutationToDom: function() {
 		var container = document.createElement( "mutation" );
-		_updateMutationWithParams.call( this, [ "action_type", "service", "action" ], container );
+		_updateMutationWithParams.call( this, [ "action_type", "service", "action", "no_param" ], container );
 		return container;
 	},
 
@@ -2997,11 +2967,10 @@ Blockly.Blocks['action_device'] = {
 	},
 
 	onchange: function() {
-		var criterias = {
+		_checkDeviceFilterConnection.call( this, {
 			"action_service": ( this.params_.service || this.getFieldValue( "service" ) ),
 			"action_action" : ( this.params_.action  || this.getFieldValue( "action" ) )
-		};
-		_checkDeviceFilterConnection.call( this, criterias );
+		} );
 	}
 };
 

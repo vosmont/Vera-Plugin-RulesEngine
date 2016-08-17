@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<implementation>
+	<actionList>
+		<action>
+			<serviceId>urn:upnp-org:serviceId:SwitchPower1</serviceId>
+			<name>SetTarget</name>
+			<run>
+				luup.variable_set("urn:upnp-org:serviceId:SwitchPower1", "Status", lul_settings.newTargetValue, lul_device)
+			</run>
+		</action>
+	</actionList>
+</implementation>

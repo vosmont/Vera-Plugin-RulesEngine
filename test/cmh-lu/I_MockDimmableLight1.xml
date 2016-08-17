@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<implementation>
+	<actionList>
+		<action>
+			<serviceId>urn:upnp-org:serviceId:SwitchPower1</serviceId>
+			<name>SetTarget</name>
+			<run>
+				luup.variable_set("urn:upnp-org:serviceId:SwitchPower1", "Status", lul_settings.newTargetValue, lul_device)
+				if (tonumber(lul_settings.newTargetValue) == 0) then
+					luup.variable_set("urn:upnp-org:serviceId:Dimming1", "LoadLevelStatus", "0", lul_device)
+				else
+					luup.variable_set("urn:upnp-org:serviceId:Dimming1", "LoadLevelStatus", "100", lul_device)
+				end
+			</run>
+		</action>
+		<action>
+			<serviceId>urn:upnp-org:serviceId:Dimming1</serviceId>
+			<name>SetLoadLevelTarget</name>
+			<run>
+				luup.variable_set("urn:upnp-org:serviceId:Dimming1", "LoadLevelStatus", lul_settings.newLoadlevelTarget, lul_device)
+				if (tonumber(lul_settings.newLoadlevelTarget) > 0) then
+					luup.variable_set("urn:upnp-org:serviceId:SwitchPower1", "Status", "1", lul_device)
+				else
+					luup.variable_set("urn:upnp-org:serviceId:SwitchPower1", "Status", "0", lul_device)
+				end
+			</run>
+		</action>
+	</actionList>
+</implementation>
