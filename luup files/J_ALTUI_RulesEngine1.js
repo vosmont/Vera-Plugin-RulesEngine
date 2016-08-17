@@ -1212,7 +1212,7 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 						var controller = MultiBox.controllerOf( device.altuiid ).controller;
 						var devicetypesDB = MultiBox.getDeviceTypesDB( controller );
 						var dt = devicetypesDB[ device.device_type ];
-						if ( dt.Services && ( dt.Services.length > 0 ) ) {
+						if ( dt && dt.Services && ( dt.Services.length > 0 ) ) {
 							MultiBox.getDeviceActions( device, function ( services ) {
 								for ( var i = 0; i < services.length; i++ ) {
 									var actionService = services[ i ].ServiceId;
