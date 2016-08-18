@@ -131,10 +131,11 @@ var RulesEngine = ( function( api, $ ) {
 			} )
 			.done( function( errors ) {
 				if ( $.isArray( errors ) && ( errors.length > 0 ) ) {
-					var html = '<table><tr><th>Date</th><th>Error</th></tr>';
+					var html = '<table><tr><th>Date</th><th>Rule</th><th>Error</th></tr>';
 					$.each( errors, function( i, error ) {
 						html += '<tr>'
 							+		'<td>' + _convertTimestampToLocaleString( error.timestamp ) + '</td>'
+							+		'<td>' + ( error.ruleId ? '#' + error.ruleId : '' ) + '</td>'
 							+		'<td>' + error.event + '</td>'
 							+	'</tr>';
 					} );

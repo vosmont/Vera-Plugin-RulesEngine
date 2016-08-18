@@ -607,7 +607,7 @@ var _INPUTS = {
 		"ADD"           : { "type": "value", "autoCreate": false, "isRemovable": true, "isMultiple": true, "counter": "items", "label": "", "align": "ALIGN_RIGHT", "check": [ "Boolean" ], "before": [ "actions" ] },
 		"actions"       : { "type": "statement", "isRemovable": true, "label": "do", "align": "ALIGN_RIGHT", "check": [ "ConditionActionGroup" ] },
 		"params"        : { "type": "value", "isRemovable": true, "label": "with params", "align": "ALIGN_RIGHT", "check": [ "ConditionParams", "ConditionParam" ], "before": [ "actions" ] },
-		"device_type"   : { "type": "deviceFilter", "isMainField": true, "field": "deviceType", "label": "type" },
+		"device_type"   : { "type": "deviceFilter", "isMainField": true, "field": "deviceType", "label": "template" },
 		"event"         : { "type": "dropdown", "isMainField": true, "field": "eventId", "options": [], "label": "event" },
 		"variable"      : { "type": "deviceFilter", "field": "variable", "label": "variable", "before": [ "params", "actions" ] },
 		"service"       : { "type": "deviceFilter", "field": "service", "label": "service", "before": [ "variable" ] },
@@ -1930,6 +1930,10 @@ function _getAllowedValue( allowedValue ) {
 function _updateConditionEventShape( deviceType, eventId, value ) {
 	var thatBlock = this;
 	// Clean
+	thatBlock.params_.service = null;
+	thatBlock.params_.variable = null;
+	thatBlock.params_.operator = null;
+	thatBlock.params_.value    = null;
 	_removeInput.call( this, "event" );
 	for ( var i = 0; i < 10; i++ ) {
 		_removeInput.call( this, "and" + i );
@@ -2094,6 +2098,7 @@ Blockly.Blocks[ "condition_value" ] = {
 		if ( xmlElement ) {
 			_createInputsFromMutation.call( this, xmlElement );
 			_loadParamsFromMutation.call( this, xmlElement, [ "condition_type", "icon", "device_label", "device_type", "event", "operators", "service", "variable_label", "variable", "operator", "value" ] );
+			// Deprecated (use event now)
 			switch( this.params_.condition_type ) {
 				case "sensor_armed":
 					this.params_.device_label = "security sensor";
@@ -2802,6 +2807,7 @@ Blockly.Blocks[ "controls_action_group_condition" ] = {
 Blockly.Msg.ACTION_WAIT_TOOLTIP = "Wait a defined time.";
 Blockly.Msg.ACTION_FUNCTION_TOOLTIP = "Execute LUA code.";
 Blockly.Msg.ACTION_DEVICE_TOOLTIP = "Execute an action of a device.";
+Blockly.Msg.ACTION_SCENE_TOOLTIP = "Execute a scene.";
 Blockly.Msg.ACTION_MQTT_TOOLTIP = "(TODO)Publish a message on MQTT broker.";
 
 Blockly.Blocks['action_wait'] = {
@@ -2971,6 +2977,27 @@ Blockly.Blocks['action_device'] = {
 			"action_service": ( this.params_.service || this.getFieldValue( "service" ) ),
 			"action_action" : ( this.params_.action  || this.getFieldValue( "action" ) )
 		} );
+	}
+};
+
+Blockly.Blocks['action_scene'] = {
+	init: function () {
+		this.setColour( Blockly.Blocks.actions.HUE2 );
+
+		var options = [ [ "...", "" ] ];
+		$.each( ALTUI_RulesEngine.getScenes(), function( i, scene ) {
+			options.push( [ scene.roomName + " - " + scene.name, scene.id.toString() ] );
+		} );
+		options.sort( _sortOptionsByName );
+
+		this.appendDummyInput()
+			.appendField( "scene" );
+		this.appendDummyInput()
+			.appendField( new Blockly.FieldDropdown( options ), "sceneId" );
+
+		this.setPreviousStatement( true, "ActionType" );
+		this.setNextStatement( true, "ActionType" );
+		this.setTooltip( Blockly.Msg.ACTION_SCENE_TOOLTIP );
 	}
 };
 

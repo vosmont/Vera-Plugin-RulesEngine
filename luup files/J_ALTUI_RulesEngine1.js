@@ -102,6 +102,7 @@ var ALTUI_RulesEngine = ( function( window, undefined ) {
 			<block type="action_device"><mutation action_type="switch"></mutation></block>\
 			<block type="action_device"><mutation action_type="dim"></mutation></block>\
 		</category>\
+		<block type="action_scene"></block>\
 	</category>\
 	<category name="Param">\
 		<block type="list_action_param"></block>\
@@ -305,6 +306,19 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 			}
 		} );
 		return result;
+	}
+
+	function _getScenes() {
+		var scenes = [];
+		$.each( jsonp.ud.scenes, function( i, scene ) {
+			var room = ( scene.room ? api.getRoomObject( scene.room ) : null );
+			scenes.push( {
+				"id": scene.id,
+				"roomName": ( room ? room.name : "_No room" ),
+				"name": scene.name
+			} );
+		} );
+		return scenes;
 	}
 
 	function _updateDevice( device, timeline ) {
@@ -1185,7 +1199,7 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 			if ( item.eventType === "ERROR" ) {
 				item.eventType = '<font color="red">' + item.eventType + '</font>';
 			}
-			$(".altui-mainpanel .timeline").append( '<div>' + _convertTimestampToLocaleString( item.timestamp ) + ' - ' + item.eventType + ' - ' + item.event + '</div>' );
+			$(".altui-mainpanel .timeline").append( '<div>' + _convertTimestampToLocaleString( item.timestamp ) + ( item.ruleId ? ' - Rule #' + item.ruleId : '' ) + ' - ' + item.eventType + ' - ' + item.event + '</div>' );
 		} );
 		$(".altui-mainpanel .timeline").append( '<div> Schedule: </div>' );
 		$.each( timeline.scheduled, function( idx, item ) {
@@ -1683,7 +1697,8 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 		getDeviceActionNames: _getDeviceActionNames,
 		getDeviceAction: _getDeviceAction,
 		getRooms: _getRooms,
-		getRules: _getRules
+		getRules: _getRules,
+		getScenes: _getScenes
 	};
 
 	// Register

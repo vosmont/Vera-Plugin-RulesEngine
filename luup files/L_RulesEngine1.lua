@@ -337,45 +337,45 @@ end
 
 local function error( msg, methodName )
 	luup.log( getFormatedMethodName( methodName ) .. " ERROR: " .. msg, 1 )
-	-- Add to known errors
+	-- Add to known errors (but without linked rule)
 	History.add( nil, "Error", msg )
 end
 
-local function _getItemSummary (item)
-	if (type(item) ~= "table") then
+local function _getItemSummary( item )
+	if ( type( item ) ~= "table" ) then
 		return ""
 	end
 	--local summary = "Rule #" .. tostring(item._ruleId) .. " - " .. tostring(item.mainType) .. " #" .. tostring(item.id)
 	--local summary = tostring(item.mainType) .. " #" .. tostring(item.id)
-	local summary = "#" .. tostring(item.id) .. "(" .. tostring(item.mainType) .. ")"
-	if (item.type ~= nil) then
-		summary = summary .. " of type '" .. tostring(item.type) .. "'"
+	local summary = "#" .. tostring( item.id ) .. "(" .. tostring( item.mainType ) .. ")"
+	if ( item.type ~= nil ) then
+		summary = summary .. " of type '" .. tostring( item.type ) .. "'"
 	end
 	local separator = "with"
-	if (item.mainType == "ActionGroup") then
+	if ( item.mainType == "ActionGroup" ) then
 		separator = "for"
 	end
-	if (item.event ~= nil) then
-		summary = summary .. " " .. separator .. " event '" .. tostring(item.event) .. "'"
+	if ( item.event ~= nil ) then
+		summary = summary .. " " .. separator .. " event '" .. tostring( item.event ) .. "'"
 	end
-	if (item.level ~= nil) then
-		summary = summary .. " " .. separator .. " level '" .. tostring(item.level) .. "'"
+	if ( item.level ~= nil ) then
+		summary = summary .. " " .. separator .. " level '" .. tostring( item.level ) .. "'"
 	end
-	if ((item.levels ~= nil) and (table.getn(item.levels) > 0)) then
-		summary = summary .. " " .. separator .. " levels " .. tostring(json.encode(item.levels))
+	if ( ( item.levels ~= nil ) and ( table.getn( item.levels ) > 0 ) ) then
+		summary = summary .. " " .. separator .. " levels " .. tostring( json.encode( item.levels ) )
 	end
 	return summary
 end
 
-local function _initMultiValueKey(object, multiValueKey, monoValueKey)
-	if (object[multiValueKey] == nil) then
-		if ((monoValueKey ~= ni) and (object[monoValueKey] ~= nil)) then
+local function _initMultiValueKey( object, multiValueKey, monoValueKey)
+	if ( object[multiValueKey] == nil ) then
+		if ( ( monoValueKey ~= nil ) and ( object[monoValueKey] ~= nil ) ) then
 			object[multiValueKey] = { object[monoValueKey] }
 		else
 			object[multiValueKey] = {}
 		end
-	elseif (type(object[multiValueKey]) ~= "table") then
-		error("multiValueKey is not a table", "initMultiValueKey")
+	elseif ( type( object[multiValueKey] ) ~= "table" ) then
+		error( "multiValueKey is not a table", "initMultiValueKey" )
 	end
 end
 
@@ -424,21 +424,21 @@ local function _checkParameters( input, parameters )
 end
 
 -- Get device id by its description
-local function _getDeviceIdByName (deviceName)
+local function _getDeviceIdByName( deviceName )
 	local id = nil
 --print(deviceName)
 --print(json.encode(luup.devices))
-	if (type(deviceName) == "number") then
-		id = ((luup.devices[deviceName] ~= nil) and deviceName or nil)
-	elseif (type(deviceName) == "string") then
-		for deviceId, device in pairs(luup.devices) do
-			if (device.description == deviceName) then
+	if ( type( deviceName ) == "number" ) then
+		id = ( ( luup.devices[deviceName] ~= nil ) and deviceName or nil )
+	elseif ( type( deviceName ) == "string" ) then
+		for deviceId, device in pairs( luup.devices ) do
+			if ( device.description == deviceName ) then
 				id = deviceId
 			end
 		end
 	end
-	if (id == nil) then
-		error("Device " .. tostring(deviceName) .. " doesn't exist", "getDeviceIdByName")
+	if ( id == nil ) then
+		error( "Device " .. tostring(deviceName) .. " doesn't exist", "getDeviceIdByName" )
 	end
 	return id
 end
@@ -770,7 +770,13 @@ function getEnhancedMessage( message, context )
 	if (context == nil) then
 		return message
 	end
-	local mainConditionContext = context.conditions[ tostring( context.id ) .. ".1" ] or {}
+	log("DEBUG context:" .. json.encode(context), "Tools.getEnhancedMessage", 3)
+	local mainConditionContext
+	if ( context.conditions and context.conditions[ tostring( context.id ) .. ".1" ] ) then
+		mainConditionContext = context.conditions[ tostring( context.id ) .. ".1" ]
+	else
+		mainConditionContext = context
+	end
 	if (string.find(message, "#duration#")) then
 		message = string.gsub(message, "#duration#", _getTimeAgo(context.lastStatusUpdateTime))
 	end
@@ -1124,10 +1130,10 @@ ScheduledTasks = {
 						log("Timeout reached for task #" .. tostring(i) .. "/" .. tostring(#_scheduledTasks) .. ":\n" .. ScheduledTasks.getTaskInfo(scheduledTask), "ScheduledTasks.execute", 4)
 					end
 					table.remove(_scheduledTasks, i)
-					if (type(scheduledTask.callback) == "function") then
-						scheduledTask.callback(unpack(scheduledTask.callbackParams))
+					if ( type( scheduledTask.callback ) == "function" ) then
+						scheduledTask.callback( unpack( scheduledTask.callbackParams ) )
 					else
-						error("callback is not a function", "ScheduledTasks.execute")
+						error( "callback is not a function", "ScheduledTasks.execute" )
 					end
 				end
 			end
@@ -1287,16 +1293,16 @@ end
 -- Condition (rule condition, action condition)
 -- **************************************************
 
-local function _getDeviceIdsFromCriterias (criterias)
+local function _getDeviceIdsFromCriterias( criterias )
 	local deviceIds = {}
-	if (type(criterias) ~= "table") then
+	if ( type( criterias ) ~= "table" ) then
 		return {}
 	end
 	local isMatching
-	for deviceId, device in pairs(luup.devices) do
+	for deviceId, device in pairs( luup.devices ) do
 		isMatching = true
 		-- Filter on id
-		if (tonumber(criterias.deviceId) and (deviceId ~= tonumber(criterias.deviceId))) then
+		if ( tonumber( criterias.deviceId ) and ( deviceId ~= tonumber( criterias.deviceId ) ) ) then
 			isMatching = false
 		end
 		-- Filter on room
@@ -1304,46 +1310,46 @@ local function _getDeviceIdsFromCriterias (criterias)
 			isMatching = false
 		end
 		-- Filter on type
-		if (criterias.deviceType and (device.device_type ~= criterias.deviceType)) then
+		if ( criterias.deviceType and ( device.device_type ~= criterias.deviceType ) ) then
 			isMatching = false
 		end
 		-- Filter on category
-		if (criterias.category) then
-			local tmpCategory = string.split(criterias.category, ",")
-			if (tonumber(tmpCategory[1]) and (device.category_num ~= tonumber(tmpCategory[1]))) then
+		if ( criterias.category ) then
+			local tmpCategory = string.split( criterias.category, "," )
+			if ( tonumber( tmpCategory[1] ) and ( device.category_num ~= tonumber( tmpCategory[1] ) ) ) then
 				isMatching = false
 			end
-			if (tonumber(tmpCategory[2]) and (device.subcategory_num ~= tonumber(tmpCategory[2]))) then
+			if ( tonumber( tmpCategory[2] ) and ( device.subcategory_num ~= tonumber( tmpCategory[2] ) ) ) then
 				isMatching = false
 			end
 		end
-		if (isMatching) then
-			table.insert(deviceIds, deviceId)
+		if isMatching then
+			table.insert( deviceIds, deviceId )
 		end
 	end
-	log("Retrieve ids " .. json.encode(deviceIds) .. " for criterias " .. json.encode(criterias), "getDeviceIdsFromCriterias", 4)
+	log( "Retrieve ids " .. json.encode( deviceIds ) .. " for criterias " .. json.encode( criterias ), "getDeviceIdsFromCriterias", 4 )
 	return deviceIds
 end
 
-local function _getDeviceIds (item)
+local function _getDeviceIds( item )
 	local deviceIds = {}
-	if ((type(item) ~= "table") or (type(item.device) ~= "table")) then
+	if ( ( type( item ) ~= "table") or ( type( item.device ) ~= "table" ) ) then
 		return {}
 	end
-	if (item.device.type == "device") then
+	if ( item.device.type == "device" ) then
 		item.device.type = nil
 		item.device.mutation = nil
-		table.append(deviceIds, _getDeviceIdsFromCriterias(item.device))
+		table.append( deviceIds, _getDeviceIdsFromCriterias( item.device ) )
 	else
-		for _, device in pairs(item.device) do
-			if ((type(device) == "table") and (device.type == "device")) then
+		for _, device in pairs( item.device ) do
+			if ( ( type( device ) == "table" ) and ( device.type == "device" ) ) then
 				device.type = nil
 				device.mutation = nil
-				table.append(deviceIds,_getDeviceIdsFromCriterias(device), true)
+				table.append( deviceIds,_getDeviceIdsFromCriterias( device ), true )
 			end
 		end
 	end
-	log(_getItemSummary(item) .. " - Retrieve ids " .. json.encode(deviceIds), "getDeviceIdsFromParam", 4)
+	log( _getItemSummary( item ) .. " - Retrieve ids " .. json.encode( deviceIds ), "getDeviceIdsFromParam", 4 )
 	return deviceIds
 end
 
@@ -1529,35 +1535,35 @@ do
 			end
 		end,
 
-		updateStatus = function (condition, params)
-			local msg = _getItemSummary(condition)
+		updateStatus = function( condition, params )
+			local msg = _getItemSummary( condition )
 			local context = condition._context
 			local deviceId = condition.deviceId
 			local params = params or {}
 
 			-- Condition of type 'value' / 'value-' / 'value+' / 'value<>'
-			msg = msg .. " for device #" .. tostring(deviceId) .. "(" .. luup.devices[deviceId].description .. ")" .. " - '" .. tostring(condition.service)
-			if (condition.action ~= nil) then
+			msg = msg .. " for device #" .. tostring( deviceId ) .. "(" .. luup.devices[deviceId].description .. ")" .. " - '" .. tostring( condition.service )
+			if ( condition.action ~= nil ) then
 				msg = msg .. "-" .. condition.action
 			end
 			msg = msg .. "-" ..  condition.variable .. "'"
 
 			-- Update known value (if needed)
-			if (condition.mainType == "Trigger") then
-				if (context.lastUpdateTime == 0) then
+			if ( condition.mainType == "Trigger" ) then
+				if ( context.lastUpdateTime == 0 ) then
 					-- The value has not yet been updated
-					context.value, context.lastUpdateTime = Variable.getUnknown(deviceId, condition.service, condition.variable)
-					msg = msg .. " (value retrieved, last change " .. tostring(os.difftime(os.time(), context.lastUpdateTime)) .. "s ago)"
+					context.value, context.lastUpdateTime = Variable.getUnknown( deviceId, condition.service, condition.variable )
+					msg = msg .. " (value retrieved, last change " .. tostring( os.difftime( os.time(), context.lastUpdateTime ) ) .. "s ago)"
 				end
 			else
 				-- Update value if too old (not automatically updated because not a trigger)
 				--if (os.difftime(os.time(), context.lastUpdateTime) > 0) then
-				if (os.difftime(os.time(), context.lastUpdateTime) > 1) then
+				if ( os.difftime( os.time(), context.lastUpdateTime ) > 1 ) then
 					msg = msg .. " (value retrieved)"
-					if (condition.action == nil) then
-						context.value, context.lastUpdateTime = Variable.getUnknown(deviceId, condition.service, condition.variable)
+					if ( condition.action == nil ) then
+						context.value, context.lastUpdateTime = Variable.getUnknown( deviceId, condition.service, condition.variable )
 					else
-						local resultCode, resultString, job, returnArguments = luup.call_action(condition.service, condition.action, condition.arguments, deviceId)
+						local resultCode, resultString, job, returnArguments = luup.call_action( condition.service, condition.action, condition.arguments, deviceId )
 						context.value = returnArguments[ condition.variable ]
 						context.lastUpdateTime = os.time()
 					end
@@ -1576,11 +1582,11 @@ do
 				LIKE = "like",
 				NOTLIKE = "not like"
 			}
-			if (condition.value ~= nil) then
+			if ( condition.value ~= nil ) then
 				-- a threshold or a pattern is defined
-				local conditionValue = tonumber(condition.value) or condition.value
-				local contextValue   = tonumber(context.value)   or context.value
-				log("condition.operator:" .. tostring(condition.operator) .. ", conditionValue:" .. tostring(conditionValue) .. ", contextValue:" .. tostring(contextValue), "ConditionValue.updateStatus", 3)
+				local conditionValue = tonumber( condition.value ) or condition.value
+				local contextValue   = tonumber( context.value )   or context.value
+				log( "condition.operator:" .. tostring( condition.operator ) .. ", conditionValue:" .. tostring( conditionValue ) .. ", contextValue:" .. tostring( contextValue ), "ConditionValue.updateStatus", 3 )
 				if ((context.value == nil)
 					or (OPERATORS[condition.operator] == nil)
 					or (type(contextValue) ~= type(conditionValue))
@@ -1642,7 +1648,7 @@ do
 
 			params.lastUpdateTime = context.lastUpdateTime
 			params.maxInterval    = condition.sinceInterval
-			local hasStatusChanged, hasParentStatusChanged = Condition.setStatus(condition, status, params )
+			local hasStatusChanged, hasParentStatusChanged = Condition.setStatus( condition, status, params )
 
 			-- Report the change of the child condition to the parent if needed
 			if (
@@ -1709,7 +1715,7 @@ do
 			end
 			log(msg, "ConditionRule.updateStatus", 3)
 
-			return Condition.setStatus(condition, status, params)
+			return Condition.setStatus( condition, status, params )
 		end
 	}
 
@@ -2072,7 +2078,7 @@ do
 			-- TODO  level ?
 			sequence._context.level = level
 			--params.lastUpdateTime = context.lastUpdateTime
-			return Condition.setStatus(sequence, status, params )
+			return Condition.setStatus( sequence, status, params )
 		end
 	}
 	ConditionTypes["condition_sequence_separator"] = {
@@ -2165,17 +2171,17 @@ Condition = {
 	end,
 
 	-- Update the status of the condition
-	updateStatus = function(condition, params)
-		msg = _getItemSummary(condition) .. " - Update status"
-		if (params ~= nil) then
-			msg = msg .. " with params " .. json.encode(params)
-			if (params.context ~= nil) then
-				table.extend(condition._context, params.context)
+	updateStatus = function( condition, params )
+		msg = _getItemSummary( condition ) .. " - Update status"
+		if ( params ~= nil ) then
+			msg = msg .. " with params " .. json.encode( params )
+			if ( params.context ~= nil ) then
+				table.extend( condition._context, params.context )
 				msg = msg .. " (contains extended context)"
 			end
 		end
-		log(msg, "Condition.updateStatus", 4)
-		return ConditionTypes[condition.type].updateStatus(condition, params)
+		log( msg, "Condition.updateStatus", 4 )
+		return ConditionTypes[condition.type].updateStatus( condition, params )
 	end,
 
 	-- Modify status of the condition
@@ -2190,7 +2196,7 @@ Condition = {
 			condition._context.status = 1
 			condition._context.lastStatusUpdateTime = os.time()
 			hasStatusChanged = true
-			if (condition.actions ~= nil) then
+			if ( condition.actions and not ( condition.isMainConditionValue == true ) ) then
 				--ActionGroups.execute(condition.actions, condition._ruleId, "conditionStart", condition.level, params )
 				ActionGroups.execute( condition.actions, condition._ruleId, "conditionStart", nil, params )
 			end
@@ -2200,7 +2206,7 @@ Condition = {
 			condition._context.status = 0
 			condition._context.lastStatusUpdateTime = os.time()
 			hasStatusChanged = true
-			if (condition.actions ~= nil) then
+			if ( condition.actions and not ( condition.isMainConditionValue == true ) ) then
 				--ActionGroups.execute(condition.actions, condition._ruleId, "conditionEnd", condition.level, params )
 				ActionGroups.execute( condition.actions, condition._ruleId, "conditionEnd", nil, params )
 			end
@@ -2241,13 +2247,12 @@ Condition = {
 
 	getStatus = function( condition )
 		--log(_getItemSummary(condition) .. " - Get status", "Condition.getStatus", 4)
-
 		local context = condition._context
 		if ( condition.mainType == "Trigger" ) then
 			if ( context.status == -1 ) then
 				Condition.updateStatus( condition, { noPropagation = true } )
 			end
-		elseif ( os.difftime( os.time(), math.max( context.lastUpdateTime, context.lastStatusUpdateTime ) ) > 1 ) then
+		elseif ( ( context.status == -1 ) or ( os.difftime( os.time(), math.max( context.lastUpdateTime, context.lastStatusUpdateTime ) ) > 1 ) ) then
 			-- The last update time is more than a one second ago
 			Condition.updateStatus( condition, { noPropagation = true } )
 		end
@@ -2337,10 +2342,10 @@ do
 			for _, deviceId in ipairs( action.deviceIds ) do
 				-- Check first device com status
 				if ( not luup.is_ready( deviceId ) or ( Variable.get( deviceId, VARIABLE.COMM_FAILURE ) == "1" ) ) then
-					error( "Device #" .. tostring( deviceId ) .. " is not ready or has a com failure", "ActionType.action_device.execute" )
+					Rule.addError( action._ruleId, "Execute rule actions", "Device #" .. tostring( deviceId ) .. " is not ready or has a com failure" )
 				end
 				-- Call luup action
-				log( "Action '" .. action.action .. "' for device #" .. tostring( deviceId ) .. " with " .. tostring( json.encode( action.arguments ) ), "ActionType.action_device.execute", 3 )
+				History.add( action._ruleId, "RuleAction", _getItemSummary( action ) .. " - Action '" .. action.action .. "' on device #" .. tostring( deviceId ) .. "(" .. luup.devices[deviceId].description.. ")" .. " with " .. tostring( json.encode( action.arguments ) ) )
 				luup.call_action( action.service, action.action, action.arguments, deviceId )
 			end
 		end
@@ -2372,10 +2377,41 @@ do
 			log( _getItemSummary( action ) .. " - type : " .. type( action.callback ), "ActionGroup.execute", 2 )
 			if ( type( action.callback ) == "function" ) then
 				-- Execute function
-				--log("Action '" .. action.action .. "' for device #" .. tostring(deviceId) .. " with " .. tostring(json.encode(action.arguments)), "ActionType.action_function.execute", 3)
-				log( _getItemSummary( action ) .. " - Do custom function with context :" .. tostring( json.encode( context ) ), "ActionGroup.execute", 2 )
+				--log( _getItemSummary( action ) .. " - Do custom function with context :" .. tostring( json.encode( context ) ), "ActionGroup.execute", 2 )
+				History.add( action._ruleId, "RuleAction", _getItemSummary( action ) .. " - Do custom function" )
 				action.callback( context )
 			end
+		end
+	}
+
+	_actionTypes["action_scene"] = {
+		init = function( action )
+			action.sceneId = tonumber( action.sceneId )
+			log( "Action '" .. tostring( json.encode( action ) ), "ActionType.action_scene.init", 4 )
+		end,
+		check = function( action )
+			if not _checkParameters( action, { "sceneId" } ) then
+				return false
+			end
+			if ( luup.scenes[ action.sceneId ] == nil ) then
+				Rule.addError( action._ruleId, "Init rule actions", "Scene #" .. tostring( action.sceneId ) .. " does not exist" )
+				return false
+			end
+			return true
+		end,
+		execute = function( action, context )
+			-- Check scene
+			if ( luup.scenes[ action.sceneId ] == nil ) then
+				Rule.addError( action._ruleId, "Execute rule actions", "Scene #" .. tostring( action.sceneId ) .. " does not exist" )
+				return false
+			end
+			if luup.scenes[ action.sceneId ].paused then
+				Rule.addError( action._ruleId, "Execute rule actions", "Scene #" .. tostring( action.sceneId ) .. " is paused" )
+				return false
+			end
+			-- Call luup action
+			History.add( action._ruleId, "RuleAction", _getItemSummary( action ) .. " - Run scene #" .. tostring( action.sceneId ) .. "(" .. luup.scenes[ action.sceneId ].description .. ")" )
+			luup.call_action( "urn:micasaverde-com:serviceId:HomeAutomationGateway1", "RunScene", { SceneNum = action.sceneId }, 0 )
 		end
 	}
 end
@@ -2683,9 +2719,9 @@ ActionGroup = {
 	end,
 
 	-- Execute a group of actions
-	execute = function (actionGroup, level, params)
+	execute = function( actionGroup, level, params )
 	-- TODO : check level ?
-		if (actionGroup == nil) then
+		if ( actionGroup == nil ) then
 			-- TODO : msg
 			return
 		end
@@ -2696,7 +2732,7 @@ ActionGroup = {
 		end
 		local params = params or {}
 		--local level = params.level
-
+log("DEBUG params:" .. json.encode(params), "ActionGroup.execute", 3)
 		-- Check if engine is enabled
 		if (not isEnabled()) then
 			log("Rules engine is not enabled - Do nothing", "ActionGroup.execute")
@@ -2741,36 +2777,42 @@ ActionGroup = {
 		else
 			--log(msg .. " - Do actions", "ActionGroup.execute", 3)
 			if (params.idx ~= nil) then
-				log(msg .. " - Resume from action #" .. tostring(params.idx), "ActionGroup.execute", 3)
+				log(msg .. " - Resume from action #" .. tostring( params.idx ), "ActionGroup.execute", 3)
 			end
-			for i = (params.idx or 1), #actionGroup["do"] do
+			for i = ( params.idx or 1 ), #actionGroup["do"] do
 				local action = actionGroup["do"][i]
-				if (action.type == "action_wait") then
+				if ( action.type == "action_wait" ) then
 					-- Wait and resume
-					log(msg .. " - Do action #" .. tostring(action.id) ..  " - Wait " .. tostring(action.delayInterval) .. " seconds", "ActionGroup.execute", 3)
+					log( msg .. " - Do action #" .. tostring( action.id ) ..  " - Wait " .. tostring( action.delayInterval ) .. " seconds", "ActionGroup.execute", 3 )
+					params.idx = i + 1
+					--[[
 					ScheduledTasks.add(
 						{ ruleId = rule.id, event = actionGroup.event, level = level, actionGroupId = actionGroup.id, isCritical = actionGroup.isCritical },
 						ActionGroup.execute, action.delayInterval, { actionGroup, level, { idx = i + 1 } }
 					)
+					--]]
+					ScheduledTasks.add(
+						{ ruleId = rule.id, event = actionGroup.event, level = level, actionGroupId = actionGroup.id, isCritical = actionGroup.isCritical },
+						ActionGroup.execute, action.delayInterval, { actionGroup, level, params }
+					)
 					return
 				else
-					local actionType = ActionTypes.get(action.type)
-					if (actionType == nil) then
-						log(msg .. " - Can not do action #" .. tostring(action.id) ..  " of type '" .. tostring(action.type) .. "' - Unknown action type", "ActionGroup.execute", 1)
+					local actionType = ActionTypes.get( action.type )
+					if ( actionType == nil ) then
+						log( msg .. " - Can not do action #" .. tostring( action.id ) ..  " of type '" .. tostring( action.type ) .. "' - Unknown action type", "ActionGroup.execute", 1 )
 					else
-						log(msg .. " - Do action #" .. tostring(action.id) ..  " of type '" .. action.type .. "'", "ActionGroup.execute", 3)
+						log( msg .. " - Do action #" .. tostring( action.id ) ..  " of type '" .. action.type .. "'", "ActionGroup.execute", 3 )
 						local functionToDo
-						if (type(actionType) == "function") then
+						if ( type( actionType ) == "function" ) then
 							functionToDo = actionType
 						else
 							functionToDo = actionType.execute
 						end
+						--History.add( rule.id, "RuleAction", "Do rule action " .. _getItemSummary( action ) )
 						--local ok, err = pcall(functionToDo, action, rule._context)
-						local ok, err = pcall(functionToDo, action, actionGroup._parent._context)
+						local ok, err = pcall( functionToDo, action, params.context or actionGroup._parent._context )
 						if not ok then
-							Rule.addError( ruleId, "RuleAction", _getItemSummary(action) .. " - " .. tostring( err ) )
-						else
-							History.add( ruleId, "RuleAction", "Do rule action : " .. _getItemSummary( action ) )
+							Rule.addError( rule.id, "RuleAction", _getItemSummary(action) .. " - " .. tostring( err ) )
 						end
 						--assert(ok, "ERROR: " .. tostring(err))
 					end
@@ -2842,7 +2884,7 @@ ActionGroups = {
 	end,
 
 	-- Execute groups of actions matching an event and optionally a level
-	execute = function (actionGroups, ruleId, event, level, params)
+	execute = function( actionGroups, ruleId, event, level, params )
 		if (actionGroups == nil) then
 			return
 		end
@@ -2851,7 +2893,7 @@ ActionGroups = {
 			log("Rule #" .. tostring(ruleId) .. " do not exist", "ActionGroups.execute")
 			return false
 		end
-
+log("DEBUG params:" .. json.encode(params), "ActionGroups.execute", 3)
 		-- Check if engine is enabled
 		if (not isEnabled()) then
 			log("Rules engine is not enabled - Do nothing", "ActionGroups.execute")
@@ -2909,7 +2951,7 @@ ActionGroups = {
 					-- The calls are made all in asynchronous to avoid the blockings
 					ScheduledTasks.add(
 						{ ruleId = rule.id, event = event, level = level, actionGroupId = actionGroup.id, isCritical = actionGroup.isCritical },
-						ActionGroup.execute, delay, { actionGroup, level }
+						ActionGroup.execute, delay, { actionGroup, level, params }
 					)
 				end
 			end
@@ -3216,6 +3258,7 @@ Rule = {
 			log(msg .. " - Start condition", "Rule.start", 3)
 			Condition.start(rule.condition)
 		end
+
 		if (rule.actions ~= nil) then
 			log(msg .. " - Start conditions of group of actions", "Rule.start", 3)
 			ActionGroups.startConditions(rule.actions)
@@ -3362,12 +3405,12 @@ Rule = {
 	end,
 
 	-- Is rule armed
-	isArmed = function (ruleId)
-		local rule = Rules.get(ruleId)
-		if (rule == nil) then
+	isArmed = function( ruleId )
+		local rule = Rules.get( ruleId )
+		if ( rule == nil ) then
 			return false
 		end
-		return (rule._context.isArmed == true)
+		return ( rule._context.isArmed == true )
 	end,
 
 	-- Rule acknowledgement
@@ -3673,7 +3716,7 @@ Rules = {
 				formerRuleInformations.isFormer = nil
 				formerRuleInformations.name = nil
 				formerRuleInformations.status = nil
-				--formerRuleInformations.errors = nil
+				formerRuleInformations.hasError = nil
 				for conditionId, conditionInfos in pairs( formerRuleInformations.conditions ) do
 					conditionInfos.status = -1
 				end
@@ -3683,20 +3726,20 @@ Rules = {
 		RulesInfos.add( rule._context )
 
 		-- Check settings
-		if Rule.checkSettings(rule) then
-			if (isStarted()) then
+		if Rule.checkSettings( rule ) then
+			if isStarted() then
 				-- If the RulesEngine is already started, then start the rule just after adding
-				Rule.start(rule)
+				Rule.start( rule )
 			end
-			if (isInitialized()) then
+			if isInitialized() then
 				RulesInfos.save()
 			end
 		else
 			--rule._context.isArmed = false
-			error(msg .. " has at least one error in settings", "Rules.add")
+			error( msg .. " has at least one error in settings", "Rules.add" )
 		end
 
-		debugLogEnd("Rules.add")
+		debugLogEnd( "Rules.add" )
 		return true
 	end,
 
@@ -3717,7 +3760,7 @@ Rules = {
 	remove = function (fileName, ruleIdx, ruleId, updateOtherRuleIdxes)
 		ruleIdx, ruleId = tonumber(ruleIdx), tonumber(ruleId)
 		if ((fileName == nil) or (ruleIdx == nil) or (ruleId == nil)) then
-			error("fileName(" .. tostring(fileName) .. "), ruleIdx(" .. tostring(ruleIdx) .. ") and ruleId(" .. tostring(ruleId) .. ") are mandatory", "Rules.remove")
+			error( "fileName(" .. tostring( fileName ) .. "), ruleIdx(" .. tostring( ruleIdx ) .. ") and ruleId(" .. tostring( ruleId ) .. ") are mandatory", "Rules.remove" )
 			return
 		end
 		local rule = Rules.get(ruleId)
@@ -3753,7 +3796,7 @@ Rules = {
 			end
 
 		else
-			error("Can not remove rule #" .. rule.id .. "(" .. rule.name .. ") because fileName(" .. tostring(fileName) .. "-" .. tostring(rule.fileName) .. ") and ruleIdx(" .. tostring(ruleIdx) .. "-" .. tostring(rule.idx) .. ") do not match", "Rules.remove")
+			error( "Can not remove rule #" .. rule.id .. "(" .. rule.name .. ") because fileName(" .. tostring( fileName ) .. "-" .. tostring( rule.fileName ) .. ") and ruleIdx(" .. tostring( ruleIdx ) .. "-" .. tostring( rule.idx ) .. ") do not match", "Rules.remove" )
 		end
 	end,
 
@@ -3761,7 +3804,7 @@ Rules = {
 	get = function( ruleId )
 		local rule
 		if (ruleId == nil) then
-			error("Parameter #1 is nil", "Rules.get")
+			error( "Parameter #1 is nil", "Rules.get" )
 		elseif ((type(ruleId) == "string") or (type(ruleId) == "number")) then
 			ruleId = tostring(ruleId)
 			if (tonumber(ruleId) ~= nil) then
@@ -3780,14 +3823,14 @@ Rules = {
 			if (ruleId.id ~= nil) then
 				rule = Rules.get(ruleId.id)
 				if (rule ~= ruleId) then
-					error("Given rule is not the rule added with this id", "Rules.get")
+					error( "Given rule is not the rule added with this id", "Rules.get" )
 				end
 			else
-				error("Given rule has not been retrieved", "Rules.get")
+				error( "Given rule has not been retrieved", "Rules.get" )
 			end
 
 		else
-			error("Parameter #1 is not a table", "Rules.get")
+			error( "Parameter #1 is not a table", "Rules.get" )
 		end
 		return rule
 	end,
@@ -4064,17 +4107,17 @@ RulesFile = {
 function loadModules ()
 	debugLogBegin("loadModules")
 
-	local moduleNames = string.split(_params.modules, ",")
-	for _, moduleName in ipairs(moduleNames) do
+	local moduleNames = string.split( _params.modules, "," )
+	for _, moduleName in ipairs( moduleNames ) do
 		-- Load module
-		log("Load module '" .. tostring(moduleName) .. "'", "loadModules")
+		log( "Load module '" .. tostring( moduleName ) .. "'", "loadModules" )
 		-- TODO: there's a problem with the environment of the module (not the the same as the plugin)
-		local status, myModule = pcall(require, moduleName)
+		local status, myModule = pcall( require, moduleName )
 		if not status then
-			error(myModule, "loadModules")
+			error( myModule, "loadModules" )
 		end
-		if (type(myModule) == "string") then
-			error("Can not load module: " .. tostring(myModule), "loadModules")
+		if ( type( myModule ) == "string" ) then
+			error( "Can not load module: " .. tostring( myModule ), "loadModules" )
 		end
 	end
 
@@ -4103,13 +4146,13 @@ function loadStartupFiles ()
 				setfenv(startup, getfenv(1))
 				local status, result = pcall(startup)
 				if not status then
-					error(result, "startup")
+					error( result, "startup" )
 				end
 			else
-				error("Can not execute startup LUA code: " .. tostring(errorMessage), "loadStartupFiles")
+				error( "Can not execute startup LUA code: " .. tostring( errorMessage ), "loadStartupFiles" )
 			end
 		else
-			warning("File '" .. path .. fileName .. "' does not exist", "loadStartupFiles")
+			warning( "File '" .. path .. fileName .. "' does not exist", "loadStartupFiles" )
 		end
 	end
 
@@ -4381,7 +4424,7 @@ local _handlerCommands = {
 			else
 				result = {
 					success = false,
-					errormsg = "Action '" .. tostring(actionName) .. "' is not handled"
+					errormsg = "Action '" .. tostring( actionName ) .. "' is not handled"
 				}
 			end
 
@@ -4396,7 +4439,7 @@ local _handlerCommands = {
 		else
 			result = {
 				success = false,
-				errormsg = "Path '" .. tostring(path) .. "' is not handled"
+				errormsg = "Path '" .. tostring( path ) .. "' is not handled"
 			}
 		end
 
@@ -4607,6 +4650,8 @@ _G["RulesEngine.ScheduledTasks.execute"] = ScheduledTasks.execute
 --_G["RulesEngine.ActionGroup.execute"] = ActionGroup.execute
 --_G["RulesEngine.Condition.updateStatus"] = Condition.updateStatus
 _G["RulesEngine.Rule.updateStatus"] = Rule.updateStatus
+
+print(json.encode(luup.scenes))
 
 -- TODO : to check
 return RulesEngine
