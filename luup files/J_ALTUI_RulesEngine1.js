@@ -142,6 +142,7 @@ div.altui-rule-acknowledged { cursor: pointer; background: url("http://vosmont.g
 .altui-rule-xml-content { width: 100%; height: 200px; }\
 #rulesengine-blockly-panel {  }\
 #rulesengine-blockly-workspace { width: 100%; height: 2000px; }\
+div.blocklyToolboxDiv { height: auto!important; /*position: fixed;*/ }\
 div.blocklyWidgetDiv { z-index: 1050; }\
 #blocklyArea { height: 100%; }\
 #rulesengine-lua-editor { height: 200px; } \
@@ -706,22 +707,36 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 			if ( !condition ) {
 				return;
 			}
-			var id = parentId.toString() + "." + idx.toString();
-			_indexBlocklyConditionBlocks[ id ] = condition;
+			var id = parentId.toString() + ( idx > 0 ? "." + idx.toString() : "" );
+			if ( !_indexBlocklyConditionBlocks[ id ] ) {
+				_indexBlocklyConditionBlocks[ id ] = [];
+			}
+			_indexBlocklyConditionBlocks[ id ].push( condition );
 			var input;
 			switch( condition.type ) {
 				case "list_with_operators_condition":
 				case "list_with_operator_condition":
-					var i = 0;
+				case "list_device":
+					var i = 0, j = 0;
 					while ( input = condition.getInput( "ADD" + i ) ) {
 						var connection = input && input.connection;
-						var subCondition = connection && connection.targetBlock();
-						_putConditionInIndex( subCondition, id, ( i + 1 ) );
+						var targetBlock = connection && connection.targetBlock();
+						if ( targetBlock ) {
+							_putConditionInIndex( targetBlock, id, ( j + 1 ) );
+							j++;
+						}
 						i++;
 					}
 					break;
 				case "condition_value":
-					var device = condition.getInput( "condition" );
+					var device = condition.getInputTargetBlock( "device" );
+					if ( device ) {
+						if ( device.type === "list_device" ) {
+							_putConditionInIndex( device, id, 0 );
+						} else {
+							_putConditionInIndex( device, id, 1 );
+						}
+					}
 					break;
 				case "condition_sequence":
 					var subCondition = condition.getInputTargetBlock( "items" );
@@ -744,14 +759,14 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 
 		var ruleBlock = topBlocks[ 0 ];
 		var ruleId = ruleBlock.getFieldValue( "id" );
-		_indexBlocklyConditionBlocks[ ruleId.toString() ] = ruleBlock;
+		_indexBlocklyConditionBlocks[ ruleId.toString() ] = [ ruleBlock ];
 		var input = ruleBlock.getInput( "condition" );
 		var connection = input && input.connection;
 		var condition = connection && connection.targetBlock();
 		_putConditionInIndex( condition, ruleId, 1 );
 	}
 
-	function _getBlocklyConditionBlock( conditionId ) {
+	function _getBlocklyConditionBlocks( conditionId ) {
 		return _indexBlocklyConditionBlocks[ conditionId.toString() ];
 	}
 
@@ -1580,20 +1595,22 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 			} );
 	}
 
-	function _changeSvgBlock( block, infos ) {
-		if ( !block ) {
+	function _changeSvgBlocks( blocks, id, infos ) {
+		if ( !blocks ) {
 			return;
 		}
-		if ( infos.status === 1 ) {
-			block.setTooltip( "ON since " + _convertTimestampToLocaleString( infos.lastStatusUpdateTime ) );
-			block.svgPath_.style.stroke = "#FF0000";
-			block.svgPath_.style["stroke-width"] = "4";
-			//block.svgPath_.style["stroke-dasharray"] = "5,5";
-		} else {
-			block.setTooltip( "OFF since " + _convertTimestampToLocaleString( infos.lastStatusUpdateTime ) );
-			block.svgPath_.style.stroke = "";
-			block.svgPath_.style["stroke-width"] = "";
-		}
+		$.each( blocks, function( i, block) {
+			if ( infos.status === 1 ) {
+				block.setTooltip( id + " - ON since " + _convertTimestampToLocaleString( infos.lastStatusUpdateTime ) + ( infos.level ? ' (level ' + infos.level + ')' : '' ) );
+				block.svgPath_.style.stroke = "#FF0000";
+				block.svgPath_.style["stroke-width"] = "4";
+				//block.svgPath_.style["stroke-dasharray"] = "5,5";
+			} else {
+				block.setTooltip( id + " - OFF since " + _convertTimestampToLocaleString( infos.lastStatusUpdateTime ) );
+				block.svgPath_.style.stroke = "";
+				block.svgPath_.style["stroke-width"] = "";
+			}
+		} );
 	}
 
 	function _updateViewPageRule( rulesInfos, ruleId ) {
@@ -1603,9 +1620,9 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 		if ( !ruleInfos ) {
 			return;
 		}
-		_changeSvgBlock( _getBlocklyConditionBlock( ruleInfos.id ), ruleInfos );
+		_changeSvgBlocks( _getBlocklyConditionBlocks( ruleInfos.id ), ruleInfos.id, ruleInfos );
 		$.each( ruleInfos.conditions, function( conditionId, conditionInfos) {
-			_changeSvgBlock( _getBlocklyConditionBlock( conditionId ), conditionInfos );
+			_changeSvgBlocks( _getBlocklyConditionBlocks( conditionId ), conditionId, conditionInfos );
 		} );
 	}
 

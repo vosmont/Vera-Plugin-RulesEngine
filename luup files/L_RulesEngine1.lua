@@ -22,7 +22,7 @@ end
 
 _NAME = "RulesEngine"
 _DESCRIPTION = "Rules Engine for the Vera with visual editor"
-_VERSION = "0.12.3"
+_VERSION = "0.12.4"
 _AUTHOR = "vosmont"
 
 -- **************************************************
@@ -66,7 +66,7 @@ local VARIABLE = {
 	STORE_PATH = { "urn:upnp-org:serviceId:RulesEngine1", "StorePath", true }
 }
 local indexVariable = {}
-for _, variable in pairs(VARIABLE) do
+for _, variable in pairs( VARIABLE ) do
 	indexVariable[variable[1] .. ";" .. variable[2]] = variable
 end
 
@@ -110,19 +110,28 @@ end
 -- **************************************************
 
 -- Merges (deeply) the contents of one table (t2) into another (t1)
-local function table_extend( t1, t2 )
+local function table_extend( t1, t2, excludedKeys )
 	if ( ( t1 == nil ) or ( t2 == nil ) ) then
 		return
 	end
+	local exclKeys
+	if ( type( excludedKeys ) == "table" ) then
+		exclKeys = {}
+		for _, key in ipairs( excludedKeys ) do
+			exclKeys[ key ] = true
+		end
+	end
 	for key, value in pairs( t2 ) do
-		if ( type( value ) == "table" ) then
-			if ( type( t1[key] ) == "table" ) then
-				t1[key] = table_extend( t1[key], value )
-			else
-				t1[key] = table_extend( {}, value )
+		if ( not exclKeys or not exclKeys[ key ] ) then
+			if ( type( value ) == "table" ) then
+				if ( type( t1[key] ) == "table" ) then
+					t1[key] = table_extend( t1[key], value )
+				else
+					t1[key] = table_extend( {}, value )
+				end
+			elseif ( value ~= nil ) then
+				t1[key] = value
 			end
-		elseif ( value ~= nil ) then
-			t1[key] = value
 		end
 	end
 	return t1
@@ -162,15 +171,22 @@ do -- Extend table
 			return
 		end
 		local table_insert = table.insert
-		table.foreach(
-			t2,
-			function ( _, v )
-				if ( noDuplicate and table.contains( t1, v ) ) then
-					return
+		if ( type( t2 ) == "table" ) then
+			table.foreach(
+				t2,
+				function ( _, v )
+					if ( noDuplicate and table.contains( t1, v ) ) then
+						return
+					end
+					table_insert( t1, v )
 				end
-				table_insert( t1, v )
+			)
+		else
+			if ( noDuplicate and table.contains( t1, t2 ) ) then
+				return
 			end
-		)
+			table_insert( t1, t2 )
+		end
 		return t1
 	end
 
@@ -358,11 +374,11 @@ local function _getItemSummary( item )
 	if ( item.event ~= nil ) then
 		summary = summary .. " " .. separator .. " event '" .. tostring( item.event ) .. "'"
 	end
-	if ( item.level ~= nil ) then
-		summary = summary .. " " .. separator .. " level '" .. tostring( item.level ) .. "'"
+	if ( item.modifiers and item.modifiers.level ) then
+		summary = summary .. " " .. separator .. " level '" .. tostring( item.modifiers.level ) .. "'"
 	end
-	if ( ( item.levels ~= nil ) and ( table.getn( item.levels ) > 0 ) ) then
-		summary = summary .. " " .. separator .. " levels " .. tostring( json.encode( item.levels ) )
+	if ( item.modifiers and item.modifiers.levels and ( #( item.modifiers.levels ) > 0 ) ) then
+		summary = summary .. " " .. separator .. " levels " .. tostring( json.encode( item.modifiers.levels ) )
 	end
 	return summary
 end
@@ -593,7 +609,7 @@ UI = {
 
 
 -- **************************************************
--- Store
+-- RulesEngine.Store
 -- **************************************************
 
 local _storePath
@@ -644,7 +660,7 @@ Store = {
 
 
 -- **************************************************
--- Messages
+-- RulesEngine.Messages
 -- **************************************************
 
 local _labels = {
@@ -1172,7 +1188,7 @@ ScheduledTasks = {
 
 
 -- **************************************************
--- Params (rule condition, action condition)
+-- RulesEngine.Modifiers (rule condition, action condition)
 -- **************************************************
 
 local function _getIntervalInSeconds (interval, unit)
@@ -1186,103 +1202,98 @@ local function _getIntervalInSeconds (interval, unit)
 	return interval
 end
 
-Params = {}
-
-local _addParam = {}
-setmetatable(_addParam, {
-	__index = function(t, item, conditionParamName)
-		log("SETTING WARNING - Param type '" .. tostring(conditionParamName) .. "' is unknown", "getParam")
-		return function ()
+local _getModifier = {}
+setmetatable( _getModifier, {
+	__index = function( t, conditionParamName )
+		log( "SETTING WARNING - Param type '" .. tostring( conditionParamName ) .. "' is unknown", "Modifier.get" )
+		return function()
 		end
 	end
-})
+} )
 do
-	_addParam["property_auto_untrip"] = function (item, param)
-		local autoUntripInterval = _getIntervalInSeconds(param.autoUntripInterval, param.unit)
-		log(_getItemSummary(item) .. " - Add 'autoUntripInterval': '" .. tostring(autoUntripInterval) .. "'", "addParams", 4)
-		item.autoUntripInterval = autoUntripInterval
+	_getModifier["property_auto_untrip"] = function( param )
+		return "autoUntripInterval", _getIntervalInSeconds( param.autoUntripInterval, param.unit )
 	end
 
-	_addParam["condition_param_since"] = function (item, param)
-		local sinceInterval = _getIntervalInSeconds(param.sinceInterval, param.unit)
-		log(_getItemSummary(item) .. " - Add 'sinceInterval': '" .. tostring(sinceInterval) .. "'", "addParams", 4)
-		item.sinceInterval = sinceInterval
+	_getModifier["condition_param_since"] = function( param )
+		return "sinceInterval", _getIntervalInSeconds( param.sinceInterval, param.unit )
 	end
 
-	_addParam["condition_param_level"] = function (item, param)
-		local level = tonumber(param.level)
-		if ((level ~= nil) and (level >= 0)) then
-			log(_getItemSummary(item) .. " - Add 'level': '" .. tostring(level) .. "'", "addParams", 4)
-			item.level = level
+	_getModifier["condition_param_level"] = function( param )
+		local level = tonumber( param.level )
+		if ( ( level ~= nil ) and ( level >= 0 ) ) then
+			return "level", level
 		else
-			log(_getItemSummary(item) .. " - Value '" .. tostring(level) .. "' is not authorized for param 'level'", "addParams", 1)
+			log( "Value '" .. tostring( level ) .. "' is not authorized for param 'level'", "Modifier.get", 1 )
 		end
 	end
 
-	_addParam["action_param_level"] = function (item, param)
-		local level = tonumber(param.level)
-		if ((level ~= nil) and (level >= 0)) then
-			if (item.levels == nil) then
-				item.levels = {}
-			end
-			log(_getItemSummary(item) .. " - Add '" .. tostring(level) .. "' to 'levels'", "addParams", 4)
-			table.insert(item.levels, level)
+	_getModifier["action_param_level"] = function( param )
+		local level = tonumber( param.level )
+		if ( ( level ~= nil ) and ( level >= 0 ) ) then
+			return "levels", level, true
 		else
-			log(_getItemSummary(item) .. " - Value '" .. tostring(level) .. "' is not authorized for param 'level'", "addParams", 1)
+			log( "Value '" .. tostring( level ) .. "' is not authorized for param 'level'", "Modifier.get", 1 )
 		end
 	end
 
-	_addParam["action_param_delay"] = function (item, param)
-		local delayInterval = _getIntervalInSeconds(param.delayInterval, param.unit)
-		log(_getItemSummary(item) .. " - Add 'delayInterval': '" .. tostring(delayInterval) .. "'", "addParams", 4)
-		item.delayInterval = delayInterval
+	_getModifier["action_param_delay"] = function( param )
+		return "delayInterval" , _getIntervalInSeconds( param.delayInterval, param.unit )
 	end
 
-	_addParam["action_param_critical"] = function (item, param) 
-		local isCritical = (param.isCritical == "TRUE")
-		log(_getItemSummary(item) .. " - Add 'isCritical': '" .. tostring(isCritical) .. "'", "addParams", 4)
-		item.isCritical = isCritical
+	_getModifier["action_param_critical"] = function( param )
+		return "isCritical", ( param.isCritical == "TRUE" )
 	end
 end
 
-local function _addParams (item, params)
-	if (type(params) == "table") then
-		if (params.type ~= nil) then
-			-- Single param
-			_addParam[params.type](item, params)
-		else
-			-- Group of params
-			for i, param in ipairs(params) do
-				_addParams (item, param)
-				params[i] = nil
+Modifiers = {
+	get = function( params )
+		local modifiers = {}
+		if ( type( params ) == "table" ) then
+			if params.type then
+				-- Single param
+				params = { params }
+			end
+			for i, param in ipairs( params ) do
+				local key, value, isMultiple = _getModifier[ param.type ]( param )
+				if key then
+					if isMultiple then
+						if ( modifiers[ key ] == nil ) then
+							modifiers[ key ] = {}
+						end
+						table.insert( modifiers[ key ], value )
+					else
+						modifiers[ key ] = value
+					end
+				end
 			end
 		end
+		return modifiers
 	end
-end
-
+}
 
 -- **************************************************
 -- Rule properties
 -- **************************************************
 
-local function _initProperties (ruleId, properties)
+local function _initProperties( ruleId, properties )
 	local result = {}
-	if ((properties == nil) or (type(properties) ~= "table")) then
+	if ( ( properties == nil ) or ( type( properties ) ~= "table" ) ) then
 		properties = {}
 	end
-	if (properties.type ~= nil) then
+	if ( properties.type ~= nil ) then
 		-- Single property
 		properties = { properties }
 	end
-	for i, property in ipairs(properties) do
-		if (property.type == nil) then
+	for i, property in ipairs( properties ) do
+		if ( property.type == nil ) then
 			-- Group of properties
-			table.extend(result, _initProperties(ruleId, property))
+			table.extend( result, _initProperties( ruleId, property ) )
 		else
 			local propertyName = property.type
 			property.type = nil
-			result[propertyName] = property
-			log("Rule #" .. tostring(ruleId) .. " - Add property '" .. tostring(propertyName) .. "': " .. tostring(json.encode(property)), "initProperties", 2)
+			result[ propertyName ] = property
+			log( "Rule #" .. tostring( ruleId ) .. " - Add property '" .. tostring( propertyName ) .. "': " .. tostring( json.encode( property ) ), "initProperties", 2 )
 		end
 	end
 	return result
@@ -1294,10 +1305,10 @@ end
 -- **************************************************
 
 local function _getDeviceIdsFromCriterias( criterias )
-	local deviceIds = {}
 	if ( type( criterias ) ~= "table" ) then
 		return {}
 	end
+	local deviceIds = {}
 	local isMatching
 	for deviceId, device in pairs( luup.devices ) do
 		isMatching = true
@@ -1305,21 +1316,36 @@ local function _getDeviceIdsFromCriterias( criterias )
 		if ( tonumber( criterias.deviceId ) and ( deviceId ~= tonumber( criterias.deviceId ) ) ) then
 			isMatching = false
 		end
+		-- Filter on service / variable
+		if ( isMatching and criterias.service and criterias.variable and ( luup.variable_get( criterias.service, criterias.variable, deviceId ) == nil ) ) then
+			isMatching = false
+		end
+		-- Filter on service / states
+		if ( isMatching and criterias.service and criterias.states ) then
+			for _, state in ipairs( criterias.states ) do
+				if ( luup.variable_get( criterias.service, state.variable, deviceId ) == nil ) then
+					isMatching = false
+					break
+				end
+			end
+		end
+		-- Filter on action
+		-- TODO : how ?
 		-- Filter on room
-		if ( tonumber( criterias.roomId ) and ( device.room_num ~= tonumber( criterias.roomId ) ) ) then
+		if ( isMatching and tonumber( criterias.roomId ) and ( device.room_num ~= tonumber( criterias.roomId ) ) ) then
 			isMatching = false
 		end
 		-- Filter on type
-		if ( criterias.deviceType and ( device.device_type ~= criterias.deviceType ) ) then
+		if ( isMatching and criterias.deviceType and ( device.device_type ~= criterias.deviceType ) ) then
 			isMatching = false
 		end
 		-- Filter on category
-		if ( criterias.category ) then
+		if ( isMatching and criterias.category ) then
 			local tmpCategory = string.split( criterias.category, "," )
 			if ( tonumber( tmpCategory[1] ) and ( device.category_num ~= tonumber( tmpCategory[1] ) ) ) then
 				isMatching = false
 			end
-			if ( tonumber( tmpCategory[2] ) and ( device.subcategory_num ~= tonumber( tmpCategory[2] ) ) ) then
+			if ( isMatching and tonumber( tmpCategory[2] ) and ( device.subcategory_num ~= tonumber( tmpCategory[2] ) ) ) then
 				isMatching = false
 			end
 		end
@@ -1331,28 +1357,45 @@ local function _getDeviceIdsFromCriterias( criterias )
 	return deviceIds
 end
 
-local function _getDeviceIds( item )
-	local deviceIds = {}
-	if ( ( type( item ) ~= "table") or ( type( item.device ) ~= "table" ) ) then
+-- Get device ids from item (condition or action) and linked device
+local function _getGroupDeviceIds( item )
+	if ( ( type( item ) ~= "table" ) or ( type( item.device ) ~= "table" ) ) then
 		return {}
 	end
+	local groupDeviceIds = {}
+	local itemCriterias = {
+		service  = item.service,
+		variable = item.variable,
+		states   = item.states,
+		action   = item.action
+	}
 	if ( item.device.type == "device" ) then
+		-- One device
 		item.device.type = nil
 		item.device.mutation = nil
-		table.append( deviceIds, _getDeviceIdsFromCriterias( item.device ) )
+		groupDeviceIds = _getDeviceIdsFromCriterias( table.extend( item.device, itemCriterias ) )
 	else
+		-- Multiple devices
 		for _, device in pairs( item.device ) do
 			if ( ( type( device ) == "table" ) and ( device.type == "device" ) ) then
 				device.type = nil
 				device.mutation = nil
-				table.append( deviceIds,_getDeviceIdsFromCriterias( device ), true )
+				table.insert( groupDeviceIds, _getDeviceIdsFromCriterias( table.extend( device, itemCriterias ) ) )
 			end
 		end
+	end
+	log( _getItemSummary( item ) .. " - Retrieve ids " .. json.encode( groupDeviceIds ), "getGroupDeviceIdsFromParam", 4 )
+	return groupDeviceIds
+end
+local function _getDeviceIds( item )
+	local groupDeviceIds = _getGroupDeviceIds( item )
+	local deviceIds = {}
+	for _, group in ipairs( groupDeviceIds ) do
+		table.append( deviceIds, group, true )
 	end
 	log( _getItemSummary( item ) .. " - Retrieve ids " .. json.encode( deviceIds ), "getDeviceIdsFromParam", 4 )
 	return deviceIds
 end
-
 
 -- **************************************************
 -- ConditionTypes
@@ -1416,7 +1459,7 @@ do
 				end
 				condition.mutation = nil
 			end
-
+log( "DEBUG service:" .. tostring(condition.service) .. ", variable:" .. tostring(condition.variable) .. ", value:" .. tostring(condition.value) .. ", deviceId:" .. tostring(condition.deviceId) .. ", deviceIds:" .. tostring(json.encode(condition.deviceIds)).. ", modifiers:" .. tostring(json.encode(condition.modifiers)), "ConditionValue.init", 4 )
 			-- Main type
 			if (condition.action ~= nil) then
 				condition.mainType = "External"
@@ -1427,79 +1470,100 @@ do
 			-- Multi-state (serviceStateTable in D_*.json)
 			-- Armed;EQ;1|Tripped;EQ;1
 			if ( condition.variable ) then
-				local multiVariables = string.split( condition.variable, "|" )
-				if ( #multiVariables > 1 ) then
-					-- List of variables - Transform condition into a group of conditions
-					log( _getItemSummary( condition ) .. " - Several variables : transform into a group of conditions", "Condition.init", 4 )
-					local parent, actions = condition._parent, condition.actions
-					condition._parent, condition.actions = nil, nil
-					local newConditionTemplate = table.extend( {}, condition )
-					--
-					condition._parent = parent
-					condition.actions = actions
-					condition.mainType = "ConditionGroup"
-					condition.type = "list_with_operator_condition"
-					condition.operator = "AND"
-					condition.items = {}
-					condition.isMainConditionValue = true
-					--
-					for i, multiVariable in ipairs( multiVariables ) do
-						local params = string.split( multiVariable, ";" )
-						local newCondition = table.extend( {}, newConditionTemplate )
-						newCondition.id = condition.id .. "." .. tostring( i )
-						newCondition._parent = condition
-						newCondition.variable = params[1]
-						newCondition.operator = params[2]
-						newCondition.value    = params[3]
-						newCondition.isChildConditionValue = true
-						log( "Create " .. _getItemSummary( newCondition ), "Condition.init", 4 )
-						table.insert( condition.items, newCondition )
-						-- Now, process device ids
-						ConditionTypes["condition_value"].init( newCondition, ruleContext )
-					end
-					return
+				local states = {}
+				for _, encodedState in ipairs( string.split( condition.variable, "|" ) ) do
+					local state = {}
+					state.variable, state.operator, state.value = unpack( string.split( encodedState, ";" ) )
+					table.insert( states, state )
+				end
+				if ( #states > 1 ) then
+					condition.states = states
+					condition.variable = nil
 				end
 			end
 
-			-- Get device id(s)
+			-- Get device id(s) from device if present
 			if ( type( condition.device ) == "table" ) then
-				local deviceIds = _getDeviceIds( condition )
+				condition.deviceIds = _getGroupDeviceIds( condition )
 				condition.device = nil
-				if ( #deviceIds == 1 ) then
-					-- Just one device
-					condition.deviceId = deviceIds[1]
+			end
+
+			-- Multi-devices
+			if ( ( type( condition.deviceIds ) == "table" ) and ( #condition.deviceIds > 0 ) ) then
+				-- Check if just one device
+				if ( ( #( condition.deviceIds ) == 1 ) and ( type( condition.deviceIds[1] ) == "number" ) ) then
+					condition.deviceId = condition.deviceIds[1]
+					condition.deviceIds = nil
 				else
 					-- List of devices - Transform condition into a group of conditions
-					log( _getItemSummary( condition ) .. " - Several devices : transform into a group of conditions", "Condition.init", 4 )
-					local parent, actions = condition._parent, condition.actions
-					condition._parent, condition.actions = nil, nil
-					local newConditionTemplate = table.extend( {}, condition )
-					--
-					condition._parent = parent
-					condition.actions = actions
+					log( _getItemSummary( condition ) .. " - Several devices : transform into a group of conditions (OR)", "ConditionValue.init", 4 )
+					local deviceIds = condition.deviceIds
+					condition.deviceIds = nil
+					-- Create a template from the condition
+					local newConditionTemplate = table.extend( {}, condition, { "_parent", "actions" } )
+	log( "DEBUG template " .. json.encode( newConditionTemplate ), "ConditionValue.init", 4 )
+					-- Transform the condition in a group of conditions
+					condition.modifiers = {}
 					condition.mainType = "ConditionGroup"
 					condition.type = "list_with_operator_condition"
 					condition.operator = "OR"
 					condition.items = {}
 					condition.isMainConditionValue = true
-					-- 
+					-- Create the conditions of the group from the template
 					for i, deviceId in ipairs( deviceIds ) do
 						local newCondition = table.extend( {}, newConditionTemplate )
 						newCondition.id = condition.id .. "." .. tostring( i )
-						newCondition._parent = condition
-						newCondition.deviceId = deviceId
+						--newCondition._parent = condition
+						if ( type( deviceId ) == "table" ) then
+							if ( ( #deviceId == 1 ) and ( type( deviceId[1] ) == "number" ) ) then
+								newCondition.deviceId = deviceId[1]
+							else
+								newCondition.deviceIds = deviceId
+							end
+						else
+							newCondition.deviceId = deviceId
+						end
 						newCondition.isChildConditionValue = true
-						log( "Create " .. _getItemSummary( newCondition ), "Condition.init", 4 )
+						if newCondition.deviceIds then
+							log( "Create " .. _getItemSummary( newCondition ) .. " for devices " .. json.encode( newCondition.deviceIds ), "ConditionValue.init", 4 )
+						else
+							log( "Create " .. _getItemSummary( newCondition ) .. " for device " .. tostring( newCondition.deviceId ), "ConditionValue.init", 4 )
+						end
 						table.insert( condition.items, newCondition )
-						--if ( ruleContext ~= nil ) then
-						--	ruleContext.conditions[ newCondition.id ] = newCondition._context
-						--end
 					end
-					--ConditionTypes[ "list_with_operator_condition" ].init( condition )
-					--Condition.init( conditions, condition._ruleId, parent )
+					ConditionTypes[ "list_with_operator_condition" ].init( condition )
+					log( "DEBUG : STOP" , "ConditionValue.init", 4 )
+					return
 				end
 			else
 				condition.deviceId = tonumber( condition.deviceId )
+			end
+
+			if condition.states then
+				-- List of variables - Transform condition into a group of conditions
+				log( _getItemSummary( condition ) .. " - Several variables : transform into a group of conditions (AND)", "ConditionValue.init", 4 )
+				-- Create a template from the condition
+				local newConditionTemplate = table.extend( {}, condition, { "_parent", "actions", "states", "modifiers" } )
+				-- Transform the condition in a group of conditions
+				condition.mainType = "ConditionGroup"
+				condition.type = "list_with_operator_condition"
+				condition.operator = "AND"
+				condition.items = {}
+				condition.isMainConditionValue = true
+				-- Create the conditions of the group from the template
+				for i, state in ipairs( condition.states ) do
+					local newCondition = table.extend( {}, newConditionTemplate )
+					newCondition.modifiers = {}
+					newCondition.id       = condition.id .. "." .. tostring( i )
+					newCondition._parent  = condition
+					newCondition.variable = state.variable
+					newCondition.operator = state.operator
+					newCondition.value    = state.value
+					newCondition.isChildConditionValue = true
+					log( "Create " .. _getItemSummary( newCondition ) .. " for variable '" .. newCondition.variable .. "'", "ConditionValue.init", 4 )
+					table.insert( condition.items, newCondition )
+				end
+				ConditionTypes[ "list_with_operator_condition" ].init( condition )
 			end
 		end,
 
@@ -1528,10 +1592,10 @@ do
 					luup.variable_watch("RulesEngine.Event.onDeviceVariableIsUpdated", condition.service, condition.variable, nil)
 					Events.setIsWatched(condition.service .. "-" .. condition.variable)
 				else
-					log(msg .. " - Watch device #" .. tostring(condition.deviceId) .. "(" .. luup.devices[condition.deviceId].description .. ") (watch already registered for this service/variable)", "Condition.start", 3)
+					log(msg .. " - Watch device #" .. tostring(condition.deviceId) .. "(" .. luup.devices[condition.deviceId].description .. ") (watch already registered for this service/variable)", "ConditionValue.start", 3)
 				end
 			else
-				log(msg .. " - Can not watch external condition", "Condition.start", 3)
+				log(msg .. " - Can not watch external condition", "ConditionValue.start", 3)
 			end
 		end,
 
@@ -1607,52 +1671,20 @@ do
 				-- No specific value condition on that condition
 				msg = msg .. " - The condition has no value condition"
 			end
+			params.lastUpdateTime = context.lastUpdateTime
+			log( msg, "ConditionValue.updateStatus", 3 )
 
 			-- Check since interval if exists
-			local currentInterval
-			local hasToRemoveFormerScheduledTasks, hasToCheckConditionStatusLater = false, false
-			if (condition.sinceInterval ~= nil) then
-				if (status == 1) then
-					currentInterval = os.difftime(os.time(), context.lastUpdateTime)
-					if (currentInterval < condition.sinceInterval) then
-						status = 0
-						msg = msg .. " but not since " .. tostring(condition.sinceInterval) .. " seconds"
-						-- Have to check later again the status of the condition
-						if not condition.noPropagation then
-							hasToRemoveFormerScheduledTasks = true
-							hasToCheckConditionStatusLater = true
-							msg = msg .. " - Check condition status later" 
-						end
-					else
-						msg = msg .. " since " .. tostring(condition.sinceInterval) .. " seconds"
-					end
-				else
-					hasToRemoveFormerScheduledTasks = true
-				end
+			if ( condition.modifiers and condition.modifiers.sinceInterval ) then
+				status = Condition.manageSinceInterval( condition, status, params )
 			end
 
-			log(msg, "ConditionValue.updateStatus", 3)
-			if hasToRemoveFormerScheduledTasks then
-				log(_getItemSummary(condition) .. " has a 'since' condition : remove its former schedule if exist", "Condition.updateStatus", 4)
-				--ScheduledTasks.remove({ ruleId = condition._ruleId, condition = tostring(condition) })
-				ScheduledTasks.remove({ condition = tostring(condition) })
-			end
-			if hasToCheckConditionStatusLater then
-				local remainingSeconds = condition.sinceInterval - currentInterval
-				log(_getItemSummary(condition) .. " - Check condition status in " .. tostring(remainingSeconds) .. " seconds", "Condition.updateStatus", 4)
-				ScheduledTasks.add(
-					{ ruleId = condition._ruleId, conditionId = condition.id, condition = tostring(condition) },
-					Condition.updateStatus, remainingSeconds, { condition }
-				)
-			end
-
-			params.lastUpdateTime = context.lastUpdateTime
-			params.maxInterval    = condition.sinceInterval
+			-- Update the status
 			local hasStatusChanged, hasParentStatusChanged = Condition.setStatus( condition, status, params )
 
 			-- Report the change of the child condition to the parent if needed
 			if (
-				hasStatusChanged --and not hasParentStatusChanged
+				hasStatusChanged and not hasParentStatusChanged
 				and condition.isChildConditionValue and condition._parent.isMainConditionValue
 				and ( condition._parent.actions ~= nil )
 			) then
@@ -1874,22 +1906,37 @@ do
 
 	-- Group of conditions with an operator (OR/AND)
 	ConditionTypes["list_with_operators_condition"] = {
-		init = function (condition, ruleContext)
+		init = function( condition, ruleContext )
 			condition.mainType = "ConditionGroup"
-			if ((condition.operator == nil) and (condition.operators == nil)) then
+			if ( ( condition.operator == nil ) and ( condition.operators == nil ) ) then
 				condition.operator = "OR"
 			end
-			for i, item in ipairs(condition.items) do
-				if (item.type ~= "empty") then
+			log( _getItemSummary( condition ) .. " - Init items", "ConditionGroup.init", 4 )
+log( "DEBUG " .. _getItemSummary( condition ) .. " - Actions: "..tostring(json.encode(condition.actions)), "ConditionGroup.init", 4 )
+			condition.hasOnlyTriggers = true
+			for i, item in ipairs( condition.items ) do
+				if ( item.type ~= "empty" ) then
 					item.id = condition.id .. "." .. tostring(i)
-					Condition.init(item, condition._ruleId, condition, ruleContext)
+					Condition.init( item, condition._ruleId, condition, ruleContext )
+					if ( item.hasOnlyTriggers ~= nil ) then
+						if not item.hasOnlyTriggers then
+							condition.hasOnlyTriggers = false
+						end
+					elseif ( item.mainType ~= "Trigger" ) then
+						condition.hasOnlyTriggers = false
+					end
 				end
 			end
 			for i = #(condition.items), 1, -1 do
-				if (condition.items[i].type == "empty") then
-					log("Condition #" .. condition.id .. "." .. tostring(i) .. " is empty: remove it", "Condition.init", 4)
-					table.remove(condition.items, i)
+				if ( condition.items[i].type == "empty" ) then
+					log( _getItemSummary( condition ) .. " - Item #" .. condition.id .. "." .. tostring(i) .. " is empty: remove it", "ConditionGroup.init", 4 )
+					table.remove( condition.items, i )
 				end
+			end
+			if condition.hasOnlyTriggers then
+				log( _getItemSummary( condition ) .. " - All the items are triggers", "ConditionGroup.init", 4 )
+			else
+				log( _getItemSummary( condition ) .. " - At least one item is not a trigger", "ConditionGroup.init", 4 )
 			end
 		end,
 
@@ -1910,37 +1957,34 @@ do
 
 		updateStatus = function( condition, params )
 			local params = params or {}
-			local status, level = 0, 0
-			local item, itemStatus, itemLevel
-			local operator
-			local isActive = false
+			local status, lastUpdateTime = 0, 0
+			local level = 0
 			local msg = ""
 
-			if ( #( condition.items ) > 1 ) then
-
-				item = condition.items[1]
-				itemStatus = Condition.getStatus( item )
-				isActive = ( itemStatus == 1 )
-				if (itemStatus == 1) then
-					itemLevel  = Condition.getLevel(item)
-					level = itemLevel
-					msg = "{#" .. item.id .. ":" .. tostring( itemStatus ) .. "/" .. tostring( itemLevel ) .. "}"
-				else
-					msg = "{#" .. item.id .. ":" .. tostring( itemStatus ) .. "}"
-				end
-
-				for i = 2, #(condition.items) do
-					operator = condition.operator or condition.operators[i - 1] or "OR"
-					item = condition.items[i]
-					itemStatus = Condition.getStatus(item)
-					if ( operator == "AND" ) then
-						isActive = isActive and ( itemStatus == 1 )
-					else
-						isActive = isActive or ( itemStatus == 1 )
+			if ( #( condition.items ) > 0 ) then
+				local item, isActive, operator
+				local itemStatus, itemLastUpdateTime
+				local itemLevel
+				for i = 1, #(condition.items) do
+					item = condition.items[ i ]
+					itemStatus, _, itemLastUpdateTime = Condition.getStatus( item )
+					if ( itemLastUpdateTime > lastUpdateTime ) then
+						lastUpdateTime = itemLastUpdateTime
 					end
-					msg = "(" .. msg .. " " .. tostring( operator ) .. " {#" .. item.id .. ":" .. tostring( itemStatus )
+					if ( i == 1 ) then
+						isActive = ( itemStatus == 1 )
+						msg = "{#" .. item.id .. ":" .. tostring( itemStatus ) .. "}"
+					else
+						operator = condition.operator or condition.operators[ i - 1 ] or "OR"
+						if ( operator == "AND" ) then
+							isActive = isActive and ( itemStatus == 1 )
+						else
+							isActive = isActive or ( itemStatus == 1 )
+						end
+						msg = "(" .. msg .. " " .. tostring( operator ) .. " {#" .. item.id .. ":" .. tostring( itemStatus )
+					end
 					if ( itemStatus == 1 ) then
-						itemLevel  = Condition.getLevel( item )
+						itemLevel = Condition.getLevel( item )
 						if ( itemLevel > level ) then
 							level = itemLevel
 						end
@@ -1952,23 +1996,25 @@ do
 					status = 1
 				else
 					status = 0
-					level = 0
 				end
-			elseif ( #( condition.items ) == 1 ) then
-				status = Condition.getStatus( condition.items[1] )
-				level  = Condition.getLevel( condition.items[1] )
 			end
 
-			log(_getItemSummary(condition) .. " - " .. msg, "Condition.updateStatus", 4)
-			-- TODO  level ?
+			condition._context.lastUpdateTime = math.max( ( condition._context.lastUpdateTime or 0 ), ( params.lastUpdateTime or 0 ), lastUpdateTime )
+			params.lastUpdateTime = condition._context.lastUpdateTime
+			log( _getItemSummary(condition) .. " - " .. msg, "ConditionGroup.updateStatus", 4 )
+
+			-- Check since interval if exists
+			if ( condition.modifiers and condition.modifiers.sinceInterval ) then
+				status = Condition.manageSinceInterval( condition, status, params )
+			end
+
+			-- Update the level
 			if ( status == 0 ) then
 				level = 0
 			end
-			if ( condition.level ~= level ) then
-				condition.level = level
-				params.levelHasChanged = true
-			end
-			--params.lastUpdateTime = context.lastUpdateTime
+			params.levelHasChanged = Condition.setLevel( condition, level )
+
+			-- Update the status
 			return Condition.setStatus( condition, status, params )
 		end
 	}
@@ -1976,30 +2022,30 @@ do
 
 	-- Sequence of conditions
 	ConditionTypes["condition_sequence"] = {
-		init = function (sequence, ruleContext)
+		init = function( sequence, ruleContext )
 			sequence.mainType = "ConditionSequence"
-			if (sequence.items ~= nil) then
+			if ( sequence.items ~= nil ) then
 				-- Init items of the sequence
-				for i, item in ipairs(sequence.items) do
+				for i, item in ipairs( sequence.items ) do
 					item.id = sequence.id .. "." .. tostring(i)
-					Condition.init(item, sequence._ruleId, sequence, ruleContext)
+					Condition.init( item, sequence._ruleId, sequence, ruleContext )
 				end
 				-- Report the minimum interval between the two conditions on the second condition
 				for i = #sequence.items, 1, -1 do
-					if (sequence.items[i].mainType == "SequenceSeparator") then
-						if (sequence.items[i + 1] ~= nil) then
-							sequence.items[i + 1].sequenceInterval = (sequence.items[i + 1].sequenceInterval or 0) + sequence.items[i].sequenceInterval
+					if ( sequence.items[i].mainType == "SequenceSeparator" ) then
+						if ( sequence.items[i + 1] ~= nil ) then
+							sequence.items[i + 1].sequenceInterval = ( sequence.items[i + 1].sequenceInterval or 0 ) + sequence.items[i].sequenceInterval
 						end
-						table.remove(sequence.items, i)
+						table.remove( sequence.items, i )
 					end
 				end
 			end
 		end,
 
-		check = function (sequence)
-			if (sequence.items ~= nil) then
-				for i, item in ipairs(sequence.items) do
-					if ((item.condition ~= nil) and not Condition.checkSettings(item.condition)) then
+		check = function( sequence )
+			if ( sequence.items ~= nil ) then
+				for i, item in ipairs( sequence.items ) do
+					if ( ( item.condition ~= nil ) and not Condition.checkSettings( item.condition ) ) then
 						return false
 					end
 				end
@@ -2007,18 +2053,18 @@ do
 			return true
 		end,
 
-		start = function (sequence)
-			if (sequence.items ~= nil) then
-				for i, item in ipairs(sequence.items) do
-					if (item.condition ~= nil) then
-						Condition.start(item.condition)
+		start = function( sequence )
+			if ( sequence.items ~= nil ) then
+				for i, item in ipairs( sequence.items ) do
+					if ( item.condition ~= nil ) then
+						Condition.start( item.condition )
 					end
 				end
 			end
 		end,
 
-		updateStatus = function (sequence, params)
-			if (sequence.items == nil) then
+		updateStatus = function( sequence, params )
+			if ( sequence.items == nil ) then
 				return
 			end
 			local params = params or {}
@@ -2027,37 +2073,37 @@ do
 			local isActive, lastStatusUpdateTime = true, 0
 			local msg = ""
 
-			if (#(sequence.items) > 0) then
-				for i, item in ipairs(sequence.items) do
+			if ( #( sequence.items ) > 0 ) then
+				for i, item in ipairs( sequence.items ) do
 					condition = item.condition
-					if ((item.mainType == "SequenceItem") and (condition ~= nil)) then
-						conditionStatus, lastConditionStatusUpdateTime = Condition.getStatus(condition)
-						isActive = isActive and (conditionStatus == 1)
-						if (i > 1) then
+					if ( ( item.mainType == "SequenceItem" ) and ( condition ~= nil ) ) then
+						conditionStatus, lastConditionStatusUpdateTime = Condition.getStatus( condition )
+						isActive = isActive and ( conditionStatus == 1 )
+						if ( i > 1 ) then
 							msg = "(" .. msg
-							if (isActive) then
+							if isActive then
 								-- Check if condition is after previous condition
-								local minimunStatusUpdateTime = lastStatusUpdateTime + (item.sequenceInterval or 0)
-								if (os.difftime(lastConditionStatusUpdateTime, minimunStatusUpdateTime) < 0) then
+								local minimunStatusUpdateTime = lastStatusUpdateTime + ( item.sequenceInterval or 0 )
+								if ( os.difftime( lastConditionStatusUpdateTime, minimunStatusUpdateTime ) < 0 ) then
 									isActive = false
 									-- TODO : a timer to activate when it becomes true ?
 								end
 							end
-							msg = msg .. " after " .. tostring(item.sequenceInterval) .. "s "
+							msg = msg .. " after " .. tostring( item.sequenceInterval ) .. "s "
 						end
 
-						msg = msg .. "{#" .. condition.id .. ":" .. tostring(conditionStatus)
-						if (conditionStatus == 1) then
-							conditionLevel = Condition.getLevel(condition)
-							if (conditionLevel > level) then
+						msg = msg .. "{#" .. condition.id .. ":" .. tostring( conditionStatus )
+						if ( conditionStatus == 1 ) then
+							conditionLevel = Condition.getLevel( condition )
+							if ( conditionLevel > level ) then
 								level = conditionLevel
 							end
-							msg = msg .. ":" .. tostring(conditionLevel)
+							msg = msg .. ":" .. tostring( conditionLevel )
 						end
 						msg = msg .. "}"
 
-						if (i > 1) then
-							msg = msg .. " => " .. tostring(isActive) .. ")"
+						if ( i > 1 ) then
+							msg = msg .. " => " .. tostring( isActive ) .. ")"
 						end
 
 						lastStatusUpdateTime = lastConditionStatusUpdateTime
@@ -2071,28 +2117,29 @@ do
 				end
 			end
 
-			log(_getItemSummary(sequence) .. " - " .. msg, "Condition.updateStatus", 4)
-			if (status == 0) then
+			log( _getItemSummary( sequence ) .. " - " .. msg, "ConditionSequence.updateStatus", 4 )
+			if ( status ==  0) then
 				level = 0
 			end
-			-- TODO  level ?
-			sequence._context.level = level
+
+			params.hasLevelChanged = Condition.setLevel( sequence, level )
+
 			--params.lastUpdateTime = context.lastUpdateTime
 			return Condition.setStatus( sequence, status, params )
 		end
 	}
 	ConditionTypes["condition_sequence_separator"] = {
-		init = function (condition, ruleContext)
+		init = function( condition, ruleContext )
 			condition.mainType = "SequenceSeparator"
-			condition.sequenceInterval = _getIntervalInSeconds(condition.sequenceInterval, condition.unit)
+			condition.sequenceInterval = _getIntervalInSeconds( condition.sequenceInterval, condition.unit )
 		end
 	}
 	ConditionTypes["condition_sequence_item"] = {
-		init = function (sequenceItem, ruleContext)
+		init = function( sequenceItem, ruleContext )
 			sequenceItem.mainType = "SequenceItem"
-			if (sequenceItem.condition ~= nil) then
+			if ( sequenceItem.condition ~= nil ) then
 				sequenceItem.condition.id = sequenceItem.id .. ".1"
-				Condition.init(sequenceItem.condition, sequenceItem._ruleId, sequenceItem._parent, ruleContext)
+				Condition.init( sequenceItem.condition, sequenceItem._ruleId, sequenceItem._parent, ruleContext )
 			end
 		end
 	}
@@ -2107,21 +2154,21 @@ end
 -- **************************************************
 
 Condition = {
-	init = function (condition, ruleId, parent, ruleContext)
+	init = function( condition, ruleId, parent, ruleContext )
 		--log("Init condition " .. json.encode(condition), "Condition.init", 4)
-		if ((condition == nil) or (type(condition) ~= "table")) then
+		if ( ( condition == nil ) or ( type( condition ) ~= "table" ) ) then
 			return
 		end
 		local id
-		if (parent == nil) then
+		if ( parent == nil ) then
 			-- Should not occur
-			id = tostring(ruleId) .. ".1"
+			id = tostring( ruleId ) .. ".1"
 		else
-			id = tostring(parent.id) .. ".1"
+			id = tostring( parent.id ) .. ".1"
 		end
 		condition.mainType = "Condition"
 		condition.type = condition.type or ""
-		if (condition.id == nil) then
+		if ( condition.id == nil ) then
 			condition.id = id
 		end
 		condition._ruleId = ruleId
@@ -2132,25 +2179,28 @@ Condition = {
 			lastStatusUpdateTime = 0,
 			lastUpdateTime = 0
 		}
-		log(_getItemSummary(condition) .. " - Init condition", "Condition.init", 3)
-		-- Params
-		if (condition.params ~= nil) then
-			log(_getItemSummary(condition) .. " - Add parameters of the condition", "Condition.init", 4)
-			_addParams(condition, condition.params)
+		log( _getItemSummary( condition ) .. " - Init condition", "Condition.init", 3 )
+		-- Modifiers
+		if ( condition.params ~= nil ) then
+			condition.modifiers = Modifiers.get( condition.params )
 			condition.params = nil
+			log( _getItemSummary( condition ) .. " - Add modifiers " .. json.encode( condition.modifiers ), "Condition.init", 4 )
+		--else
+			--condition.modifiers = {}
 		end
-		condition.params = nil
 		-- Specific initialisation for this type of condition
-		ConditionTypes[condition.type].init(condition, ruleContext)
+		ConditionTypes[condition.type].init( condition, ruleContext )
+		-- Level
+		condition._context.level = Condition.getLevel( condition )
 		-- Actions of the condition
-		if (condition.actions ~= nil) then
-			log(_getItemSummary(condition) .. " - Init the groups of actions of the condition", "Condition.init", 4)
+		if ( condition.actions ~= nil ) then
+			log( _getItemSummary( condition ) .. " - Init the groups of actions of the condition", "Condition.init", 4 )
 			--condition.actions.id = condition.id
-			ActionGroups.init(condition.actions, condition._ruleId, condition)
+			ActionGroups.init( condition.actions, condition._ruleId, condition )
 		end
-		-- Add a pointer on the context of the condition in the context of the rule
-		if (ruleContext ~= nil) then
-			ruleContext.conditions[condition.id] = condition._context
+		-- Add a pointer on the context of the condition in the context of the rule (used in UI to display the status of the conditions)
+		if ( ruleContext ~= nil ) then
+			ruleContext.conditions[ condition.id ] = condition._context
 		end
 	end,
 
@@ -2196,7 +2246,8 @@ Condition = {
 			condition._context.status = 1
 			condition._context.lastStatusUpdateTime = os.time()
 			hasStatusChanged = true
-			if ( condition.actions and not ( condition.isMainConditionValue == true ) ) then
+			--if ( condition.actions and not ( condition.isMainConditionValue == true ) ) then
+			if ( condition.actions ) then
 				--ActionGroups.execute(condition.actions, condition._ruleId, "conditionStart", condition.level, params )
 				ActionGroups.execute( condition.actions, condition._ruleId, "conditionStart", nil, params )
 			end
@@ -2206,7 +2257,8 @@ Condition = {
 			condition._context.status = 0
 			condition._context.lastStatusUpdateTime = os.time()
 			hasStatusChanged = true
-			if ( condition.actions and not ( condition.isMainConditionValue == true ) ) then
+			--if ( condition.actions and not ( condition.isMainConditionValue == true ) ) then
+			if ( condition.actions ) then
 				--ActionGroups.execute(condition.actions, condition._ruleId, "conditionEnd", condition.level, params )
 				ActionGroups.execute( condition.actions, condition._ruleId, "conditionEnd", nil, params )
 			end
@@ -2229,9 +2281,10 @@ Condition = {
 			log( msg .. " is inactive", "Condition.setStatus", 3 )
 		end
 
-		if ( ( hasStatusChanged or params.levelHasChanged ) and not params.noPropagation and ( condition._parent ~= nil ) ) then
+		-- TODO : if lastUpdateTime > lastStatusUpdateTime transmettre params.context pour update
+		-- Update the parent of the condition
+		if ( ( hasStatusChanged or params.levelHasChanged ) and ( condition._parent ~= nil ) and not params.noPropagation ) then
 			local parent = condition._parent
-			-- Update the parent of the condition
 			log( msg .. " - Update parent " .. _getItemSummary( parent ), "Condition.setStatus", 3 )
 			if ( parent.mainType == "Rule" ) then
 				hasParentStatusChanged = Rule.updateStatus( parent )
@@ -2248,21 +2301,84 @@ Condition = {
 	getStatus = function( condition )
 		--log(_getItemSummary(condition) .. " - Get status", "Condition.getStatus", 4)
 		local context = condition._context
-		if ( condition.mainType == "Trigger" ) then
-			if ( context.status == -1 ) then
+		if ( context.status == -1 ) then
+			log( _getItemSummary( condition ) .. " - Status is unknown : have to retrieve it", "Condition.getStatus", 4 )
+			Condition.updateStatus( condition, { noPropagation = true } )
+		elseif ( condition.mainType ~= "Trigger" ) then
+			if ( ( ( condition.hasOnlyTriggers == nil ) or ( condition.hasOnlyTriggers == false ) ) and ( os.difftime( os.time(), math.max( context.lastUpdateTime, context.lastStatusUpdateTime ) ) > 1 ) ) then
+				-- The last update time is more than a one second ago
+				log( _getItemSummary( condition ) .. " - Status is too old : have to retrieve it", "Condition.getStatus", 4 )
 				Condition.updateStatus( condition, { noPropagation = true } )
 			end
-		elseif ( ( context.status == -1 ) or ( os.difftime( os.time(), math.max( context.lastUpdateTime, context.lastStatusUpdateTime ) ) > 1 ) ) then
-			-- The last update time is more than a one second ago
-			Condition.updateStatus( condition, { noPropagation = true } )
 		end
 
-		log( _getItemSummary( condition ) .. " - status:" .. tostring( context.status ) .. ", level:" .. tostring( condition.level ), "Condition.getStatus", 4 )
-		return context.status, ( context.lastStatusUpdateTime or 0 )
+		log( _getItemSummary( condition ) .. " - status:" .. tostring( context.status ) .. ", level:" .. tostring( condition._context.level ), "Condition.getStatus", 4 )
+		return context.status, ( context.lastStatusUpdateTime or 0 ), ( context.lastUpdateTime or 0 )
 	end,
 
+	-- Modify level of the condition
+	setLevel = function( condition, level )
+		local hasLevelChanged = false
+		if ( condition._context.level ~= level ) then
+			log( string.format( _getItemSummary( condition ) .. " - Level has changed (oldLevel:'%d', newLevel:'%d')", condition._context.level, level ), "Condition.setLevel", 3 )
+			condition._context.level = level
+			condition._context.lastLevelUpdateTime = os.time()
+			hasLevelChanged = true
+		end
+		return hasLevelChanged
+	end,
+
+	-- Get level of the condition
 	getLevel = function( condition )
-		return ( condition.level or 0 ), ( condition._context.lastLevelUpdateTime or 0 )
+		if ( condition.modifiers and condition.modifiers.level ) then
+			return ( condition.modifiers.level or 0 )
+		else
+			return ( condition._context.level or 0 ), ( condition._context.lastLevelUpdateTime or 0 )
+		end
+	end,
+
+	-- Check since interval if exists
+	manageSinceInterval = function( condition, status, params )
+		local currentInterval
+		local msg = ""
+		local hasToRemoveFormerScheduledTasks, hasToCheckConditionStatusLater = false, false
+		if ( condition.modifiers and condition.modifiers.sinceInterval ) then
+			params.maxInterval = condition.modifiers.sinceInterval
+			if ( status == 1 ) then
+				currentInterval = os.difftime( os.time(), condition._context.lastUpdateTime )
+				if ( currentInterval < condition.modifiers.sinceInterval ) then
+					status = 0
+					msg = msg .. " but not since " .. tostring( condition.modifiers.sinceInterval ) .. " seconds"
+					-- Have to check later again the status of the condition
+					if not condition.noPropagation then
+						hasToRemoveFormerScheduledTasks = true
+						hasToCheckConditionStatusLater = true
+						msg = msg .. " - Check condition status later" 
+					end
+				else
+					msg = msg .. " since " .. tostring( condition.modifiers.sinceInterval ) .. " seconds"
+				end
+				log( _getItemSummary( condition ) .. " is respected " .. msg, "Condition.manageSinceInterval", 4 )
+			else
+				hasToRemoveFormerScheduledTasks = true
+			end
+		end
+
+		if hasToRemoveFormerScheduledTasks then
+			log( _getItemSummary( condition ) .. " has a 'since' condition : remove its former schedule if exist", "Condition.manageSinceInterval", 4 )
+			--ScheduledTasks.remove({ ruleId = condition._ruleId, condition = tostring(condition) })
+			ScheduledTasks.remove( { condition = tostring( condition ) } )
+		end
+		if hasToCheckConditionStatusLater then
+			local remainingSeconds = condition.modifiers.sinceInterval - currentInterval
+			log( _getItemSummary( condition ) .. " - Check condition status in " .. tostring( remainingSeconds ) .. " seconds", "Condition.manageSinceInterval", 4 )
+			ScheduledTasks.add(
+				{ ruleId = condition._ruleId, conditionId = condition.id, condition = tostring( condition ) },
+				Condition.updateStatus, remainingSeconds, { condition }
+			)
+		end
+
+		return status, msg
 	end
 }
 
@@ -2288,8 +2404,8 @@ Conditions = {
 local _actionTypes = {}
 do
 	_actionTypes["action_wait"] = {
-		init = function (action)
-			action.delayInterval = _getIntervalInSeconds(action.delayInterval, action.unit)
+		init = function( action )
+			action.delayInterval = _getIntervalInSeconds( action.delayInterval, action.unit )
 		end
 	}
 
@@ -2567,13 +2683,14 @@ ActionGroup = {
 		actionGroup._parent = parent
 		actionGroup._ruleId = ruleId
 		actionGroup._context = { lastUpdateTime = 0 }
-		actionGroup.levels = {}
 		log(_getItemSummary(actionGroup) .. " - Init group of actions", "ActionGroup.init", 3)
-		-- Params
-		if (actionGroup.params ~= nil) then
-			log(_getItemSummary(actionGroup) .. " - Add params", "ActionGroup.init", 4)
-			_addParams(actionGroup, actionGroup.params)
+		-- Modifiers
+		if ( actionGroup.params ~= nil ) then
+			actionGroup.modifiers = Modifiers.get( actionGroup.params )
 			actionGroup.params = nil
+			log( _getItemSummary( actionGroup ) .. " - Add modifiers " .. json.encode( actionGroup.modifiers ), "ActionGroup.init", 4 )
+		else
+			actionGroup.modifiers = {}
 		end
 		-- Condition of the group of actions
 		if (actionGroup.condition ~= nil) then
@@ -2630,7 +2747,7 @@ ActionGroup = {
 			if (type(actionGroup.delayInterval) == "function") then
 				delayInterval = tonumber(actionGroup.delayInterval()) or 0
 			else
-				delayInterval = tonumber(actionGroup.delayInterval) or 0
+				delayInterval = tonumber( actionGroup.modifiers.delayInterval ) or 0
 			end
 			if ((delayInterval == 0) and (actionGroup.event == "reminder")) then
 				isRecurrent = true
@@ -2650,7 +2767,7 @@ ActionGroup = {
 				if (elapsedTime == 0) then
 					delay = delayInterval
 					log("Delay interval: " .. tostring(delay), "ActionGroup.getDelay", 4)
-				elseif (delayInterval >= elapsedTime) then
+				elseif ( delayInterval >= elapsedTime ) then
 					delay = delayInterval - elapsedTime
 					if _isLogLevel(4) then
 						log(
@@ -2660,7 +2777,7 @@ ActionGroup = {
 							"ActionGroup.getDelay", 4
 						)
 					end
-				elseif (elapsedTime - delayInterval <= (params.maxInterval or 10)) then
+				elseif ( elapsedTime - delayInterval <= ( params.maxInterval or 10 ) ) then
 					delay = 0
 					log("Delay interval is zero" , "ActionGroup.getDelay", 4)
 				else
@@ -2702,16 +2819,16 @@ ActionGroup = {
 		return true
 	end,
 
-	isMatchingLevel = function (actionGroup, level)
-		log("DEBUG " .. _getItemSummary(actionGroup) .. " - level " .. json.encode(actionGroup.levels), "ActionGroup.isMatchingLevel", 3)
-		if (level ~= nil) then
-			if ((table.getn(actionGroup.levels) == 0) or not table.contains(actionGroup.levels, level)) then
-				log(_getItemSummary(actionGroup) .. " - The requested level '" .. tostring(level) .. "' is not respected", "ActionGroup.isMatchingLevel", 4)
+	isMatchingLevel = function( actionGroup, level )
+		log( "DEBUG " .. _getItemSummary( actionGroup ) .. " - level " .. json.encode( actionGroup.modifiers.levels ), "ActionGroup.isMatchingLevel", 3 )
+		if ( level ~= nil ) then
+			if ( ( actionGroup.modifiers.levels == nil ) or ( #(actionGroup.modifiers.levels) == 0 ) or not table.contains( actionGroup.modifiers.levels, level ) ) then
+				log( _getItemSummary( actionGroup ) .. " - The requested level '" .. tostring( level ) .. "' is not respected", "ActionGroup.isMatchingLevel", 4 )
 				return false
 			end
 		else
-			if ((table.getn(actionGroup.levels) > 0) and not table.contains(actionGroup.levels, 0)) then
-				log(_getItemSummary(actionGroup) .. " - There's at least a level different from '0' and none was requested", "ActionGroup.isMatchingLevel", 4)
+			if ( ( type( actionGroup.modifiers.levels ) == "table" ) and ( #(actionGroup.modifiers.levels) > 0 ) and not table.contains( actionGroup.modifiers.levels, 0 ) ) then
+				log( _getItemSummary( actionGroup ) .. " - There's at least a level different from '0' and none was requested", "ActionGroup.isMatchingLevel", 4 )
 				return false
 			end
 		end
@@ -2743,8 +2860,8 @@ log("DEBUG params:" .. json.encode(params), "ActionGroup.execute", 3)
 		rule._context.level = level or rule._context.level
 
 		local msg = "*   Rule #" .. rule.id .. "(" .. rule.name .. ") - Group of actions #" .. tostring(actionGroup.id) .. " for event '" .. tostring(actionGroup.event) .. "'"
-		if (actionGroup.level ~= nil) then
-			msg = msg .. "(level " .. json.encode(actionGroup.levels) .. ")"
+		if ( actionGroup.modifiers.levels ~= nil ) then
+			msg = msg .. "(level " .. json.encode( actionGroup.modifiers.levels ) .. ")"
 		end
 
 		-- Check if a hook prevents to do the actions
@@ -2772,8 +2889,8 @@ log("DEBUG params:" .. json.encode(params), "ActionGroup.execute", 3)
 		elseif ((actionGroup.condition ~= nil) and (Condition.getStatus(actionGroup.condition) == 0)) then
 			log(msg .. " - Don't do anything - Rule is still active but the condition of the group of actions is no more respected", "ActionGroup.execute", 3)
 		-- Check if the level is still respected (TODO : est-ce nécessaire puisque au changement, les schedule sont enlevés)
-		elseif not ActionGroup.isMatchingLevel(actionGroup, level) then
-			log(msg .. " - Don't do anything - Level doesn't match the requested level " .. tostring(level), "ActionGroup.execute", 3)
+		elseif not ActionGroup.isMatchingLevel( actionGroup, level ) then
+			log(msg .. " - Don't do anything - Level doesn't match the requested level " .. tostring( level ), "ActionGroup.execute", 3)
 		else
 			--log(msg .. " - Do actions", "ActionGroup.execute", 3)
 			if (params.idx ~= nil) then
@@ -2792,7 +2909,7 @@ log("DEBUG params:" .. json.encode(params), "ActionGroup.execute", 3)
 					)
 					--]]
 					ScheduledTasks.add(
-						{ ruleId = rule.id, event = actionGroup.event, level = level, actionGroupId = actionGroup.id, isCritical = actionGroup.isCritical },
+						{ ruleId = rule.id, event = actionGroup.event, level = level, actionGroupId = actionGroup.id, isCritical = actionGroup.modifiers.isCritical },
 						ActionGroup.execute, action.delayInterval, { actionGroup, level, params }
 					)
 					return
@@ -2825,7 +2942,7 @@ log("DEBUG params:" .. json.encode(params), "ActionGroup.execute", 3)
 			local delay = ActionGroup.getDelay(rule, actionGroup, nil, true)
 			log(msg .. " - Do recurrent group of actions in " .. tostring(delay) .. " seconds", "ActionGroup.execute", 2)
 			ScheduledTasks.add(
-				{ ruleId = rule.id, event = "reminder", level = level, actionGroupId = actionGroup.id, isCritical = actionGroup.isCritical },
+				{ ruleId = rule.id, event = "reminder", level = level, actionGroupId = actionGroup.id, isCritical = actionGroup.modifiers.isCritical },
 				ActionGroup.execute, delay, { actionGroup, level }
 			)
 		end
@@ -2913,7 +3030,7 @@ log("DEBUG params:" .. json.encode(params), "ActionGroups.execute", 3)
 		end
 		
 		-- Announce what will be done
-		if (level ~= nil) then
+		if ( level ~= nil ) then
 			log("*** Rule #" .. tostring(rule.id) .. " - Do group of actions for event '" .. event .. "' with explicit level '" .. tostring(level) .. "'", "ActionGroups.execute")
 		--elseif (rule._context.level > 0) then
 		--	log("*** " .. Rule.getSummary(rule) .. " - Do group of actions for event '" .. event .. "' matching rule level '" .. tostring(rule._context.level) .. "'", "ActionGroups.execute")
@@ -2930,7 +3047,7 @@ log("DEBUG params:" .. json.encode(params), "ActionGroups.execute", 3)
 			if not ActionGroup.isMatchingEvent(actionGroup, event) then
 				log(msg .. " - Don't do because event '" .. tostring(event) .. "' is not respected", "ActionGroups.execute", 3)
 			-- Check if the level is respected
-			elseif not ActionGroup.isMatchingLevel(actionGroup, level) then
+			elseif not ActionGroup.isMatchingLevel( actionGroup, level ) then
 				log(msg .. " - Don't do because level '" .. tostring(level) .. "' is not respected", "ActionGroups.execute", 3)
 			-- Check if the specific condition of the group of rule actions is respected
 			elseif ((actionGroup.condition ~= nil) and (Condition.getStatus(actionGroup.condition) == 0)) then
@@ -2950,7 +3067,7 @@ log("DEBUG params:" .. json.encode(params), "ActionGroups.execute", 3)
 					end
 					-- The calls are made all in asynchronous to avoid the blockings
 					ScheduledTasks.add(
-						{ ruleId = rule.id, event = event, level = level, actionGroupId = actionGroup.id, isCritical = actionGroup.isCritical },
+						{ ruleId = rule.id, event = event, level = level, actionGroupId = actionGroup.id, isCritical = actionGroup.modifiers.isCritical },
 						ActionGroup.execute, delay, { actionGroup, level, params }
 					)
 				end
@@ -2958,7 +3075,7 @@ log("DEBUG params:" .. json.encode(params), "ActionGroups.execute", 3)
 		end
 		if not isAtLeastOneToExecute then
 			local msg = Rule.getSummary(rule) .. " - No action to do for event '" .. tostring(event) .. "'"
-			if (level ~= nil) then
+			if ( level ~= nil ) then
 				msg = msg .. " and level '" .. tostring(level) .. "'"
 			end
 			log(msg, "ActionGroups.execute", 2)
@@ -4008,7 +4125,8 @@ RulesFile = {
 							item = {
 								type = item.type,
 								operator = item["operator"],
-								items = items
+								items = items,
+								actions = item["actions"]
 							}
 						elseif (string.match(item.type, "^list_with_operators_.*")) then
 							-- List with operatorS
@@ -4021,7 +4139,8 @@ RulesFile = {
 							item = {
 								type = item.type,
 								operators = operators,
-								items = items
+								items = items,
+								actions = item["actions"]
 							}
 						elseif ((item.type == "lists_create_with") or string.match(item.type, "^list_.*")) then
 							-- List
@@ -4072,16 +4191,16 @@ RulesFile = {
 
 		-- Add the rules parsed from XML
 		local idx = 1
-		if ((type(xmltable) == "table") and (xmltable.tag == "xml")) then
-			for _, xmlRule in ipairs(xmltable) do
-				if ((type(xmlRule) == "table") and (xmlRule.tag == "block") and (xmlRule.attr.type == "rule")) then
-					if ((#ruleIdxes == 0) or (table.contains(ruleIdxes, idx))) then
-						local rule = parseXmlItem(xmlRule, 0)
-						log("Rule parsed from XML: " .. json.encode(rule), "RulesFile.load", 4)
-						rule.id = tonumber(rule.id or "")
+		if ( ( type( xmltable ) == "table" ) and ( xmltable.tag == "xml" ) ) then
+			for _, xmlRule in ipairs( xmltable ) do
+				if ( ( type( xmlRule ) == "table" ) and ( xmlRule.tag == "block" ) and ( xmlRule.attr.type == "rule" ) ) then
+					if ( ( #ruleIdxes == 0 ) or ( table.contains( ruleIdxes, idx ) ) ) then
+						local rule = parseXmlItem( xmlRule, 0 )
+						log( "Rule parsed from XML: " .. json.encode(rule), "RulesFile.load", 5 )
+						rule.id = tonumber( rule.id or "" )
 						rule.fileName = fileName
 						rule.idx = idx -- Index in the XML file
-						Rules.add(rule, keepFormerRuleWithSameId)
+						Rules.add( rule, keepFormerRuleWithSameId )
 					end
 					idx = idx +1
 				end
@@ -4650,8 +4769,6 @@ _G["RulesEngine.ScheduledTasks.execute"] = ScheduledTasks.execute
 --_G["RulesEngine.ActionGroup.execute"] = ActionGroup.execute
 --_G["RulesEngine.Condition.updateStatus"] = Condition.updateStatus
 _G["RulesEngine.Rule.updateStatus"] = Rule.updateStatus
-
-print(json.encode(luup.scenes))
 
 -- TODO : to check
 return RulesEngine
