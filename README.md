@@ -1,4 +1,4 @@
-# Vera-Plugin-RulesEngine
+# ![rulesengine](media/rulesengine_logo.png) Vera-Plugin-RulesEngine
 
 A rules engine for for [getVera](http://getvera.com/) Home Controller (VeraEdge, Vera3, VeraLite)
 
