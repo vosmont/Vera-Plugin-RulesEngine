@@ -22,7 +22,7 @@ end
 
 _NAME = "RulesEngine"
 _DESCRIPTION = "Rules Engine for the Vera with visual editor"
-_VERSION = "0.12.4"
+_VERSION = "0.12.4.1"
 _AUTHOR = "vosmont"
 
 -- **************************************************
@@ -470,7 +470,7 @@ Variable = {
 		if ( ( type( variable ) == "table" ) and ( type( variable[4] ) == "string" ) ) then
 			local variableTimestamp = VARIABLE[ variable[4] ]
 			if ( variableTimestamp ~= nil ) then
-				return luup.variable_get( variableTimestamp[1], variableTimestamp[2], deviceId )
+				return tonumber( luup.variable_get( variableTimestamp[1], variableTimestamp[2], deviceId ) )
 			end
 		end
 		return nil
