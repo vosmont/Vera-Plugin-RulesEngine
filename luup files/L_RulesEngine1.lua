@@ -22,7 +22,7 @@ end
 
 _NAME = "RulesEngine"
 _DESCRIPTION = "Rules Engine for the Vera with visual editor"
-_VERSION = "0.13"
+_VERSION = "0.13.1"
 _AUTHOR = "vosmont"
 
 -- **************************************************

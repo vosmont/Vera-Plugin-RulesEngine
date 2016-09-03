@@ -2327,6 +2327,7 @@ Blockly.Blocks[ "condition_time" ] = {
 		this.setColour( Blockly.Blocks.conditions.HUE1 );
 		this.prefix_ = "condition";
 		this.params_ = {};
+		this.filters_ = {};
 		//this.inputs_ = [ "time_operator", "timer_type", "timer_relative", "params", "actions" ];
 		this.inputs_ = [ "time_operator", "timer_type", "params", "actions" ];
 
