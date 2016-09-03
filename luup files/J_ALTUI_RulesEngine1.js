@@ -17,6 +17,7 @@ var ALTUI_RulesEngine = ( function( window, undefined ) {
 	var _rulesInfos = {};
 	var _altuiid, _version, _debugMode;
 	var _lastUpdate = 0;
+	var _workspaceHeight = 2000;
 
 	var htmlControlPanel = '\
 <div id="rulesengine-blockly-panel">\
@@ -53,7 +54,8 @@ var ALTUI_RulesEngine = ( function( window, undefined ) {
 <sep></sep>\
 <category name="Device" colour="320">\
 	<block type="list_device"></block>\
-	<block type="device"><mutation inputs="id,room"></mutation><field name="roomId"></field></block>\
+	<block type="device"><mutation inputs="id"></mutation></block>\
+	<block type="current_device"></block>\
 </category>\
 <sep></sep>\
 <category name="Conditions" colour="40">\
@@ -68,7 +70,7 @@ var ALTUI_RulesEngine = ( function( window, undefined ) {
 	</category>\
 	<category name="Type">\
 		<block type="condition_value"><mutation condition_type="event"></mutation></block>\
-		<block type="condition_value"></block>\
+		<block type="condition_value"><mutation inputs="service,variable"></block>\
 		<!--\
 		<category name="Templates">\
 			<block type="condition_value"><mutation condition_type="sensor_armed"></mutation></block>\
@@ -80,6 +82,7 @@ var ALTUI_RulesEngine = ( function( window, undefined ) {
 		-->\
 		<block type="condition_time"></block>\
 		<block type="condition_rule"></block>\
+		<block type="condition_inverter"></block>\
 	</category>\
 	<category name="Param">\
 		<block type="list_condition_param"></block>\
@@ -97,7 +100,7 @@ var ALTUI_RulesEngine = ( function( window, undefined ) {
 	<category name="Type">\
 		<block type="action_wait"></block>\
 		<block type="action_function"></block>\
-		<block type="action_device"></block>\
+		<block type="action_device"><mutation input_service=""></mutation></block>\
 		<category name="Templates">\
 			<block type="action_device"><mutation action_type="switch"></mutation></block>\
 			<block type="action_device"><mutation action_type="dim"></mutation></block>\
@@ -141,7 +144,7 @@ div.altui-rule-acknowledged { cursor: pointer; background: url("http://vosmont.g
 .altui-rule-xml .panel-body { padding: 0px; }\
 .altui-rule-xml-content { width: 100%; height: 200px; }\
 #rulesengine-blockly-panel {  }\
-#rulesengine-blockly-workspace { width: 100%; height: 2000px; }\
+#rulesengine-blockly-workspace { width: 100%; height: ' + _workspaceHeight + 'px; }\
 div.blocklyToolboxDiv { height: auto!important; /*position: fixed;*/ }\
 div.blocklyWidgetDiv { z-index: 1050; }\
 #blocklyArea { height: 100%; }\
@@ -166,14 +169,20 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 		if ( device.device_type === "urn:schemas-upnp-org:device:RulesEngine:1" ) {
 			// Seems to be called at each change in the system, not just our device
 			for ( var i = 0; i < device.states.length; i++ ) {
-//console.log("onDeviceStatusChanged", device.states[ i ].variable, device.states[ i ].value);
 				if ( device.states[ i ].variable === "LastUpdate" ) {
 					if ( _lastUpdate !== device.states[ i ].value ) {
 						_lastUpdate = device.states[ i ].value;
+						var ruleIds = MultiBox.getStatus( device, "urn:upnp-org:serviceId:RulesEngine1", "LastModifiedRules" ) || "";
+						ruleIds = $.map( ruleIds.split( "," ), function( value ) {
+							return parseInt( value, 10 );
+						} );
+//console.log("Change on RulesEngine " + _convertTimestampToLocaleString(_lastUpdate), ruleIds );
 						if ( $( "#rulesengine-blockly-workspace" ).length > 0 ) {
+							//console.log("rulesengine-blockly-workspace")
+							//_clearIndexBlocklyConditionBlocks();
 							// Update the rule currently displayed (readonly mode)
 							var ruleId = $( "#rulesengine-blockly-workspace" ).data( "rule_id" );
-							if ( $( "#rulesengine-blockly-workspace" ).data( "read_only" ) ) {
+							if ( $( "#rulesengine-blockly-workspace" ).data( "read_only" ) && ( ruleIds.indexOf( ruleId ) > -1 ) ) {
 								$.when( _getRulesInfosAsync( device, { "ruleId": ruleId } ) )
 									.done( function( rulesInfos ) {
 										_updateViewPageRule( rulesInfos, ruleId );
@@ -196,7 +205,7 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 
 	function _init( device ) {
 		_version = MultiBox.getStatus( device, "urn:upnp-org:serviceId:RulesEngine1", "PluginVersion" );
-		_debugMode = MultiBox.getStatus( device, "urn:upnp-org:serviceId:RulesEngine1", "Debug" );
+		_debugMode = parseInt( MultiBox.getStatus( device, "urn:upnp-org:serviceId:RulesEngine1", "Debug" ) || "0", 10 );
 	}
 
 	// *************************************************************************************************
@@ -623,6 +632,8 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 			.data( "read_only", readOnly );
 
 		if ( readOnly !== true ) {
+			var workspace = Blockly.getMainWorkspace();
+			workspace.addChangeListener( _adaptWorkspaceHeightToRule );
 			//$( window ).on( "scroll", _scrollBlocklyToolbox );
 			//$( window ).on( "resize", function() { console.info("resize") } );
 		}
@@ -638,6 +649,24 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 			}
 			_isFirstCall = false;
 		} );
+	}
+
+	function _adaptWorkspaceHeightToRule( event ) {
+		/*
+		The current version of Blockly in ALTUI seems to be outdated
+		if ( event && ( event.type === Blockly.Events.CHANGE ) && ( event.element == "rule" ) ) {
+		}
+		*/
+		var workspace = Blockly.getMainWorkspace();
+		var topBlocks = workspace.getTopBlocks( true );
+		if ( !topBlocks || ( topBlocks.length === 0 ) ) {
+			return;
+		}
+		var coords = topBlocks[ 0 ].getRelativeToSurfaceXY();
+		var ruleHeight = topBlocks[ 0 ].height + 100;
+		if ( ruleHeight > _workspaceHeight ) {
+			$( "#rulesengine-blockly-workspace" ).height( ruleHeight );
+		}
 	}
 
 	function _showLuaEditor( code, callback ) {
@@ -712,6 +741,7 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 				_indexBlocklyConditionBlocks[ id ] = [];
 			}
 			_indexBlocklyConditionBlocks[ id ].push( condition );
+//console.info(id,condition.type);
 			var input;
 			switch( condition.type ) {
 				case "list_with_operators_condition":
@@ -753,6 +783,12 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 					var subCondition = connection && connection.targetBlock();
 					_putConditionInIndex( subCondition, id, 1 );
 					break;
+				case "condition_inverter":
+					var condition = condition.getInputTargetBlock( "condition" );
+					if ( condition ) {
+						_putConditionInIndex( condition, id, 1 );
+					}
+					break;
 				default:
 			}
 		}
@@ -764,6 +800,8 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 		var connection = input && input.connection;
 		var condition = connection && connection.targetBlock();
 		_putConditionInIndex( condition, ruleId, 1 );
+		
+		//console.info(_indexBlocklyConditionBlocks);
 	}
 
 	function _getBlocklyConditionBlocks( conditionId ) {
@@ -883,16 +921,30 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 				var html = '<div class="panel panel-default">'
 					+			'<small><table class="table">'
 					+				'<thead>'
-					+					('<tr><th>{0}</th><th>{1}</th><th>{2}</th></tr>'.format( _T( "Date" ), _T( "Type" ), _T( "Event" ) ) )
+					+					( '<tr><th>{0}</th><th>{1}</th><th>{2}</th></tr>'.format( _T( "Date" ), _T( "Type" ), _T( "Event" ) ) )
 					+				'</thead>'
 					+				'<tbody>';
 				$.each( timeline.history, function( i, e ) {
 					html +=				'<tr><td>{0}</td><td>{1}</td><td>{2}</td></tr>'.format( _convertTimestampToLocaleString( e.timestamp ), e.eventType, e.event);
-				});
+				} );
 				html +=				'</tbody>'
-					+			'</table></small>'
-					+		'</div>';
+					+			'</table></small>';
 
+				if ( timeline.scheduled && ( timeline.scheduled.length > 0 ) ) {
+					html +=		'<small><table class="table">'
+						+			'<thead>'
+						+				( '<tr><th>{0}</th><th>{1}</th><th>{2}</th></tr>'.format( _T( "Date" ), _T( "Type" ), _T( "Event" ) ) )
+						+			'</thead>'
+						+			'<tbody>';
+					$.each( timeline.scheduled, function( i, e ) {
+						html +=			'<tr><td>{0}</td><td>{1}</td><td>{2}</td></tr>'.format( _convertTimestampToLocaleString( e.timestamp ), e.eventType, e.event);
+					} );
+					html +=			'</tbody>'
+						+		'</table></small>';
+				}
+
+				html +=		'</div>';
+				
 				dialog.find( ".row-fluid" ).append(html);
 				dialog.modal();
 			} );
@@ -1316,6 +1368,7 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 					altuiid, "urn:upnp-org:serviceId:RulesEngine1", "LoadRules",
 					{ fileName: fileName, ruleIdx: modifiedRuleIdxes.join( "," ) }
 				);
+				_clearIndexBlocklyConditionBlocks();
 				_pageRules( altuiid );
 				PageMessage.message( "File \"" + fileName + "\" has been saved", "success");
 			} );
@@ -1327,62 +1380,74 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 
 	// Load all the action of devices (ALTUI just load them on demand)
 	var _indexDeviceActionByDevice = {};
-	var _indexDevicesActions = {};
-	function _loadDevicesActions() {
+	var _indexDevicesActions = null;
+	var _devicesTypes = [];
+	function _loadDevicesInfos() {
 		var d = $.Deferred();
-		_indexDeviceActionByDevice = {};
-		_indexDevicesActions = {};
-		MultiBox.getDevices(
-			null,
-			null,
-			function( devices ) {
-				var nbRetrieved = 0;
-				$.each( devices, function( i, device ) {
-					if ( device && ( device.id !== 0 ) ) {
-						var controller = MultiBox.controllerOf( device.altuiid ).controller;
-						var devicetypesDB = MultiBox.getDeviceTypesDB( controller );
-						var dt = devicetypesDB[ device.device_type ];
-						if ( dt && dt.Services && ( dt.Services.length > 0 ) ) {
-							MultiBox.getDeviceActions( device, function ( services ) {
-								for ( var i = 0; i < services.length; i++ ) {
-									var actionService = services[ i ].ServiceId;
-									for ( var j = 0; j < services[ i ].Actions.length; j++ ) {
-										var action = services[ i ].Actions[ j ];
-										_indexDevicesActions[ actionService + ";" + action.name ] = action;
-										
-										if ( !_indexDeviceActionByDevice[ device.altuiid ] ) {
-											_indexDeviceActionByDevice[ device.altuiid ] = { "services": {}, "actions": {} };
+		if ( _indexDevicesActions ) {
+			// The action of devices have already been retrieved
+			// If a new type of device, the browser has to be refreshed
+			d.resolve();
+		} else {
+			_indexDeviceActionByDevice = {};
+			_indexDevicesActions = {};
+			MultiBox.getDevices(
+				null,
+				null,
+				function( devices ) {
+					var nbRetrieved = 0;
+					$.each( devices, function( i, device ) {
+						if ( device && ( device.id !== 0 ) ) {
+							// Get the type
+							if ( $.inArray( device.device_type, _devicesTypes ) === -1 ) {
+								_devicesTypes.push( device.device_type );
+							}
+							// Get the actions
+							var controller = MultiBox.controllerOf( device.altuiid ).controller;
+							var devicetypesDB = MultiBox.getDeviceTypesDB( controller );
+							var dt = devicetypesDB[ device.device_type ];
+							if ( dt && dt.Services && ( dt.Services.length > 0 ) ) {
+								MultiBox.getDeviceActions( device, function ( services ) {
+									for ( var i = 0; i < services.length; i++ ) {
+										var actionService = services[ i ].ServiceId;
+										for ( var j = 0; j < services[ i ].Actions.length; j++ ) {
+											var action = services[ i ].Actions[ j ];
+											_indexDevicesActions[ actionService + ";" + action.name ] = action;
+											
+											if ( !_indexDeviceActionByDevice[ device.altuiid ] ) {
+												_indexDeviceActionByDevice[ device.altuiid ] = { "services": {}, "actions": {} };
+											}
+											if ( !_indexDeviceActionByDevice[ device.altuiid ].services[ actionService ] ) {
+												_indexDeviceActionByDevice[ device.altuiid ].services[ actionService ] = {};
+											}
+											_indexDeviceActionByDevice[ device.altuiid ].services[ actionService ][ action.name ] = true;
+											if ( !_indexDeviceActionByDevice[ device.altuiid ].actions[ action.name ] ) {
+												_indexDeviceActionByDevice[ device.altuiid ].actions[ action.name ] = {};
+											}
+											_indexDeviceActionByDevice[ device.altuiid ].actions[ action.name ][ actionService ] = true;
 										}
-										if ( !_indexDeviceActionByDevice[ device.altuiid ].services[ actionService ] ) {
-											_indexDeviceActionByDevice[ device.altuiid ].services[ actionService ] = {};
-										}
-										_indexDeviceActionByDevice[ device.altuiid ].services[ actionService ][ action.name ] = true;
-										if ( !_indexDeviceActionByDevice[ device.altuiid ].actions[ action.name ] ) {
-											_indexDeviceActionByDevice[ device.altuiid ].actions[ action.name ] = {};
-										}
-										_indexDeviceActionByDevice[ device.altuiid ].actions[ action.name ][ actionService ] = true;
 									}
-								}
+									nbRetrieved++;
+									if ( nbRetrieved === devices.length ) {
+										d.resolve();
+									}
+								} );
+							} else {
 								nbRetrieved++;
 								if ( nbRetrieved === devices.length ) {
 									d.resolve();
 								}
-							} );
-						} else {
+							}
+						}  else {
 							nbRetrieved++;
 							if ( nbRetrieved === devices.length ) {
 								d.resolve();
 							}
 						}
-					}  else {
-						nbRetrieved++;
-						if ( nbRetrieved === devices.length ) {
-							d.resolve();
-						}
-					}
-				} );
-			}
-		);
+					} );
+				}
+			);
+		}
 		return d.promise();
 	}
 	function _hasDeviceActionService( device, actionService, actionName ) {
@@ -1451,7 +1516,13 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 		if ( !actionService || !actionName ) {
 			return;
 		}
-		return _indexDevicesActions[ actionService + ";" + actionName ];
+		if ( _indexDevicesActions ) {
+			return _indexDevicesActions[ actionService + ";" + actionName ];
+		}
+	}
+
+	function _getDeviceTypes() {
+		return _devicesTypes;
 	}
 
 	function _pageRuleEdit( altuiid, fileName, idx, id, readOnly ) {
@@ -1477,7 +1548,8 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 			+			'</button>'
 						)
 			+		'</div>'
-			+		'<div class="btn-group pull-right" role="group" aria-label="...">'
+			+		( readOnly ? '' :
+					'<div class="btn-group pull-right" role="group" aria-label="...">'
 			+			'<button class="btn btn-default altui-rule-import" title="' + _T( "Import XML" ) + '">'
 			+				'<span class="glyphicon glyphicon-log-in" aria-hidden="true"></span>'
 			+			'</button>'
@@ -1485,6 +1557,7 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 			+				'<span class="glyphicon glyphicon-log-out" aria-hidden="true"></span>'
 			+			'</button>'
 			+		'</div>'
+					)
 			+	'</div>'
 			+	'<div id="altui-rule-import" class="panel panel-default altui-rule-xml collapse">'
 			+		'<div class="panel-body">'
@@ -1548,7 +1621,7 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 		// Draw the rule editor after having loaded all the xml rules 
 		// and eventually show the rule to edit
 		$.when( 
-			_loadDevicesActions(),
+			_loadDevicesInfos(),
 			_loadBlocklyResourcesAsync( device )
 		)
 			.done( function() {
@@ -1558,16 +1631,14 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 				}
 				$.when(
 					_loadRulesAsync( device, fileName ),
-					_getRulesInfosAsync( device, { fileName: fileName } )
+					_getRulesInfosAsync( device, { fileName: fileName } ),
+					( id ? _getRulesInfosAsync( device, { fileName: fileName, ruleId: id } ) : true )
 				)
-					.done( function( xmlRules, rulesInfos ) {
+					.done( function( xmlRules, rulesInfos, extendedRulesInfos ) {
 						if ( id ) {
-							var ruleInfos = $.grep( rulesInfos, function( infos ) {
-								return infos.id === id;
-							} )[ 0 ];
 							$( "#rulesengine-blockly-workspace" )
 								.data( "rule_id", id )
-								.data( "rule_version", ruleInfos.version )
+								.data( "rule_version", ( extendedRulesInfos[0] ? extendedRulesInfos[0].version : "unknown" ) )
 						}
 						$( "#rulesengine-blockly-workspace" )
 							.data( "plugin_version", _version );
@@ -1576,19 +1647,31 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 						_checkXmlRulesIds( xmlRules, rulesInfos );
 						if ( idx != null ) {
 							var workspace = Blockly.getMainWorkspace();
-							try {
-								_clearIndexBlocklyConditionBlocks();
-								Blockly.Xml.domToWorkspace(workspace, { childNodes: [ xmlRules[ idx - 1 ] ] } );
+							workspace.clear();
+
+							function _showRule() {
+								//_clearIndexBlocklyConditionBlocks();
+								Blockly.Xml.domToWorkspace( workspace, { childNodes: [ xmlRules[ idx - 1 ] ] } );
 								_moveFirstBlocklyBlockToTopLeftCorner();
 								if ( readOnly ) {
 									_updateIndexBlocklyConditionBlocks();
-									_updateViewPageRule( rulesInfos, id );
+									_updateViewPageRule( extendedRulesInfos, id );
 								}
-							} catch( e ) {
-								// There's a critical error
-								// TODO : not be able to save and show XML code
-								PageMessage.message( "Blocky error : " + e, "danger");
-								console.error( e );
+								_adaptWorkspaceHeightToRule();
+							}
+
+							if ( _debugMode > 0 ) {
+								_showRule();
+							} else {
+								// Catch errors if no debug
+								try {
+									_showRule();
+								} catch( e ) {
+									// There's a critical error
+									// TODO : not be able to save and show XML code
+									PageMessage.message( "Blocky error : " + e, "danger");
+									console.error( e );
+								}
 							}
 						}
 					} );
@@ -1599,16 +1682,27 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 		if ( !blocks ) {
 			return;
 		}
-		$.each( blocks, function( i, block) {
-			if ( infos.status === 1 ) {
+		$.each( blocks, function( i, block ) {
+			if ( infos.isArmed === false ) {
+				block.setTooltip( id + " - Disarmed" );
+				block.svgPath_.style.stroke = "";
+				block.svgPath_.style["stroke-width"] = "";
+				block.svgPath_.style.fill = "#AAAAAA";
+			} else if ( infos.status === 1 ) {
 				block.setTooltip( id + " - ON since " + _convertTimestampToLocaleString( infos.lastStatusUpdateTime ) + ( infos.level ? ' (level ' + infos.level + ')' : '' ) );
 				block.svgPath_.style.stroke = "#FF0000";
 				block.svgPath_.style["stroke-width"] = "4";
 				//block.svgPath_.style["stroke-dasharray"] = "5,5";
 			} else {
-				block.setTooltip( id + " - OFF since " + _convertTimestampToLocaleString( infos.lastStatusUpdateTime ) );
-				block.svgPath_.style.stroke = "";
-				block.svgPath_.style["stroke-width"] = "";
+				if ( infos.nextCheckTime && ( infos.nextCheckTime > 0 ) ) {
+					block.setTooltip( id + " - Could be ON - Check at " + _convertTimestampToLocaleString( infos.nextCheckTime ) );
+					block.svgPath_.style.stroke = "#FFA500";
+					block.svgPath_.style["stroke-width"] = "4";
+				} else {
+					block.setTooltip( id + " - OFF since " + _convertTimestampToLocaleString( infos.lastStatusUpdateTime ) );
+					block.svgPath_.style.stroke = "";
+					block.svgPath_.style["stroke-width"] = "";
+				}
 			}
 		} );
 	}
@@ -1690,7 +1784,7 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 				+			'&nbsp;v' + _version
 				+		'</div>'
 				+		'<div class="info">'
-				+			( _debugMode != "" ? '<small>Debug ON</small>' : '' )
+				+			( _debugMode > 0 ? '<small>Debug ON</small>' : '' )
 				+		'</div>'
 				+	'</div>'
 				+	'<script type="text/javascript">'
@@ -1713,6 +1807,7 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 		getDeviceActionServiceNames: _getDeviceActionServiceNames,
 		getDeviceActionNames: _getDeviceActionNames,
 		getDeviceAction: _getDeviceAction,
+		getDeviceTypes: _getDeviceTypes,
 		getRooms: _getRooms,
 		getRules: _getRules,
 		getScenes: _getScenes
