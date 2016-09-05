@@ -1903,6 +1903,7 @@ Blockly.Blocks[ "list_with_operators_condition" ] = {
 
 Blockly.Msg.CONDITION_DEVICE_VALUE_TOOLTIP = "Condition on the value of a device's variable.";
 Blockly.Msg.CONDITION_TIME_TOOLTIP = "Condition on time.";
+Blockly.Msg.CONDITION_TIME_BETWEEN_TOOLTIP = "Condition on time between two boundaries.";
 Blockly.Msg.CONDITION_RULE_TOOLTIP = "Condition on the status of another rule.";
 Blockly.Msg.CONDITION_INVERTER_TOOLTIP = "Inverts the linked condition (NOT).";
 Blockly.Msg.CONDITION_MQTT_TOOLTIP = "(TODO)Condition on a received message from MQTT broker.";
@@ -2322,7 +2323,41 @@ var timeRE = /^\d\d:\d\d:\d\d$/;
 var relativeTimeRE = /^[-+]?\d\d:\d\d:\d\d[rt]$/;
 var timeFormatExplication = "format must be 'hh:mm:ss' or relative to sunrise(r)/sunset(t) '[-+]hh:mm:ss[rt]'";
 
-Blockly.Blocks[ "condition_time" ] = {
+Blockly.Blocks[ "time" ] = {
+	init: function() {
+		this.setColour( Blockly.Blocks.conditions.HUE1 );
+		this.prefix_ = "condition";
+		this.params_ = {};
+
+		this.appendDummyInput()
+			.appendField( new Blockly.FieldTextInput( "hh:mm:ss" ), "time" );
+
+		this.setInputsInline( false );
+		this.setOutput( true, "Time" );
+		this.setTooltip( Blockly.Msg.CONDITION_TIME_TOOLTIP );
+	},
+
+	onchange: function() {
+		var time = this.getFieldValue( "time" );
+		if ( time && ( time.match( timeRE ) == null ) && ( time.match( relativeTimeRE ) == null ) ) {
+			this.setWarningText( "Time " + timeFormatExplication );
+			return;
+		}
+		var daysOfWeek = this.getFieldValue( "daysOfWeek" );
+		if ( daysOfWeek && ( daysOfWeek.match( /^[1-7](,[1-7])*$/ ) == null ) ) {
+			this.setWarningText( "Days of week format must be empty or '[1-7](,[1-7])*'" );
+			return;
+		}
+		var daysOfMonth = this.getFieldValue( "daysOfMonth" );
+		if ( daysOfMonth && ( daysOfMonth.match( /^\d{1,2}(,\d{1,2})*$/ ) == null ) ) {
+			return;
+			this.setWarningText( "Days of week format must be '\d{1,2}(,\d{1,2})*'" );
+		}
+		this.setWarningText();
+	}
+};
+
+Blockly.Blocks[ "condition_time_old" ] = {
 	init: function() {
 		this.setColour( Blockly.Blocks.conditions.HUE1 );
 		this.prefix_ = "condition";
@@ -2434,6 +2469,144 @@ Blockly.Blocks[ "condition_time" ] = {
 						inputTimerType
 							.appendField( new Blockly.FieldTextInput( "" ), "daysOfWeek" );
 					}
+				}
+			}
+		}
+	}
+};
+
+Blockly.Blocks[ "condition_time" ] = {
+	init: function() {
+		this.setColour( Blockly.Blocks.conditions.HUE1 );
+		this.prefix_ = "condition";
+		this.params_ = {};
+		this.inputs_ = [ "timer_type", "params", "actions" ];
+
+		this.appendDummyInput()
+			.appendField( "time is" );
+
+		this.appendValueInput( "time" )
+			.setCheck( "Time" );
+
+		_setMutator.call( this );
+
+		this.setInputsInline( true );
+		this.setOutput( true, "Boolean" );
+		this.setTooltip( Blockly.Msg.CONDITION_TIME_TOOLTIP );
+	},
+
+	mutationToDom: function() {
+		var container = document.createElement( "mutation" );
+		_updateMutationWithRemovableInputs.call( this, container );
+		_updateMutationWithParams.call( this, [ "timer_type" ], container );
+		return container;
+	},
+
+	domToMutation: function( xmlElement ) {
+		_createInputsFromMutation.call( this, xmlElement );
+		var timerType = this.params_[ "input_timer_type" ] || this.params_[ "timer_type" ];
+		this.updateShape_( timerType );
+	},
+
+	decompose: function( workspace ) {
+		return _decompose.call( this, workspace );
+	},
+
+	compose: function( containerBlock ) {
+		_compose.call( this, containerBlock );
+		this.updateShape_( this.getFieldValue( "timerType" ) );
+	},
+
+	updateShape_: function( option ) {
+		var inputTimerType = this.getInput( "timer_type" );
+		if (inputTimerType) {
+			if ( option === "3" ) {
+				if ( this.getField( "daysOfWeek" ) ) {
+					inputTimerType.removeField( "daysOfWeek" );
+				}
+				if ( this.getField( "daysOfMonth" ) == null ) {
+					inputTimerType
+						.appendField( new Blockly.FieldTextInput( "" ), "daysOfMonth" );
+				}
+			} else {
+				if ( this.getField( "daysOfMonth" ) ) {
+					inputTimerType.removeField( "daysOfMonth" );
+				}
+				if ( this.getField( "daysOfWeek" ) == null ) {
+					inputTimerType
+						.appendField( new Blockly.FieldTextInput( "" ), "daysOfWeek" );
+				}
+			}
+		}
+	}
+};
+
+Blockly.Blocks[ "condition_time_between" ] = {
+	init: function() {
+		this.setColour( Blockly.Blocks.conditions.HUE1 );
+		this.prefix_ = "condition";
+		this.params_ = {};
+		this.inputs_ = [ "timer_type", "params", "actions" ];
+
+		this.appendDummyInput()
+			.appendField( "time is between" );
+
+		this.appendValueInput( "time1" )
+			.setCheck( "Time" );
+
+		this.appendDummyInput()
+			.appendField( "and" );
+
+		this.appendValueInput( "time2" )
+			.setCheck( "Time" );
+
+		_setMutator.call( this );
+
+		this.setInputsInline( true );
+		this.setOutput( true, "Boolean" );
+		this.setTooltip( Blockly.Msg.CONDITION_TIME_BETWEEN_TOOLTIP );
+	},
+
+	mutationToDom: function() {
+		var container = document.createElement( "mutation" );
+		_updateMutationWithRemovableInputs.call( this, container );
+		_updateMutationWithParams.call( this, [ "timer_type" ], container );
+		return container;
+	},
+
+	domToMutation: function( xmlElement ) {
+		_createInputsFromMutation.call( this, xmlElement );
+		var timerType = this.params_[ "input_timer_type" ] || this.params_[ "timer_type" ];
+		this.updateShape_( timerType );
+	},
+
+	decompose: function( workspace ) {
+		return _decompose.call( this, workspace );
+	},
+
+	compose: function( containerBlock ) {
+		_compose.call( this, containerBlock );
+		this.updateShape_( this.getFieldValue( "timerType" ) );
+	},
+
+	updateShape_: function( option ) {
+		var inputTimerType = this.getInput( "timer_type" );
+		if (inputTimerType) {
+			if ( option === "3" ) {
+				if ( this.getField( "daysOfWeek" ) ) {
+					inputTimerType.removeField( "daysOfWeek" );
+				}
+				if ( this.getField( "daysOfMonth" ) == null ) {
+					inputTimerType
+						.appendField( new Blockly.FieldTextInput( "" ), "daysOfMonth" );
+				}
+			} else {
+				if ( this.getField( "daysOfMonth" ) ) {
+					inputTimerType.removeField( "daysOfMonth" );
+				}
+				if ( this.getField( "daysOfWeek" ) == null ) {
+					inputTimerType
+						.appendField( new Blockly.FieldTextInput( "" ), "daysOfWeek" );
 				}
 			}
 		}

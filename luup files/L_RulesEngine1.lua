@@ -22,7 +22,7 @@ end
 
 _NAME = "RulesEngine"
 _DESCRIPTION = "Rules Engine for the Vera with visual editor"
-_VERSION = "0.13.1"
+_VERSION = "0.14"
 _AUTHOR = "vosmont"
 
 -- **************************************************
@@ -590,9 +590,10 @@ Variable = {
 	getOrInit = function( deviceId, variable, defaultValue )
 		local value, timestamp = Variable.get( deviceId, variable )
 		if ( ( value == nil ) or (  value == "" ) ) then
-			Variable.set( deviceId, variable, defaultValue )
 			value = defaultValue
+			Variable.set( deviceId, variable, value )
 			timestamp = os.time()
+			Variable.setTimestamp( deviceId, variable, timestamp )
 		end
 		return value, timestamp
 	end,
@@ -738,65 +739,65 @@ local function _getDuration( timeInterval )
 	return duration
 end
 
-local function _getTimeAgo (timestamp)
-	if (timestamp == nil) then
+local function _getTimeAgo( timestamp )
+	if ( timestamp == nil ) then
 		return ""
 	end
-	return _getDuration(os.difftime(os.time(), timestamp))
+	return _getDuration( os.difftime( os.time(), timestamp ) )
 end
 
-local function _getTimeAgoFull (timestamp)
-	if (timestamp == nil) then
+local function _getTimeAgoFull( timestamp )
+	if ( timestamp == nil ) then
 		return ""
 	end
-	local timeInterval = os.difftime(os.time(), timestamp)
-	local days = math.floor(timeInterval / 86400)
+	local timeInterval = os.difftime( os.time(), timestamp )
+	local days = math.floor( timeInterval / 86400 )
 	local daysRemainder = timeInterval % 86400
-	local hours = math.floor(daysRemainder / 3600)
+	local hours = math.floor( daysRemainder / 3600 )
 	local hoursRemainder = daysRemainder % 3600
-	local minutes = math.floor(hoursRemainder / 60)
+	local minutes = math.floor( hoursRemainder / 60 )
 	local seconds = hoursRemainder % 60
 
 	local timeAgo = ""
 	-- Days
-	if (days > 1) then
+	if ( days > 1 ) then
 		timeAgo = tostring(days) .. " " .. _labels["days"]
-	elseif (days == 1) then
+	elseif ( days == 1 ) then
 		timeAgo = _labels["oneDay"]
 	end
 	-- Hours
-	if ((string.len(timeAgo) > 0) and (hours > 0)) then
+	if ( ( string.len( timeAgo ) > 0 ) and ( hours > 0 ) ) then
 		timeAgo = timeAgo .. " " .. _labels["and"] .. " "
 	end
-	if (hours > 1) then
-		timeAgo = timeAgo .. tostring(hours) .. " " .. _labels["hours"]
-	elseif (hours == 1) then
+	if ( hours > 1 ) then
+		timeAgo = timeAgo .. tostring( hours ) .. " " .. _labels["hours"]
+	elseif ( hours == 1 ) then
 		timeAgo = timeAgo .. _labels["oneHour"]
 	end
 	-- Minutes
-	if (days == 0) then
-		if ((string.len(timeAgo) > 0) and (minutes > 0)) then
+	if ( days == 0 ) then
+		if ( ( string.len( timeAgo ) > 0) and ( minutes > 0 ) ) then
 			timeAgo = timeAgo .. " " .. _labels["and"] .. " "
 		end
-		if (minutes > 1) then
-			timeAgo = timeAgo .. tostring(minutes) .. " " .. _labels["minutes"]
-		elseif (minutes == 1) then
+		if ( minutes > 1 ) then
+			timeAgo = timeAgo .. tostring( minutes ) .. " " .. _labels["minutes"]
+		elseif ( minutes == 1 ) then
 			timeAgo = timeAgo .. _labels["oneMinute"]
 		end
 	end
 	-- Seconds
-	if ((days == 0) and (hours == 0)) then
-		if ((string.len(timeAgo) > 0) and (seconds > 0)) then
+	if ( ( days == 0 ) and ( hours == 0 ) ) then
+		if ( ( string.len( timeAgo ) > 0 ) and ( seconds > 0 ) ) then
 			timeAgo = timeAgo .. " " .. _labels["and"] .. " "
 		end
-		if (seconds > 1) then
-			timeAgo = timeAgo .. tostring(seconds) .. " " .. _labels["seconds"]
-		elseif (seconds == 1) then
+		if ( seconds > 1 ) then
+			timeAgo = timeAgo .. tostring( seconds ) .. " " .. _labels["seconds"]
+		elseif ( seconds == 1 ) then
 			timeAgo = timeAgo .. _labels["oneSecond"]
 		end
 	end
 
-	if (timeAgo == "") then
+	if ( timeAgo == "" ) then
 		timeAgo = _labels["zeroSecond"]
 	end
 
@@ -949,7 +950,7 @@ Event = {
 				log( "This event is linked to rule #" .. tostring( condition._ruleId ) .. " and condition #" .. tostring( condition.id ), "Event.onTimerIsTriggered", 2 )
 			end
 			-- Update the status of the conditions (asynchronously to release the lock the fatest possible)
-			ScheduledTasks.add( nil, Conditions.updateStatus, 0, { linkedConditions, { context = context } } )
+			ScheduledTasks.add( nil, Conditions.updateStatus, 0, { linkedConditions, { context = context, event = data } } )
 		else
 			log( "Engine is not enabled - Do nothing", "Event.onTimerIsTriggered" )
 		end
@@ -1008,6 +1009,7 @@ local _indexFunctionNames = {}
 ScheduledTasks = {
 	createIndexFunctionNames = function ()
 		_indexFunctionNames[ tostring(Condition.updateStatus) ]  = "Condition.updateStatus"
+		_indexFunctionNames[ tostring(Condition.setStatus) ]     = "Condition.setStatus"
 		_indexFunctionNames[ tostring(Conditions.updateStatus) ] = "Conditions.updateStatus"
 		_indexFunctionNames[ tostring(Rule.updateStatus) ]       = "Rule.updateStatus"
 		_indexFunctionNames[ tostring(ActionGroup.execute) ]     = "ActionGroup.execute"
@@ -1082,7 +1084,7 @@ ScheduledTasks = {
 				)
 			end
 			notifyTimelineUpdate()
-			luup.call_delay("RulesEngine.ScheduledTasks.execute", remainingSeconds, nil)
+			luup.call_delay( "RulesEngine.ScheduledTasks.execute", remainingSeconds, nil )
 		else
 			log("Doesn't change next wakeup : no scheduled task before current timeout", "ScheduledTasks.prepareNextWakeUp", 2)
 		end
@@ -1450,12 +1452,71 @@ local function _getDeviceIds( item )
 	return deviceIds
 end
 
+
+-- **************************************************
+-- Sunrise / Sunset
+-- **************************************************
+
+local _lastSunUpdated = os.date( "%d" )
+local _sunrises = {}
+local _sunsets = {}
+Sun = {
+	update = function()
+		function _isToday( timestamp )
+			return ( os.date( "%d", timestamp ) == os.date( "%d" ) )
+		end
+
+		function _update( items, timestamp )
+			local _oneDay = 86400
+			if _isToday( timestamp ) then
+				items[1] = timestamp
+			else
+				if ( items[1] == nil ) then
+					items[1] = timestamp - _oneDay
+				end
+				items[2] = timestamp
+			end
+		end
+
+		-- Rotation
+		local currentDate = os.date( "%d" )
+		if ( currentDate ~= _lastSunUpdated ) then
+			_sunrises[1] = _sunrises[2]
+			_sunsets[1]  = _sunsets[2]
+			_lastSunUpdated = currentDate
+		end
+
+		local sunrise, sunset = luup.sunrise(), luup.sunset()
+		_update( _sunrises, sunrise )
+		_update( _sunsets, sunset )
+		log( "Update sunset/sunrise timestamps: " .. json.encode( _sunrises ) .. " / " ..  json.encode( _sunsets ), "Sun.update", 2 )
+
+		local nextUpdate = os.difftime( math.min( sunrise, sunset ), os.time() )
+		log( "Next update in " .. tostring( nextUpdate ) .. " seconds", "Sun.update", 3 )
+		luup.call_delay( "RulesEngine.Sun.update", nextUpdate, nil )
+	end,
+
+	getTodaySunrise = function()
+		return _sunrises[1]
+	end,
+	--[[
+	getTomorrowSunrise = function()
+		return _sunrises[2]
+	end,
+	--]]
+	getTodaySunset = function()
+		return _sunsets[1]
+	end--[[,
+	getTomorrowSunset = function()
+		return _sunsets[2]
+	end
+	--]]
+}
+
+
 -- **************************************************
 -- ConditionTypes
 -- **************************************************
-
-local time_format           = "(%d%d?)%:(%d%d?)%:(%d%d?)"
-local relative_time_format  = "([%+%-]?)" .. time_format .. "([rt]?)"
 
 local ConditionTypes = {}
 setmetatable(ConditionTypes, {
@@ -1804,60 +1865,233 @@ log( "DEBUG service:" .. tostring(condition.service) .. ", variable:" .. tostrin
 			end
 			log( msg, "ConditionRule.updateStatus", 3 )
 
+			-- Update the status
 			return Condition.setStatus( condition, status, params )
 		end
 	}
 
-	-- Condition of type 'time'
+	-- Condition of type 'time' and 'time_between'
 	-- See http://wiki.micasaverde.com/index.php/Luup_Lua_extensions#function:_call_timer
-	-- TODO sunset sunrise
-	-- luup.sunrise()
-	-- luup.sunset()
+	local timePattern         = "(%d%d?)%:(%d%d?)%:(%d%d?)"
+	local relativeTimePattern = "([%+%-]?)" .. timePattern .. "([rt]?)"
+	local function _checkTimePattern( time )
+		if ( ( type( time ) == "string" ) and string.match( time, relativeTimePattern ) ) then
+			return true
+		end
+		return nil
+	end
+
+	local function _getTimestampForToday( time )
+		if ( time == nil ) then
+			return nil
+		end
+		local t
+		local date = os.date( "*t" )
+		local sign, H, M, S, rt = string.match( time, relativeTimePattern )
+		if ( rt == "" ) then
+			t = os.time( { year = date.year, month = date.month, day = date.day, hour = H, min = M, sec = S } )
+		else
+			-- Relative time to sunrise/sunset
+			if ( rt == "r" ) then
+				t = Sun.getTodaySunrise()
+			elseif ( rt == "t" ) then
+				t = Sun.getTodaySunset()
+			else
+				-- noon ????
+				t = ( Sun.getTodaySunrise() + Sun.getTodaySunset() ) / 2
+			end
+			local offset = ( H * 60 + M ) * 60 + S
+			if ( sign == "-" ) then
+				t = t - offset
+			else
+				t = t + offset
+			end
+		end
+		return t, ( rt ~= "" ), os.date( "%H:%M:%S", t )
+	end
+
+	local function _initTimeCondition( condition ) 
+		if ( type( condition.daysOfWeek ) == "string" ) then
+			condition.timerType = 2
+			condition.days = string.split( condition.daysOfWeek, "," )
+		elseif ( type( condition.daysOfMonth ) == "string" ) then
+			condition.timerType = 3
+			condition.days = string.split( condition.daysOfMonth, "," )
+		end
+		if ( ( condition.daysOfWeek == nil ) and ( condition.daysOfMonth == nil ) ) then
+			condition.timerType = 2
+			condition.days = { "1","2","3","4","5","6","7" }
+		end
+		condition.mainType = "Trigger"
+	end
+
+	local function _registerTimer( eventName, condition, day, time )
+		local msg = _getItemSummary( condition )
+		Events.registerItem( eventName, condition )
+		if not Events.isWatched( eventName ) then
+			log( msg .. " - Starts timer '" .. eventName .. "'", "ConditionTime.start", 3 )
+			luup.call_timer( "RulesEngine.Event.onTimerIsTriggered", condition.timerType, time, day, eventName )
+			Events.setIsWatched( eventName )
+		else
+			log( msg .. " - Timer '" .. eventName .. "' is already started", "ConditionTime.start", 3 )
+		end
+	end
+
+	local function _addOffsetToDay( timerType, day, dayOffset )
+		local newDay
+		if ( timerType == 2 ) then
+			-- Weekday
+			newDay = ( tonumber( day ) + dayOffset - 1 ) % 7 + 1
+		else
+			newDay = ( tonumber( day ) + dayOffset - 1 ) % 31 + 1 -- problem for months with 30 or 28 days !
+		end
+		return tostring( newDay )
+	end
+
+	local function _getDayOfWeek( time )
+		local day = os.date( "%w", time )
+		if ( day == "0" ) then
+			day = "7"
+		end
+		return day
+	end
+	local function _getDayOfMonth( time )
+		return tostring( tonumber( os.date( "%d", time ) ) )
+	end
+
 	ConditionTypes["condition_time"] = {
 		init = function( condition )
-			if ( type( condition.daysOfWeek ) == "string" ) then
-				condition.timerType = 2
-				condition.days = string.split( condition.daysOfWeek, "," )
-			elseif ( type( condition.daysOfMonth ) == "string" ) then
-				condition.timerType = 3
-				condition.days = string.split( condition.daysOfMonth, "," )
+			_initTimeCondition( condition )
+			if ( ( type( condition.time ) == "table" ) and ( condition.time.type == "time" ) ) then
+				condition.time = condition.time.time
 			end
-			if ( ( condition.daysOfWeek == nil ) and ( condition.daysOfMonth == nil ) ) then
-				condition.timerType = 2
-				condition.days = { "1","2","3","4","5","6","7" }
-			end
-			condition.mainType = "Trigger"
+			condition.events = {}
 		end,
 
 		check = function( condition )
-			if not _checkParameters( condition, { { "time", "time1", "time2" }, "timerType", "days" } ) then
+			if not _checkParameters( condition, { "time", "timerType", "days" } ) then
+				return false
+			elseif not _checkTimePattern( condition.time ) then
+				Rule.addError( condition._ruleId, "Init condition", _getItemSummary( condition ) .. " - Time '" .. tostring( condition.time ) .. "' does not respect the format '" .. relativeTimePattern .. "'" )
 				return false
 			end
-			-- TODO : check time format ?
 			return true
 		end,
 
 		start = function( condition )
-			local msg = _getItemSummary( condition )
+			local event
+			for _, day in ipairs( condition.days ) do
+				event = "timer;" .. tostring( condition.timerType ) .. ";" .. day .. ";" .. condition.time
+				_registerTimer( event, condition, day, condition.time )
+				table.insert( condition.events, event )
+			end
+		end,
 
-			local times
-			if ( condition.time ~= nil ) then
-				times = { condition.time }
+		updateStatus = function( condition, params )
+			local msg = _getItemSummary( condition )
+			local status = 1
+
+			local now = os.time()
+			local currentTime = os.date( "%H:%M:%S", os.time() )
+			local currentDay, typeOfDay
+			if ( condition.timerType == 2 ) then
+				typeOfDay = "week"
+				currentDay = _getDayOfWeek( now )
 			else
-				times = { condition.time1, condition.time2 }
+				typeOfDay = "month"
+				currentDay = _getDayOfMonth( now )
 			end
 
+			if ( params.event ) then
+				-- A linked event has just occured
+				if table.contains( condition.events, params.event ) then
+					-- Time is equal
+					msg = msg .. " - Current time '" .. currentTime .. "' is equal to '" .. condition.time .. "'"
+				else
+					msg = msg .. " - Event '" .. tostring( params.event ) .. "' is not bound to this condition"
+					status = 0
+				end
+			else
+				local timestamp, isRelative, realTime = _getTimestampForToday( condition.time )
+				local msgDay = "of " .. typeOfDay .. " '" .. tostring( currentDay ) .. "'"
+				local msgTime = "equal to '" .. ( isRelative and ( condition.time .. " => " .. realTime ) or condition.time ) .. "'"
+				if ( table.contains( condition.days, currentDay ) and ( currentTime == condition.time ) ) then
+					msg = msg .. " - Current day " .. msgDay .. " is in " .. json.encode( condition.days ) .. " and current time '" .. currentTime .. "' is " .. msgTime
+				else
+					msg = msg .. " - Current day " .. msgDay .. " is not in " .. json.encode( condition.days ) .. " or current time '" .. currentTime .. "' is not " .. msgTime
+					status = 0
+				end
+			end
+
+			log( msg, "ConditionTime.updateStatus", 3 )
+
+			-- TODO time of untrip (like motion sensor)
+			if ( status == 1 ) then
+				ScheduledTasks.add(
+					{ ruleId = condition._ruleId, conditionId = condition.id, condition = tostring( condition ), summary = "Pulse off " .. _getItemSummary( condition ) },
+					Condition.setStatus, 1, { condition, 0, params }
+				)
+			end
+
+			-- Update the status
+			return Condition.setStatus( condition, status, params )
+		end
+	}
+
+	ConditionTypes["condition_time_between"] = {
+		init = function( condition )
+			_initTimeCondition( condition )
+			-- First boundary
+			if ( ( type( condition.time1 ) == "table" ) and ( condition.time1.type == "time" ) ) then
+				condition.time1 = condition.time1.time
+			end
+			condition.events1 = {}
+			-- Second boundary
+			if ( ( type( condition.time2 ) == "table" ) and ( condition.time2.type == "time" ) ) then
+				condition.time2 = condition.time2.time
+			end
+			condition.events2 = {}
+			-- Calculate approximatively times (with today as base) to know if the boundaries are on 2 days
+			local timestamp1 = _getTimestampForToday( condition.time1 )
+			local timestamp2 = _getTimestampForToday( condition.time2 )
+			if ( timestamp1 and timestamp2 and ( timestamp1 > timestamp2 ) ) then
+				condition.dayOffset = 1
+				condition.days2 = {}
+			else
+				condition.dayOffset = 0
+			end
+		end,
+
+		check = function( condition )
+			if not _checkParameters( condition, { "time1", "time2", "timerType", "days" } ) then
+				return false
+			elseif not _checkTimePattern( condition.time1 ) then
+				Rule.addError( condition._ruleId, "Init condition", _getItemSummary( condition ) .. " - Time1 '" .. tostring( condition.time1 ) .. "' does not respect the format '" .. relativeTimePattern .. "'" )
+				return false
+			elseif not _checkTimePattern( condition.time2 ) then
+				Rule.addError( condition._ruleId, "Init condition", _getItemSummary( condition ) .. " - Time2 '" .. tostring( condition.time2 ) .. "' does not respect the format '" .. relativeTimePattern .. "'" )
+				return false
+			end
+			return true
+		end,
+
+		start = function( condition )
+			local event1, event2, day2
 			for _, day in ipairs( condition.days ) do
-				for _, time in ipairs( times ) do
-					local eventName = "timer;" .. tostring( condition.timerType ) .. ";" .. tostring( day ) .. ";" .. tostring( time )
-					Events.registerItem( eventName, condition )
-					if not Events.isWatched( eventName ) then
-						log( msg .. " - Starts timer '" .. eventName .. "'", "ConditionTime.start", 3 )
-						luup.call_timer( "RulesEngine.Event.onTimerIsTriggered", condition.timerType, time, day, eventName )
-						Events.setIsWatched( eventName )
-					else
-						log( msg .. " - Timer '" .. eventName .. "' is already started", "ConditionTime.start", 3 )
-					end
+				event1 = "timer;" .. tostring( condition.timerType ) .. ";" .. day .. ";" .. condition.time1
+				_registerTimer( event1, condition, day, condition.time1 )
+				table.insert( condition.events1, event1 )
+
+				if ( condition.dayOffset == 0 ) then
+					event2 = "timer;" .. tostring( condition.timerType ) .. ";" .. day .. ";" .. condition.time2
+					_registerTimer( event2, condition, day, condition.time2 )
+					table.insert( condition.events2, event2 )
+				else
+					day2 = _addOffsetToDay( condition.timerType, day, condition.dayOffset )
+					event2 = "timer;" .. tostring( condition.timerType ) .. ";" .. day2 .. ";" .. condition.time2
+					_registerTimer( event2, condition, day2, condition.time2 )
+					table.insert( condition.days2, day2 )
+					table.insert( condition.events2, event2 )
 				end
 			end
 		end,
@@ -1865,104 +2099,65 @@ log( "DEBUG service:" .. tostring(condition.service) .. ", variable:" .. tostrin
 		updateStatus = function( condition, params )
 			local msg = _getItemSummary( condition )
 			local status = 1
-			local hasToTriggerOff = false
-
-			--[[
-			if ( params and os.difftime( params.context.lastUpdateTime) then
-				
-			end
-			--]]
-
-			function getDayOfWeek( time )
-				local day = os.date( "%w", time )
-				if ( day == "0" ) then
-					day = "7"
-				end
-				return day
-			end
-			function getDayOfMonth( time )
-				return tostring( tonumber( os.date( "%d", time ) ) )
-			end
 
 			local now = os.time()
-			local currentDay, previousDay, typeOfDay
+			local currentTime = os.date( "%H:%M:%S" )
+			local currentDay, typeOfDay
 			if ( condition.timerType == 2 ) then
 				typeOfDay = "week"
-				currentDay = getDayOfWeek( now )
-				previousDay = getDayOfWeek( now - 86400 )
+				currentDay = _getDayOfWeek( now )
 			else
 				typeOfDay = "month"
-				currentDay = getDayOfMonth( now )
-				previousDay = getDayOfMonth( now - 86400 )
+				currentDay = _getDayOfMonth( now )
 			end
 
-			if ( condition.time == nil ) then
-				--local sign,H,M,S,rt = (condition.time): match (relative_time_format)
-			
-				-- Between
-				local currentTime = os.date( "%H:%M:%S", os.time() + 1 ) -- add 1 second to pass the edge
+			if ( params.event ) then
+				-- A linked event has just occured
+				local msgTimeBetween = "between '" .. condition.time1 .. "' and '" .. condition.time2 .. "'"
+				if table.contains( condition.events1, params.event ) then
+					-- Time is now between
+					msg = msg .. " - Current time '" .. currentTime .. "' is " .. msgTimeBetween
+				elseif table.contains( condition.events2, params.event ) then
+					-- Time is no more between
+					msg = msg .. " - Current time '" .. currentTime .. "' is not " .. msgTimeBetween
+					status = 0
+				else
+					msg = msg .. " - Event '" .. tostring( params.event ) .. "' is not bound to this condition"
+					status = 0
+				end
+				
+			else
+				local timestamp1, isRelative1, realTime1 = _getTimestampForToday( condition.time1 )
+				local timestamp2, isRelative2, realTime2 = _getTimestampForToday( condition.time2 )
 				local msgDay = "of " .. typeOfDay .. " '" .. tostring( currentDay ) .. "'"
-				local msgTimeBetween = "between '" .. tostring( condition.time1 ) .. "' and '" .. tostring( condition.time2 ) .. "'"
-				if ( condition.time1 <= condition.time2 ) then
-					-- The bounds are on the same day
-					if not table.contains( condition.days, currentDay ) then
-						msg = msg .. " - Current day " .. msgDay .. " is not in " .. tostring( json.encode( condition.days ) )
-						status = 0
-					elseif ( ( currentTime < condition.time1 ) or ( currentTime > condition.time2 ) ) then
-						msg = msg .. " - Current time '" .. tostring( currentTime ) .. "' is not " .. msgTimeBetween
-						status = 0
+				local msgTimeBetween = "between '" .. ( isRelative1 and ( condition.time1 .. " => " .. realTime1 ) or condition.time1 ) ..
+							"' and '" .. ( isRelative2 and ( condition.time2 .. " => " .. realTime2 ) or condition.time2 ) .. "'"
+				if ( condition.dayOffset == 0 ) then
+					-- The boundaries are on the same day
+					if ( table.contains( condition.days, currentDay ) and ( timestamp1 <= now ) and ( now <= timestamp2 ) ) then
+						msg = msg .. " - Current day " .. msgDay .. " is in " .. json.encode( condition.days ) .. " and current time '" .. currentTime .. "' is " .. msgTimeBetween
 					else
-						msg = msg .. " - Current day " .. msgDay .. " is in " .. tostring( json.encode( condition.days ) ) .. " and current time '" .. tostring( currentTime ) .. "' is " .. msgTimeBetween
+						msg = msg .. " - Current day " .. msgDay .. " is not in " .. json.encode( condition.days ) .. " or current time '" .. currentTime .. "' is not " .. msgTimeBetween
+						status = 0
 					end
 				else
-					-- The bounds are on 2 days
-					if table.contains( condition.days, currentDay ) then
-						-- D
-						if ( currentTime < condition.time1 ) then
-							msg = msg .. " - Current time '" .. tostring( currentTime ) .. "' is not " .. msgTimeBetween
-							status = 0
-						else
-							msg = msg .. " - Current day " .. msgDay .. " is in " .. tostring( json.encode( condition.days ) ) .. " and current time '" .. tostring( currentTime ) .. "' is " .. msgTimeBetween
-						end
-					elseif table.contains( condition.days, previousDay ) then
-						-- D+1
-						if ( currentTime < condition.time2 ) then
-							msg = msg .. " - Current time '" .. tostring( currentTime ) .. "' is not between '" .. tostring( condition.time1 ) .. "' and '" .. tostring( condition.time2 ) .. "' (D+1)"
-							status = 0
-						else
-							msg = msg .. " - Current day " .. msgDay .. " is in " .. tostring( json.encode( condition.days ) ) .. " and current time '" .. tostring( currentTime ) .. "' is " .. msgTimeBetween .. "(D+1)"
-						end
+					-- The boundaries are on 2 days
+					if (
+						( table.contains( condition.days, currentDay ) and ( now >= timestamp1 ) )
+						or ( table.contains( condition.days2, currentDay ) and ( now <= timestamp2 ) )
+					) then
+						msg = msg .. " - Current day " .. msgDay .. " is in " .. json.encode( condition.days ) .. " and current time '" .. currentTime .. "' is " .. msgTimeBetween
 					else
-						msg = msg .. " - Current day " .. msgDay .. " is not in " .. tostring( json.encode( condition.days ) )
+						msg = msg .. " - Current day " .. msgDay .. " is not in " .. json.encode( condition.days ) .. " or current time '" .. currentTime .. "' is not " .. msgTimeBetween .. "(D+1)"
 						status = 0
 					end
 				end
-			else
-				hasToTriggerOff = true
-				local currentTime = os.date( "%H:%M:%S", os.time() )
-				if not table.contains( condition.days, currentDay ) then
-					msg = msg .. " - Current day of " .. typeOfDay .. " '" .. tostring( currentDay ) .. "' is not in " .. tostring( json.encode( condition.days ) )
-					status = 0
-				elseif ( currentTime ~= condition.time ) then
-					msg = msg .. " - Current time '" .. tostring( currentTime ) .. "' is not equal to '" .. tostring( condition.time ) .. "'"
-					status = 0
-				end
 			end
 
-			log( msg, "ConditionTime.updateStatus", 3 )
+			log( msg, "ConditionTimeBetween.updateStatus", 3 )
 
-			if Condition.setStatus( condition, status ) then
-				luup.call_delay( "RulesEngine.Rule.updateStatus", 0, condition._ruleId )
-			end
-
-			-- TODO time of untrip (like motion sensor)
-			if ( hasToTriggerOff and ( status == 1 ) ) then
-				if Condition.setStatus( condition, 0 ) then
-					luup.call_delay( "RulesEngine.Rule.updateStatus", 0, condition._ruleId )
-				end
-			end
-
-			return true
+			-- Update the status
+			return Condition.setStatus( condition, status, params )
 		end
 	}
 
@@ -2102,6 +2297,7 @@ log( "DEBUG " .. _getItemSummary( condition ) .. " - Actions: "..tostring(json.e
 					status = 1
 				else
 					status = 0
+					level = 0
 				end
 			end
 
@@ -2115,9 +2311,6 @@ log( "DEBUG " .. _getItemSummary( condition ) .. " - Actions: "..tostring(json.e
 			end
 
 			-- Update the level
-			if ( status == 0 ) then
-				level = 0
-			end
 			params.levelHasChanged = Condition.setLevel( condition, level )
 
 			-- Update the status
@@ -2224,10 +2417,8 @@ log( "DEBUG " .. _getItemSummary( condition ) .. " - Actions: "..tostring(json.e
 			end
 
 			log( _getItemSummary( sequence ) .. " - " .. msg, "ConditionSequence.updateStatus", 4 )
-			if ( status ==  0) then
-				level = 0
-			end
 
+			-- Update the level
 			params.hasLevelChanged = Condition.setLevel( sequence, level )
 
 			--params.lastUpdateTime = context.lastUpdateTime
@@ -4825,6 +5016,7 @@ function startup( lul_device )
 
 	-- Init
 	_initPluginInstance()
+	Sun.update()
 
 	-- Watch setting changes
 	--luup.variable_watch( "RulesEngine.initPluginInstance", SID.RulesEngine, "Options", lul_device )
@@ -4909,6 +5101,8 @@ _G["RulesEngine.ScheduledTasks.execute"] = ScheduledTasks.execute
 --_G["RulesEngine.ActionGroup.execute"] = ActionGroup.execute
 --_G["RulesEngine.Condition.updateStatus"] = Condition.updateStatus
 _G["RulesEngine.Rule.updateStatus"] = Rule.updateStatus
+
+_G["RulesEngine.Sun.update"] = Sun.update
 
 -- TODO : to check
 return RulesEngine

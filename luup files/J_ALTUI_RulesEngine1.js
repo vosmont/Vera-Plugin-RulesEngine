@@ -80,7 +80,8 @@ var ALTUI_RulesEngine = ( function( window, undefined ) {
 			<block type="condition_value"><mutation condition_type="switch"></mutation></block>\
 		</category>\
 		-->\
-		<block type="condition_time"></block>\
+		<block type="condition_time"><value name="time"><block type="time"><field name="time">hh:mm:ss</field></block></value></block>\
+		<block type="condition_time_between"><value name="time1"><block type="time"><field name="time">hh:mm:ss</field></block></value><value name="time2"><block type="time"><field name="time">hh:mm:ss</field></block></value></block>\
 		<block type="condition_rule"></block>\
 		<block type="condition_inverter"></block>\
 	</category>\
@@ -119,6 +120,7 @@ var ALTUI_RulesEngine = ( function( window, undefined ) {
 	<block type="text"></block>\
 	<block type="text_area"></block>\
 	<block type="math_number"></block>\
+	<block type="time"></block>\
 </category>\
 ';
 
