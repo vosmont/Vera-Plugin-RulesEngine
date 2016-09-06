@@ -22,7 +22,7 @@ end
 
 _NAME = "RulesEngine"
 _DESCRIPTION = "Rules Engine for the Vera with visual editor"
-_VERSION = "0.14"
+_VERSION = "0.14.1"
 _AUTHOR = "vosmont"
 
 -- **************************************************
@@ -955,7 +955,7 @@ Event = {
 			log( "Engine is not enabled - Do nothing", "Event.onTimerIsTriggered" )
 		end
 		-- Schedule next call
-		local timerType, timerDays, timerTime = unpack( string.split( data, ";" ) )
+		local _, timerType, timerDays, timerTime = unpack( string.split( data, ";" ) )
 		log( "Restarts timer '" .. data .. "'", "Event.onTimerIsTriggered", 3 )
 		luup.call_timer( "RulesEngine.Event.onTimerIsTriggered", tonumber( timerType ), timerTime, timerDays, data )
 	end,
@@ -1482,14 +1482,17 @@ Sun = {
 		local currentDate = os.date( "%d" )
 		if ( currentDate ~= _lastSunUpdated ) then
 			_sunrises[1] = _sunrises[2]
-			_sunsets[1]  = _sunsets[2]
+			_sunrises[2] = nil
+			_sunsets[1] = _sunsets[2]
+			_sunsets[2] = nil
 			_lastSunUpdated = currentDate
 		end
 
 		local sunrise, sunset = luup.sunrise(), luup.sunset()
 		_update( _sunrises, sunrise )
 		_update( _sunsets, sunset )
-		log( "Update sunset/sunrise timestamps: " .. json.encode( _sunrises ) .. " / " ..  json.encode( _sunsets ), "Sun.update", 2 )
+		log( "Sunrise: " .. os.date( "%c", _sunrises[1] ) .. " / " .. ( _sunrises[2] and os.date( "%c", _sunrises[2] ) or "" ), "Sun.update", 2 )
+		log( "Sunset : " .. os.date( "%c", _sunsets[1] ) .. " / " ..  ( _sunsets[2] and os.date( "%c", _sunsets[2] ) or "" ), "Sun.update", 2 )
 
 		local nextUpdate = os.difftime( math.min( sunrise, sunset ), os.time() )
 		log( "Next update in " .. tostring( nextUpdate ) .. " seconds", "Sun.update", 3 )
