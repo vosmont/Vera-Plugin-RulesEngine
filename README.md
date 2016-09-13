@@ -1,6 +1,6 @@
 # ![rulesengine](media/rulesengine_logo.png) Vera-Plugin-RulesEngine
 
-A rules engine for [getVera](http://getvera.com/) Home Controller (VeraEdge, Vera3, VeraLite)
+A rules engine for [getVera](http://getvera.com/) Home Controller (VeraPlus, VeraEdge, Vera3, VeraLite) and [openLuup](https://github.com/akbooer/openLuup)
 - allows to create visually rules (with [Blockly](https://github.com/google/blockly))
 - management of complex conditions
 - customizable
