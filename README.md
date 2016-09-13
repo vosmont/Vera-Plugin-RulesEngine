@@ -17,6 +17,9 @@ A rules engine for [Vera Control, Ltd.](http://getvera.com/) Home Controllers
 <br/>
 <br/>
 <br/>
+<br/>
+<br/>
+<br/>
 
 **Compatible with UI5 & UI7 / VeraPlus, VeraEdge, Vera3, VeraLite / [openLuup](https://github.com/akbooer/openLuup)**
 **Rules are editable only with [AltUI](http://forum.micasaverde.com/index.php/board,78.0.html)**
