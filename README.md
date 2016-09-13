@@ -1,4 +1,4 @@
-# ![rulesengine](media/rulesengine_logo.png) Vera-Plugin-RulesEngine
+# <img align="left" src="media/rulesengine_logo.png"> Vera-Plugin-RulesEngine
 
 A rules engine for [Vera Control, Ltd.](http://getvera.com/) Home Controller (VeraPlus, VeraEdge, Vera3, VeraLite) and [openLuup](https://github.com/akbooer/openLuup)
 
