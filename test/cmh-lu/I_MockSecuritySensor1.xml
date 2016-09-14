@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<implementation>
+	<actionList>
+		<action>
+			<serviceId>urn:micasaverde-com:serviceId:SecuritySensor1</serviceId>
+			<name>SetArmed</name>
+			<run>
+				luup.variable_set("urn:micasaverde-com:serviceId:SecuritySensor1", "Armed", lul_settings.newArmedValue, lul_device)
+			</run>
+		</action>
+	</actionList>
+</implementation>

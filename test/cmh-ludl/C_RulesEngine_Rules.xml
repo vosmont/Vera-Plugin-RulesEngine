@@ -99,7 +99,7 @@
       </block>
     </value>
   </block>
-  <block type="rule" x="30" y="10" hashcode="61216" version="0.10">
+  <block type="rule" x="10" y="10" hashcode="57505" version="0.15">
     <field name="id">5</field>
     <value name="name">
       <block type="text">
@@ -108,12 +108,12 @@
     </value>
     <value name="condition">
       <block type="condition_value">
-        <mutation inputs="actions,params" dummy="" service="urn:upnp-org:serviceId:TemperatureSensor1" variable="CurrentTemperature"></mutation>
+        <mutation service="urn:upnp-org:serviceId:TemperatureSensor1" variable="CurrentTemperature"></mutation>
         <field name="operator">LIKE</field>
         <field name="value">^test_.*$</field>
         <value name="device">
           <block type="device">
-            <mutation inputs="id,category" dummy="" input_id="8" text_id="Temperature 4" input_category="17" text_category="Temperature Sensor"></mutation>
+            <mutation inputs="id,category" input_id="8" text_id="Temperature 4" input_category="17" text_category="Temperature Sensor"></mutation>
             <field name="deviceId">8</field>
             <field name="category">17</field>
           </block>
@@ -143,7 +143,7 @@
       </block>
     </value>
   </block>
-  <block type="rule" x="10" y="10" hashcode="68045" version="0.11">
+  <block type="rule" x="10" y="10" hashcode="90293" version="0.12.4">
     <field name="id">7</field>
     <value name="name">
       <block type="text">
@@ -156,15 +156,26 @@
         <field name="deviceType">urn:schemas-micasaverde-com:device:MotionSensor:1</field>
         <field name="eventId">1</field>
         <value name="device">
-          <block type="device">
-            <mutation inputs="id" dummy="" input_id="10" text_id="Motion 1"></mutation>
-            <field name="deviceId">10</field>
+          <block type="list_device">
+            <mutation items="3"></mutation>
+            <value name="ADD0">
+              <block type="device">
+                <mutation inputs="id" dummy="" input_id="11" text_id="Motion 2"></mutation>
+                <field name="deviceId">11</field>
+              </block>
+            </value>
+            <value name="ADD2">
+              <block type="device">
+                <mutation inputs="id" dummy="" input_id="10" text_id="Motion 1"></mutation>
+                <field name="deviceId">10</field>
+              </block>
+            </value>
           </block>
         </value>
       </block>
     </value>
   </block>
-  <block type="rule" x="10" y="10" hashcode="472642" version="0.12">
+  <block type="rule" x="10" y="10" hashcode="430984" version="0.15">
     <field name="id">8</field>
     <value name="name">
       <block type="text">
@@ -178,18 +189,23 @@
     </value>
     <value name="condition">
       <block type="list_with_operator_condition">
-        <mutation dummy="" items="3"></mutation>
+        <mutation items="3"></mutation>
         <field name="operator">OR</field>
         <value name="ADD0">
           <block type="condition_value">
-            <mutation inputs="params" dummy="" condition_type="event" input_device_type="urn:schemas-micasaverde-com:device:TemperatureSensor:1" text_device_type="TemperatureSensor:1" input_event="1" service="urn:upnp-org:serviceId:TemperatureSensor1" variable="CurrentTemperature" operator="GT" value="10"></mutation>
+            <mutation inputs="params" condition_type="event" input_device_type="urn:schemas-micasaverde-com:device:TemperatureSensor:1" input_event="1" service="urn:upnp-org:serviceId:TemperatureSensor1" variable="CurrentTemperature" operator="GT" value="10"></mutation>
             <field name="deviceType">urn:schemas-micasaverde-com:device:TemperatureSensor:1</field>
             <field name="eventId">1</field>
             <field name="value0">10</field>
             <value name="device">
-              <block type="device">
-                <mutation inputs="id" dummy="" input_id="5" text_id="Temperature 1"></mutation>
-                <field name="deviceId">5</field>
+              <block type="list_device">
+                <mutation items="3"></mutation>
+                <value name="ADD0">
+                  <block type="device">
+                    <mutation inputs="id" input_id="5" text_id="Temperature 1"></mutation>
+                    <field name="deviceId">5</field>
+                  </block>
+                </value>
               </block>
             </value>
             <value name="params">
@@ -201,14 +217,19 @@
         </value>
         <value name="ADD1">
           <block type="condition_value">
-            <mutation inputs="params" dummy="" condition_type="event" input_device_type="urn:schemas-micasaverde-com:device:TemperatureSensor:1" text_device_type="TemperatureSensor:1" input_event="1" service="urn:upnp-org:serviceId:TemperatureSensor1" variable="CurrentTemperature" operator="GT" value="20"></mutation>
+            <mutation inputs="params" condition_type="event" input_device_type="urn:schemas-micasaverde-com:device:TemperatureSensor:1" input_event="1" service="urn:upnp-org:serviceId:TemperatureSensor1" variable="CurrentTemperature" operator="GT" value="20"></mutation>
             <field name="deviceType">urn:schemas-micasaverde-com:device:TemperatureSensor:1</field>
             <field name="eventId">1</field>
             <field name="value0">20</field>
             <value name="device">
-              <block type="device">
-                <mutation inputs="id" dummy="" input_id="5" text_id="Temperature 1"></mutation>
-                <field name="deviceId">5</field>
+              <block type="list_device">
+                <mutation items="3"></mutation>
+                <value name="ADD0">
+                  <block type="device">
+                    <mutation inputs="id" input_id="5" text_id="Temperature 1"></mutation>
+                    <field name="deviceId">5</field>
+                  </block>
+                </value>
               </block>
             </value>
             <value name="params">
@@ -220,14 +241,18 @@
         </value>
         <value name="ADD2">
           <block type="condition_value">
-            <mutation inputs="params" dummy="" condition_type="event" input_device_type="urn:schemas-micasaverde-com:device:TemperatureSensor:1" text_device_type="TemperatureSensor:1" input_event="1" service="urn:upnp-org:serviceId:TemperatureSensor1" variable="CurrentTemperature" operator="GT" value="30"></mutation>
-            <field name="deviceType">urn:schemas-micasaverde-com:device:TemperatureSensor:1</field>
+            <mutation inputs="params" condition_type="event" input_device_type="urn:schemas-micasaverde-com:device:MotionSensor:1" input_event="1" service="urn:micasaverde-com:serviceId:SecuritySensor1" variable="Armed;EQ;1|Tripped;EQ;1"></mutation>
+            <field name="deviceType">urn:schemas-micasaverde-com:device:MotionSensor:1</field>
             <field name="eventId">1</field>
-            <field name="value0">30</field>
             <value name="device">
-              <block type="device">
-                <mutation inputs="id" dummy="" input_id="5" text_id="Temperature 1"></mutation>
-                <field name="deviceId">5</field>
+              <block type="list_device">
+                <mutation items="3"></mutation>
+                <value name="ADD0">
+                  <block type="device">
+                    <mutation inputs="id" input_id="10" text_id="Motion 1"></mutation>
+                    <field name="deviceId">10</field>
+                  </block>
+                </value>
               </block>
             </value>
             <value name="params">
@@ -241,7 +266,7 @@
     </value>
     <statement name="actions">
       <block type="action_group">
-        <mutation inputs="params" dummy="" recurrent_interval_input="false"></mutation>
+        <mutation inputs="params" recurrent_interval_input="false"></mutation>
         <field name="event">start</field>
         <value name="params">
           <block type="action_param_level">
@@ -254,20 +279,15 @@
             <field name="param_newLoadlevelTarget">50</field>
             <value name="device">
               <block type="device">
-                <mutation inputs="id" dummy="" input_id="26" text_id="Dimmable"></mutation>
-                <field name="deviceId">26</field>
+                <mutation inputs="id" input_id="30" text_id="DimmableLight 1"></mutation>
+                <field name="deviceId">30</field>
               </block>
             </value>
-            <next>
-              <block type="action_function">
-                <field name="functionContent">print( "Level 1", json.encode( context ) )\\n\\nprint(RulesEngine.getEnhancedMessage( "#devicename# temperature: #value#", context ) )</field>
-              </block>
-            </next>
           </block>
         </statement>
         <next>
           <block type="action_group">
-            <mutation inputs="params" dummy="" recurrent_interval_input="false"></mutation>
+            <mutation inputs="params" recurrent_interval_input="false"></mutation>
             <field name="event">start</field>
             <value name="params">
               <block type="action_param_level">
@@ -280,20 +300,15 @@
                 <field name="param_newLoadlevelTarget">70</field>
                 <value name="device">
                   <block type="device">
-                    <mutation inputs="id" dummy="" input_id="26" text_id="Dimmable"></mutation>
-                    <field name="deviceId">26</field>
+                    <mutation inputs="id" input_id="30" text_id="DimmableLight 1"></mutation>
+                    <field name="deviceId">30</field>
                   </block>
                 </value>
-                <next>
-                  <block type="action_function">
-                    <field name="functionContent">print("Level 2", context)</field>
-                  </block>
-                </next>
               </block>
             </statement>
             <next>
               <block type="action_group">
-                <mutation inputs="params" dummy="" recurrent_interval_input="false"></mutation>
+                <mutation inputs="params" recurrent_interval_input="false"></mutation>
                 <field name="event">start</field>
                 <value name="params">
                   <block type="action_param_level">
@@ -306,15 +321,10 @@
                     <field name="param_newLoadlevelTarget">100</field>
                     <value name="device">
                       <block type="device">
-                        <mutation inputs="id" dummy="" input_id="26" text_id="Dimmable"></mutation>
-                        <field name="deviceId">26</field>
+                        <mutation inputs="id" input_id="30" text_id="DimmableLight 1"></mutation>
+                        <field name="deviceId">30</field>
                       </block>
                     </value>
-                    <next>
-                      <block type="action_function">
-                        <field name="functionContent">print("Level 3", json.encode(context))</field>
-                      </block>
-                    </next>
                   </block>
                 </statement>
               </block>
@@ -324,7 +334,7 @@
       </block>
     </statement>
   </block>
-  <block type="rule" x="10" y="10" hashcode="59858" version="0.12">
+  <block type="rule" x="10" y="10" hashcode="64363" version="0.13">
     <field name="id">9</field>
     <value name="name">
       <block type="text">
@@ -342,17 +352,24 @@
       </block>
     </value>
     <value name="condition">
-      <block type="condition_time">
-        <mutation inputs="timer_type" dummy="" input_time_operator="BW" input_timer_type="2"></mutation>
-        <field name="operator">BW</field>
-        <field name="time1">08:00:00</field>
-        <field name="time2">20:00:00</field>
+      <block type="condition_time_between">
+        <mutation inputs="timer_type" input_timer_type="2"></mutation>
         <field name="timerType">2</field>
         <field name="daysOfWeek">2,3</field>
+        <value name="time1">
+          <block type="time">
+            <field name="time">08:00:00</field>
+          </block>
+        </value>
+        <value name="time2">
+          <block type="time">
+            <field name="time">+00:30:00t</field>
+          </block>
+        </value>
       </block>
     </value>
   </block>
-  <block type="rule" x="10" y="10" hashcode="50983" version="0.12">
+  <block type="rule" x="10" y="10" hashcode="55479" version="0.13">
     <field name="id">10</field>
     <value name="name">
       <block type="text">
@@ -365,13 +382,955 @@
       </block>
     </value>
     <value name="condition">
-      <block type="condition_time">
-        <mutation inputs="timer_type" dummy="" input_time_operator="BW" input_timer_type="2"></mutation>
-        <field name="operator">BW</field>
-        <field name="time1">21:00:00</field>
-        <field name="time2">09:00:00</field>
+      <block type="condition_time_between">
+        <mutation inputs="timer_type" input_timer_type="2"></mutation>
         <field name="timerType">2</field>
         <field name="daysOfWeek">4,5</field>
+        <value name="time1">
+          <block type="time">
+            <field name="time">21:00:00</field>
+          </block>
+        </value>
+        <value name="time2">
+          <block type="time">
+            <field name="time">-00:30:00r</field>
+          </block>
+        </value>
+      </block>
+    </value>
+  </block>
+  <block type="rule" x="10" y="10" hashcode="241534" version="0.13">
+    <field name="id">11</field>
+    <value name="name">
+      <block type="text">
+        <field name="TEXT">Rule_Condition_Since</field>
+      </block>
+    </value>
+    <value name="description">
+      <block type="text_area">
+        <field name="TEXT"></field>
+      </block>
+    </value>
+    <value name="properties">
+      <block type="property_room">
+        <field name="roomId"></field>
+      </block>
+    </value>
+    <value name="condition">
+      <block type="list_with_operators_condition">
+        <mutation items="3"></mutation>
+        <field name="operator1">OR</field>
+        <field name="operator2">OR</field>
+        <value name="ADD0">
+          <block type="condition_value">
+            <mutation inputs="params" condition_type="event" input_device_type="urn:schemas-upnp-org:device:BinaryLight:1" input_event="1" service="urn:upnp-org:serviceId:SwitchPower1" variable="Status" operator="EQ" value="1"></mutation>
+            <field name="deviceType">urn:schemas-upnp-org:device:BinaryLight:1</field>
+            <field name="eventId">1</field>
+            <field name="value0">1</field>
+            <value name="device">
+              <block type="list_device">
+                <mutation items="3"></mutation>
+                <value name="ADD0">
+                  <block type="device">
+                    <mutation inputs="id,room" input_id="20" text_id="Switch 6" input_room="" text_room="..."></mutation>
+                    <field name="deviceId">20</field>
+                    <field name="roomId"></field>
+                  </block>
+                </value>
+                <value name="ADD2">
+                  <block type="device">
+                    <mutation inputs="id,room" input_id="21" text_id="Switch 7" input_room="" text_room="..."></mutation>
+                    <field name="deviceId">21</field>
+                    <field name="roomId"></field>
+                  </block>
+                </value>
+              </block>
+            </value>
+            <value name="params">
+              <block type="condition_param_since">
+                <field name="sinceInterval">2</field>
+                <field name="unit">S</field>
+              </block>
+            </value>
+          </block>
+        </value>
+        <value name="ADD1">
+          <block type="condition_value">
+            <mutation inputs="params" condition_type="event" input_device_type="urn:schemas-micasaverde-com:device:MotionSensor:1" input_event="1" service="urn:micasaverde-com:serviceId:SecuritySensor1" variable="Armed;EQ;1|Tripped;EQ;1"></mutation>
+            <field name="deviceType">urn:schemas-micasaverde-com:device:MotionSensor:1</field>
+            <field name="eventId">1</field>
+            <value name="device">
+              <block type="list_device">
+                <mutation items="3"></mutation>
+                <value name="ADD0">
+                  <block type="device">
+                    <mutation inputs="id,room" input_id="11" text_id="Motion 2" input_room="1" text_room="Room 1"></mutation>
+                    <field name="deviceId">11</field>
+                    <field name="roomId">1</field>
+                  </block>
+                </value>
+                <value name="ADD1">
+                  <block type="device">
+                    <mutation inputs="id,room" input_id="13" text_id="Motion 4" input_room="2" text_room="Room 2"></mutation>
+                    <field name="deviceId">13</field>
+                    <field name="roomId">2</field>
+                  </block>
+                </value>
+              </block>
+            </value>
+            <value name="params">
+              <block type="condition_param_since">
+                <field name="sinceInterval">2</field>
+                <field name="unit">S</field>
+              </block>
+            </value>
+          </block>
+        </value>
+      </block>
+    </value>
+  </block>
+  <block type="rule" x="10" y="10" hashcode="131818" version="0.12.5">
+    <field name="id">12</field>
+    <value name="name">
+      <block type="text">
+        <field name="TEXT">Rule_Action_Scene</field>
+      </block>
+    </value>
+    <value name="description">
+      <block type="text_area">
+        <field name="TEXT"></field>
+      </block>
+    </value>
+    <value name="properties">
+      <block type="property_room">
+        <field name="roomId"></field>
+      </block>
+    </value>
+    <value name="condition">
+      <block type="list_with_operators_condition">
+        <mutation dummy="" items="3"></mutation>
+        <field name="operator1">AND</field>
+        <field name="operator2">OR</field>
+        <value name="ADD0">
+          <block type="condition_value">
+            <mutation dummy="" condition_type="event" input_device_type="urn:schemas-upnp-org:device:BinaryLight:1" text_device_type="BinaryLight:1" input_event="1" service="urn:upnp-org:serviceId:SwitchPower1" variable="Status" operator="EQ" value="1"></mutation>
+            <field name="deviceType">urn:schemas-upnp-org:device:BinaryLight:1</field>
+            <field name="eventId">1</field>
+            <field name="value0">1</field>
+            <value name="device">
+              <block type="device">
+                <mutation inputs="id,room" dummy="" input_id="15" text_id="Switch 1" input_room="" text_room="..."></mutation>
+                <field name="deviceId">15</field>
+                <field name="roomId"></field>
+              </block>
+            </value>
+          </block>
+        </value>
+      </block>
+    </value>
+    <statement name="actions">
+      <block type="action_group">
+        <mutation dummy="" recurrent_interval_input="false"></mutation>
+        <field name="event">start</field>
+        <statement name="do">
+          <block type="action_scene">
+            <field name="sceneId">1</field>
+          </block>
+        </statement>
+      </block>
+    </statement>
+  </block>
+  <block type="rule" x="10" y="10" hashcode="1230475" version="0.12.5">
+    <field name="id">13</field>
+    <value name="name">
+      <block type="text">
+        <field name="TEXT">Rule_Action_Condition</field>
+      </block>
+    </value>
+    <value name="description">
+      <block type="text_area">
+        <field name="TEXT"></field>
+      </block>
+    </value>
+    <value name="properties">
+      <block type="property_room">
+        <field name="roomId"></field>
+      </block>
+    </value>
+    <value name="condition">
+      <block type="list_with_operator_condition">
+        <mutation inputs="actions" dummy="" items="2"></mutation>
+        <field name="operator">OR</field>
+        <value name="ADD0">
+          <block type="list_with_operators_condition">
+            <mutation inputs="actions" dummy="" items="2"></mutation>
+            <field name="operator1">OR</field>
+            <value name="ADD0">
+              <block type="condition_value">
+                <mutation inputs="actions" dummy="" input_service="urn:upnp-org:serviceId:SwitchPower1" text_service="SwitchPower1" input_variable="Status" text_variable="Status"></mutation>
+                <field name="service">urn:upnp-org:serviceId:SwitchPower1</field>
+                <field name="variable">Status</field>
+                <field name="operator">EQ</field>
+                <field name="value">1</field>
+                <value name="device">
+                  <block type="list_device">
+                    <mutation items="2"></mutation>
+                    <value name="ADD0">
+                      <block type="device">
+                        <mutation inputs="id" dummy="" input_id="15" text_id="Switch 1"></mutation>
+                        <field name="deviceId">15</field>
+                      </block>
+                    </value>
+                    <value name="ADD1">
+                      <block type="device">
+                        <mutation inputs="id" dummy="" input_id="16" text_id="Switch 2"></mutation>
+                        <field name="deviceId">16</field>
+                      </block>
+                    </value>
+                  </block>
+                </value>
+                <statement name="actions">
+                  <block type="condition_action_group">
+                    <mutation dummy="" recurrent_interval_input="false"></mutation>
+                    <field name="event">conditionStart</field>
+                    <statement name="do">
+                      <block type="action_device">
+                        <mutation action_type="switch" service="urn:upnp-org:serviceId:SwitchPower1" action="SetTarget"></mutation>
+                        <field name="actionParams">{"newTargetValue":"1"}</field>
+                        <value name="device">
+                          <block type="device">
+                            <mutation inputs="id" dummy="" input_id="25" text_id="BinaryLight 1"></mutation>
+                            <field name="deviceId">25</field>
+                          </block>
+                        </value>
+                      </block>
+                    </statement>
+                    <next>
+                      <block type="condition_action_group">
+                        <mutation dummy="" recurrent_interval_input="false"></mutation>
+                        <field name="event">conditionEnd</field>
+                        <statement name="do">
+                          <block type="action_device">
+                            <mutation action_type="switch" service="urn:upnp-org:serviceId:SwitchPower1" action="SetTarget"></mutation>
+                            <field name="actionParams">{"newTargetValue":"0"}</field>
+                            <value name="device">
+                              <block type="device">
+                                <mutation inputs="id" dummy="" input_id="25" text_id="BinaryLight 1"></mutation>
+                                <field name="deviceId">25</field>
+                              </block>
+                            </value>
+                          </block>
+                        </statement>
+                      </block>
+                    </next>
+                  </block>
+                </statement>
+              </block>
+            </value>
+            <value name="ADD1">
+              <block type="condition_value">
+                <mutation inputs="actions" dummy="" condition_type="event" input_device_type="urn:schemas-micasaverde-com:device:MotionSensor:1" text_device_type="MotionSensor:1" input_event="1" service="urn:micasaverde-com:serviceId:SecuritySensor1" variable="Armed;EQ;1|Tripped;EQ;1"></mutation>
+                <field name="deviceType">urn:schemas-micasaverde-com:device:MotionSensor:1</field>
+                <field name="eventId">1</field>
+                <value name="device">
+                  <block type="list_device">
+                    <mutation items="2"></mutation>
+                    <value name="ADD0">
+                      <block type="device">
+                        <mutation inputs="id" dummy="" input_id="10" text_id="Motion 1"></mutation>
+                        <field name="deviceId">10</field>
+                      </block>
+                    </value>
+                    <value name="ADD1">
+                      <block type="device">
+                        <mutation inputs="id" dummy="" input_id="11" text_id="Motion 2"></mutation>
+                        <field name="deviceId">11</field>
+                      </block>
+                    </value>
+                  </block>
+                </value>
+                <statement name="actions">
+                  <block type="condition_action_group">
+                    <mutation dummy="" recurrent_interval_input="false"></mutation>
+                    <field name="event">conditionStart</field>
+                    <statement name="do">
+                      <block type="action_device">
+                        <mutation action_type="switch" service="urn:upnp-org:serviceId:SwitchPower1" action="SetTarget"></mutation>
+                        <field name="actionParams">{"newTargetValue":"1"}</field>
+                        <value name="device">
+                          <block type="device">
+                            <mutation inputs="id" dummy="" input_id="26" text_id="BinaryLight 2"></mutation>
+                            <field name="deviceId">26</field>
+                          </block>
+                        </value>
+                      </block>
+                    </statement>
+                    <next>
+                      <block type="condition_action_group">
+                        <mutation dummy="" recurrent_interval_input="false"></mutation>
+                        <field name="event">conditionEnd</field>
+                        <statement name="do">
+                          <block type="action_device">
+                            <mutation action_type="switch" service="urn:upnp-org:serviceId:SwitchPower1" action="SetTarget"></mutation>
+                            <field name="actionParams">{"newTargetValue":"0"}</field>
+                            <value name="device">
+                              <block type="device">
+                                <mutation inputs="id" dummy="" input_id="26" text_id="BinaryLight 2"></mutation>
+                                <field name="deviceId">26</field>
+                              </block>
+                            </value>
+                          </block>
+                        </statement>
+                      </block>
+                    </next>
+                  </block>
+                </statement>
+              </block>
+            </value>
+            <statement name="actions">
+              <block type="condition_action_group">
+                <mutation dummy="" recurrent_interval_input="false"></mutation>
+                <field name="event">conditionStart</field>
+                <statement name="do">
+                  <block type="action_device">
+                    <mutation action_type="switch" service="urn:upnp-org:serviceId:SwitchPower1" action="SetTarget"></mutation>
+                    <field name="actionParams">{"newTargetValue":"1"}</field>
+                    <value name="device">
+                      <block type="device">
+                        <mutation inputs="id" dummy="" input_id="27" text_id="BinaryLight 3"></mutation>
+                        <field name="deviceId">27</field>
+                      </block>
+                    </value>
+                  </block>
+                </statement>
+                <next>
+                  <block type="condition_action_group">
+                    <mutation dummy="" recurrent_interval_input="false"></mutation>
+                    <field name="event">conditionEnd</field>
+                    <statement name="do">
+                      <block type="action_device">
+                        <mutation action_type="switch" service="urn:upnp-org:serviceId:SwitchPower1" action="SetTarget"></mutation>
+                        <field name="actionParams">{"newTargetValue":"0"}</field>
+                        <value name="device">
+                          <block type="device">
+                            <mutation inputs="id" dummy="" input_id="27" text_id="BinaryLight 3"></mutation>
+                            <field name="deviceId">27</field>
+                          </block>
+                        </value>
+                      </block>
+                    </statement>
+                  </block>
+                </next>
+              </block>
+            </statement>
+          </block>
+        </value>
+        <value name="ADD1">
+          <block type="list_with_operators_condition">
+            <mutation inputs="actions" dummy="" items="2"></mutation>
+            <field name="operator1">AND</field>
+            <value name="ADD0">
+              <block type="condition_value">
+                <mutation inputs="actions,params" dummy="" input_service="urn:upnp-org:serviceId:SwitchPower1" text_service="SwitchPower1" input_variable="Status" text_variable="Status"></mutation>
+                <field name="service">urn:upnp-org:serviceId:SwitchPower1</field>
+                <field name="variable">Status</field>
+                <field name="operator">EQ</field>
+                <field name="value">1</field>
+                <value name="device">
+                  <block type="list_device">
+                    <mutation items="2"></mutation>
+                    <value name="ADD0">
+                      <block type="device">
+                        <mutation inputs="id" dummy="" input_id="17" text_id="Switch 3"></mutation>
+                        <field name="deviceId">17</field>
+                      </block>
+                    </value>
+                    <value name="ADD1">
+                      <block type="device">
+                        <mutation inputs="id" dummy="" input_id="18" text_id="Switch 4"></mutation>
+                        <field name="deviceId">18</field>
+                      </block>
+                    </value>
+                  </block>
+                </value>
+                <statement name="actions">
+                  <block type="condition_action_group">
+                    <mutation dummy="" recurrent_interval_input="false"></mutation>
+                    <field name="event">conditionStart</field>
+                    <statement name="do">
+                      <block type="action_device">
+                        <mutation action_type="switch" service="urn:upnp-org:serviceId:SwitchPower1" action="SetTarget"></mutation>
+                        <field name="actionParams">{"newTargetValue":"1"}</field>
+                        <value name="device">
+                          <block type="device">
+                            <mutation inputs="id" dummy="" input_id="30" text_id="DimmableLight 1"></mutation>
+                            <field name="deviceId">30</field>
+                          </block>
+                        </value>
+                      </block>
+                    </statement>
+                    <next>
+                      <block type="condition_action_group">
+                        <mutation dummy="" recurrent_interval_input="false"></mutation>
+                        <field name="event">conditionEnd</field>
+                        <statement name="do">
+                          <block type="action_device">
+                            <mutation action_type="switch" service="urn:upnp-org:serviceId:SwitchPower1" action="SetTarget"></mutation>
+                            <field name="actionParams">{"newTargetValue":"0"}</field>
+                            <value name="device">
+                              <block type="device">
+                                <mutation inputs="id" dummy="" input_id="30" text_id="DimmableLight 1"></mutation>
+                                <field name="deviceId">30</field>
+                              </block>
+                            </value>
+                          </block>
+                        </statement>
+                      </block>
+                    </next>
+                  </block>
+                </statement>
+              </block>
+            </value>
+            <value name="ADD1">
+              <block type="condition_value">
+                <mutation inputs="actions" dummy="" condition_type="event" input_device_type="urn:schemas-micasaverde-com:device:MotionSensor:1" text_device_type="MotionSensor:1" input_event="1" service="urn:micasaverde-com:serviceId:SecuritySensor1" variable="Armed;EQ;1|Tripped;EQ;1"></mutation>
+                <field name="deviceType">urn:schemas-micasaverde-com:device:MotionSensor:1</field>
+                <field name="eventId">1</field>
+                <value name="device">
+                  <block type="list_device">
+                    <mutation items="2"></mutation>
+                    <value name="ADD0">
+                      <block type="device">
+                        <mutation inputs="id" dummy="" input_id="12" text_id="Motion 3"></mutation>
+                        <field name="deviceId">12</field>
+                      </block>
+                    </value>
+                    <value name="ADD1">
+                      <block type="device">
+                        <mutation inputs="id" dummy="" input_id="13" text_id="Motion 4"></mutation>
+                        <field name="deviceId">13</field>
+                      </block>
+                    </value>
+                  </block>
+                </value>
+                <statement name="actions">
+                  <block type="condition_action_group">
+                    <mutation dummy="" recurrent_interval_input="false"></mutation>
+                    <field name="event">conditionStart</field>
+                    <statement name="do">
+                      <block type="action_device">
+                        <mutation action_type="switch" service="urn:upnp-org:serviceId:SwitchPower1" action="SetTarget"></mutation>
+                        <field name="actionParams">{"newTargetValue":"1"}</field>
+                        <value name="device">
+                          <block type="device">
+                            <mutation inputs="id" dummy="" input_id="31" text_id="DimmableLight 2"></mutation>
+                            <field name="deviceId">31</field>
+                          </block>
+                        </value>
+                      </block>
+                    </statement>
+                    <next>
+                      <block type="condition_action_group">
+                        <mutation dummy="" recurrent_interval_input="false"></mutation>
+                        <field name="event">conditionEnd</field>
+                        <statement name="do">
+                          <block type="action_device">
+                            <mutation action_type="switch" service="urn:upnp-org:serviceId:SwitchPower1" action="SetTarget"></mutation>
+                            <field name="actionParams">{"newTargetValue":"0"}</field>
+                            <value name="device">
+                              <block type="device">
+                                <mutation inputs="id" dummy="" input_id="31" text_id="DimmableLight 2"></mutation>
+                                <field name="deviceId">31</field>
+                              </block>
+                            </value>
+                          </block>
+                        </statement>
+                      </block>
+                    </next>
+                  </block>
+                </statement>
+              </block>
+            </value>
+            <statement name="actions">
+              <block type="condition_action_group">
+                <mutation dummy="" recurrent_interval_input="false"></mutation>
+                <field name="event">conditionStart</field>
+                <statement name="do">
+                  <block type="action_device">
+                    <mutation action_type="switch" service="urn:upnp-org:serviceId:SwitchPower1" action="SetTarget"></mutation>
+                    <field name="actionParams">{"newTargetValue":"1"}</field>
+                    <value name="device">
+                      <block type="device">
+                        <mutation inputs="id" dummy="" input_id="32" text_id="DimmableLight 3"></mutation>
+                        <field name="deviceId">32</field>
+                      </block>
+                    </value>
+                  </block>
+                </statement>
+                <next>
+                  <block type="condition_action_group">
+                    <mutation dummy="" recurrent_interval_input="false"></mutation>
+                    <field name="event">conditionEnd</field>
+                    <statement name="do">
+                      <block type="action_device">
+                        <mutation action_type="switch" service="urn:upnp-org:serviceId:SwitchPower1" action="SetTarget"></mutation>
+                        <field name="actionParams">{"newTargetValue":"0"}</field>
+                        <value name="device">
+                          <block type="device">
+                            <mutation inputs="id" dummy="" input_id="32" text_id="DimmableLight 3"></mutation>
+                            <field name="deviceId">32</field>
+                          </block>
+                        </value>
+                      </block>
+                    </statement>
+                  </block>
+                </next>
+              </block>
+            </statement>
+          </block>
+        </value>
+        <statement name="actions">
+          <block type="condition_action_group">
+            <mutation dummy="" recurrent_interval_input="false"></mutation>
+            <field name="event">conditionStart</field>
+            <statement name="do">
+              <block type="action_device">
+                <mutation action_type="switch" service="urn:upnp-org:serviceId:SwitchPower1" action="SetTarget"></mutation>
+                <field name="actionParams">{"newTargetValue":"1"}</field>
+                <value name="device">
+                  <block type="device">
+                    <mutation inputs="id" dummy="" input_id="29" text_id="BinaryLight 5"></mutation>
+                    <field name="deviceId">29</field>
+                  </block>
+                </value>
+              </block>
+            </statement>
+            <next>
+              <block type="condition_action_group">
+                <mutation dummy="" recurrent_interval_input="false"></mutation>
+                <field name="event">conditionEnd</field>
+                <statement name="do">
+                  <block type="action_device">
+                    <mutation action_type="switch" service="urn:upnp-org:serviceId:SwitchPower1" action="SetTarget"></mutation>
+                    <field name="actionParams">{"newTargetValue":"0"}</field>
+                    <value name="device">
+                      <block type="device">
+                        <mutation inputs="id" dummy="" input_id="29" text_id="BinaryLight 5"></mutation>
+                        <field name="deviceId">29</field>
+                      </block>
+                    </value>
+                  </block>
+                </statement>
+              </block>
+            </next>
+          </block>
+        </statement>
+      </block>
+    </value>
+    <statement name="actions">
+      <block type="action_group">
+        <mutation dummy="" recurrent_interval_input="false"></mutation>
+        <field name="event">start</field>
+        <statement name="do">
+          <block type="action_device">
+            <mutation action_type="switch" service="urn:upnp-org:serviceId:SwitchPower1" action="SetTarget"></mutation>
+            <field name="actionParams">{"newTargetValue":"1"}</field>
+            <value name="device">
+              <block type="device">
+                <mutation inputs="id" dummy="" input_id="34" text_id="DimmableLight 5"></mutation>
+                <field name="deviceId">34</field>
+              </block>
+            </value>
+          </block>
+        </statement>
+        <next>
+          <block type="action_group">
+            <mutation dummy="" recurrent_interval_input="false"></mutation>
+            <field name="event">end</field>
+            <statement name="do">
+              <block type="action_device">
+                <mutation action_type="switch" service="urn:upnp-org:serviceId:SwitchPower1" action="SetTarget"></mutation>
+                <field name="actionParams">{"newTargetValue":"0"}</field>
+                <value name="device">
+                  <block type="device">
+                    <mutation inputs="id" dummy="" input_id="34" text_id="DimmableLight 5"></mutation>
+                    <field name="deviceId">34</field>
+                  </block>
+                </value>
+              </block>
+            </statement>
+          </block>
+        </next>
+      </block>
+    </statement>
+  </block>
+  <block type="rule" x="10" y="10" hashcode="315130" version="0.12.5">
+    <field name="id">18</field>
+    <value name="name">
+      <block type="text">
+        <field name="TEXT">Rule_Action_Current_Device</field>
+      </block>
+    </value>
+    <value name="description">
+      <block type="text_area">
+        <field name="TEXT"></field>
+      </block>
+    </value>
+    <value name="properties">
+      <block type="property_room">
+        <field name="roomId"></field>
+      </block>
+    </value>
+    <value name="condition">
+      <block type="list_with_operators_condition">
+        <mutation inputs="actions" items="2"></mutation>
+        <field name="operator1">AND</field>
+        <value name="ADD0">
+          <block type="condition_value">
+            <mutation inputs="actions" condition_type="event" input_device_type="urn:schemas-upnp-org:device:BinaryLight:1" input_event="1" service="urn:upnp-org:serviceId:SwitchPower1" variable="Status" operator="EQ" value="1"></mutation>
+            <field name="deviceType">urn:schemas-upnp-org:device:BinaryLight:1</field>
+            <field name="eventId">1</field>
+            <field name="value0">1</field>
+            <value name="device">
+              <block type="device">
+                <mutation inputs="id" input_id="15" text_id="Switch 1"></mutation>
+                <field name="deviceId">15</field>
+              </block>
+            </value>
+            <statement name="actions">
+              <block type="condition_action_group">
+                <mutation recurrent_interval_input="false"></mutation>
+                <field name="event">conditionStart</field>
+                <statement name="do">
+                  <block type="action_wait">
+                    <field name="delayInterval">20</field>
+                    <field name="unit">S</field>
+                    <next>
+                      <block type="action_device">
+                        <mutation input_service="urn:upnp-org:serviceId:SwitchPower1" text_service="SwitchPower1" input_action="SetTarget" text_action="SetTarget"></mutation>
+                        <field name="service">urn:upnp-org:serviceId:SwitchPower1</field>
+                        <field name="action">SetTarget</field>
+                        <field name="param_newTargetValue">0</field>
+                        <value name="device">
+                          <block type="list_device">
+                            <mutation items="2"></mutation>
+                            <value name="ADD0">
+                              <block type="current_device"></block>
+                            </value>
+                            <value name="ADD1">
+                              <block type="device">
+                                <mutation inputs="id" input_id="25" text_id="BinaryLight 1"></mutation>
+                                <field name="deviceId">25</field>
+                              </block>
+                            </value>
+                          </block>
+                        </value>
+                      </block>
+                    </next>
+                  </block>
+                </statement>
+              </block>
+            </statement>
+          </block>
+        </value>
+        <value name="ADD1">
+          <block type="condition_value">
+            <mutation condition_type="event" input_device_type="urn:schemas-upnp-org:device:BinaryLight:1" input_event="1" service="urn:upnp-org:serviceId:SwitchPower1" variable="Status" operator="EQ" value="1"></mutation>
+            <field name="deviceType">urn:schemas-upnp-org:device:BinaryLight:1</field>
+            <field name="eventId">1</field>
+            <field name="value0">1</field>
+            <value name="device">
+              <block type="device">
+                <mutation inputs="id" input_id="16" text_id="Switch 2"></mutation>
+                <field name="deviceId">16</field>
+              </block>
+            </value>
+          </block>
+        </value>
+        <statement name="actions">
+          <block type="condition_action_group">
+            <mutation recurrent_interval_input="false"></mutation>
+            <field name="event">conditionStart</field>
+            <statement name="do">
+              <block type="action_wait">
+                <field name="delayInterval">10</field>
+                <field name="unit">S</field>
+                <next>
+                  <block type="action_device">
+                    <mutation action_type="switch" service="urn:upnp-org:serviceId:SwitchPower1" action="SetTarget"></mutation>
+                    <field name="actionParams">{"newTargetValue":"0"}</field>
+                    <value name="device">
+                      <block type="list_device">
+                        <mutation items="2"></mutation>
+                        <value name="ADD0">
+                          <block type="current_device"></block>
+                        </value>
+                        <value name="ADD1">
+                          <block type="device">
+                            <mutation inputs="id" input_id="25" text_id="BinaryLight 1"></mutation>
+                            <field name="deviceId">25</field>
+                          </block>
+                        </value>
+                      </block>
+                    </value>
+                  </block>
+                </next>
+              </block>
+            </statement>
+          </block>
+        </statement>
+      </block>
+    </value>
+  </block>
+  <block type="rule" x="10" y="10" hashcode="194460" version="0.12.5">
+    <field name="id">19</field>
+    <value name="name">
+      <block type="text">
+        <field name="TEXT">Rule_Condition_Inverter</field>
+      </block>
+    </value>
+    <value name="description">
+      <block type="text_area">
+        <field name="TEXT"></field>
+      </block>
+    </value>
+    <value name="properties">
+      <block type="property_room">
+        <field name="roomId"></field>
+      </block>
+    </value>
+    <value name="condition">
+      <block type="list_with_operator_condition">
+        <mutation items="2"></mutation>
+        <field name="operator">AND</field>
+        <value name="ADD0">
+          <block type="condition_value">
+            <mutation condition_type="event" input_device_type="urn:schemas-upnp-org:device:BinaryLight:1" input_event="1" service="urn:upnp-org:serviceId:SwitchPower1" variable="Status" operator="EQ" value="1"></mutation>
+            <field name="deviceType">urn:schemas-upnp-org:device:BinaryLight:1</field>
+            <field name="eventId">1</field>
+            <field name="value0">1</field>
+            <value name="device">
+              <block type="list_device">
+                <mutation items="3"></mutation>
+                <value name="ADD0">
+                  <block type="device">
+                    <mutation inputs="id" input_id="15" text_id="Switch 1"></mutation>
+                    <field name="deviceId">15</field>
+                  </block>
+                </value>
+                <value name="ADD2">
+                  <block type="device">
+                    <mutation inputs="id" input_id="16" text_id="Switch 2"></mutation>
+                    <field name="deviceId">16</field>
+                  </block>
+                </value>
+              </block>
+            </value>
+          </block>
+        </value>
+        <value name="ADD1">
+          <block type="condition_inverter">
+            <value name="condition">
+              <block type="condition_value">
+                <mutation condition_type="event" input_device_type="urn:schemas-micasaverde-com:device:MotionSensor:1" input_event="1" service="urn:micasaverde-com:serviceId:SecuritySensor1" variable="Armed;EQ;1|Tripped;EQ;1"></mutation>
+                <field name="deviceType">urn:schemas-micasaverde-com:device:MotionSensor:1</field>
+                <field name="eventId">1</field>
+                <value name="device">
+                  <block type="list_device">
+                    <mutation items="3"></mutation>
+                    <value name="ADD0">
+                      <block type="device">
+                        <mutation inputs="id" input_id="10" text_id="Motion 1"></mutation>
+                        <field name="deviceId">10</field>
+                      </block>
+                    </value>
+                    <value name="ADD2">
+                      <block type="device">
+                        <mutation inputs="id" input_id="11" text_id="Motion 2"></mutation>
+                        <field name="deviceId">11</field>
+                      </block>
+                    </value>
+                  </block>
+                </value>
+              </block>
+            </value>
+          </block>
+        </value>
+      </block>
+    </value>
+  </block>
+  <block type="rule" x="10" y="10" hashcode="105227" version="0.14">
+    <field name="id">20</field>
+    <value name="name">
+      <block type="text">
+        <field name="TEXT">Rule_Condition_Time</field>
+      </block>
+    </value>
+    <value name="description">
+      <block type="text_area">
+        <field name="TEXT"></field>
+      </block>
+    </value>
+    <value name="properties">
+      <block type="property_room">
+        <field name="roomId"></field>
+      </block>
+    </value>
+    <value name="condition">
+      <block type="condition_time">
+        <mutation inputs="timer_type" input_timer_type="2"></mutation>
+        <field name="timerType">2</field>
+        <field name="daysOfWeek">1</field>
+        <value name="time">
+          <block type="time">
+            <field name="time">+01:30:00t</field>
+          </block>
+        </value>
+      </block>
+    </value>
+    <statement name="actions">
+      <block type="action_group">
+        <mutation recurrent_interval_input="false"></mutation>
+        <field name="event">start</field>
+        <statement name="do">
+          <block type="action_device">
+            <mutation action_type="switch" service="urn:upnp-org:serviceId:SwitchPower1" action="SetTarget"></mutation>
+            <field name="actionParams">{"newTargetValue":"1"}</field>
+            <value name="device">
+              <block type="device">
+                <mutation inputs="id" input_id="25" text_id="BinaryLight 1"></mutation>
+                <field name="deviceId">25</field>
+              </block>
+            </value>
+          </block>
+        </statement>
+      </block>
+    </statement>
+  </block>
+  <block type="rule" x="10" y="10" hashcode="164217" version="0.14.1">
+    <field name="id">21</field>
+    <value name="name">
+      <block type="text">
+        <field name="TEXT">Rule_Condition_Sequence</field>
+      </block>
+    </value>
+    <value name="description">
+      <block type="text_area">
+        <field name="TEXT"></field>
+      </block>
+    </value>
+    <value name="properties">
+      <block type="property_room">
+        <field name="roomId"></field>
+      </block>
+    </value>
+    <value name="condition">
+      <block type="condition_sequence">
+        <statement name="items">
+          <block type="condition_sequence_item">
+            <value name="condition">
+              <block type="condition_value">
+                <mutation condition_type="event" input_device_type="urn:schemas-micasaverde-com:device:MotionSensor:1" input_event="1" service="urn:micasaverde-com:serviceId:SecuritySensor1" variable="Armed;EQ;1|Tripped;EQ;1"></mutation>
+                <field name="deviceType">urn:schemas-micasaverde-com:device:MotionSensor:1</field>
+                <field name="eventId">1</field>
+                <value name="device">
+                  <block type="device">
+                    <mutation inputs="id" input_id="10" text_id="Motion 1"></mutation>
+                    <field name="deviceId">10</field>
+                  </block>
+                </value>
+              </block>
+            </value>
+            <next>
+              <block type="condition_sequence_separator">
+                <field name="sequenceInterval">2</field>
+                <field name="unit">S</field>
+                <next>
+                  <block type="condition_sequence_item">
+                    <value name="condition">
+                      <block type="condition_value">
+                        <mutation condition_type="event" input_device_type="urn:schemas-micasaverde-com:device:MotionSensor:1" input_event="1" service="urn:micasaverde-com:serviceId:SecuritySensor1" variable="Armed;EQ;1|Tripped;EQ;1"></mutation>
+                        <field name="deviceType">urn:schemas-micasaverde-com:device:MotionSensor:1</field>
+                        <field name="eventId">1</field>
+                        <value name="device">
+                          <block type="device">
+                            <mutation inputs="id" input_id="11" text_id="Motion 2"></mutation>
+                            <field name="deviceId">11</field>
+                          </block>
+                        </value>
+                      </block>
+                    </value>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </statement>
+      </block>
+    </value>
+  </block>
+  <block type="rule" x="10" y="10" hashcode="165340" version="0.15">
+    <field name="id">22</field>
+    <value name="name">
+      <block type="text">
+        <field name="TEXT">Rule_Condition_Function</field>
+      </block>
+    </value>
+    <value name="description">
+      <block type="text_area">
+        <field name="TEXT"></field>
+      </block>
+    </value>
+    <value name="properties">
+      <block type="property_room">
+        <field name="roomId"></field>
+      </block>
+    </value>
+    <value name="condition">
+      <block type="list_with_operator_condition">
+        <mutation items="2"></mutation>
+        <field name="operator">AND</field>
+        <value name="ADD0">
+          <block type="condition_value">
+            <mutation inputs="actions" condition_type="event" input_device_type="urn:schemas-upnp-org:device:BinaryLight:1" input_event="1" service="urn:upnp-org:serviceId:SwitchPower1" variable="Status" operator="EQ" value="1"></mutation>
+            <field name="deviceType">urn:schemas-upnp-org:device:BinaryLight:1</field>
+            <field name="eventId">1</field>
+            <field name="value0">1</field>
+            <value name="device">
+              <block type="list_device">
+                <mutation items="3"></mutation>
+                <value name="ADD0">
+                  <block type="device">
+                    <mutation inputs="id" input_id="15" text_id="Switch 1"></mutation>
+                    <field name="deviceId">15</field>
+                  </block>
+                </value>
+                <value name="ADD1">
+                  <block type="device">
+                    <mutation inputs="id" input_id="16" text_id="Switch 2"></mutation>
+                    <field name="deviceId">16</field>
+                  </block>
+                </value>
+              </block>
+            </value>
+            <statement name="actions">
+              <block type="condition_action_group">
+                <mutation recurrent_interval_input="false"></mutation>
+                <field name="event">conditionStart</field>
+                <statement name="do">
+                  <block type="action_function">
+                    <field name="functionContent">count = ( count or 0 ) + 1\\nRulesEngine.log( "TEST count: " .. count, "Test" )</field>
+                  </block>
+                </statement>
+              </block>
+            </statement>
+          </block>
+        </value>
+        <value name="ADD1">
+          <block type="condition_function">
+            <field name="functionContent">if ( ( count or 0 ) &gt;= 3 ) then\\n    return true\\nelse\\n    return false\\nend</field>
+          </block>
+        </value>
       </block>
     </value>
   </block>
