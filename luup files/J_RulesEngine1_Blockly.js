@@ -2027,14 +2027,12 @@ function _getEventList( deviceType ) {
 	var eventList = {};
 	var devicetypesDB = MultiBox.getDeviceTypesDB( "0" ); // TODO : controller_id
 	var dt = devicetypesDB[ deviceType ];
-	$.each( dt, function( key, value ) {
-		if ( value.ui_static_data && value.ui_static_data.eventList2 ) {
-			for ( var i = 0; i < value.ui_static_data.eventList2.length; i++ ) {
-				var event = value.ui_static_data.eventList2[ i ];
-				eventList[ event.id.toString() ] = event;
-			}
+	if ( dt.ui_static_data && dt.ui_static_data.eventList2 ) {
+		for ( var i = 0; i < dt.ui_static_data.eventList2.length; i++ ) {
+			var event = dt.ui_static_data.eventList2[ i ];
+			eventList[ event.id.toString() ] = event;
 		}
-	} );
+	}
 	return eventList;
 }
 
