@@ -17,6 +17,7 @@ var ALTUI_RulesEngine = ( function( window, undefined ) {
 	var _rulesInfos = {};
 	var _altuiid, _version, _debugMode;
 	var _lastUpdate = 0;
+	var _lastMainUpdate = 0;
 	var _workspaceHeight = 2000;
 
 	var htmlControlPanel = '\
@@ -84,6 +85,7 @@ var ALTUI_RulesEngine = ( function( window, undefined ) {
 		<block type="condition_time_between"><value name="time1"><block type="time"><field name="time">hh:mm:ss</field></block></value><value name="time2"><block type="time"><field name="time">hh:mm:ss</field></block></value></block>\
 		<block type="condition_rule"></block>\
 		<block type="condition_inverter"></block>\
+		<block type="condition_function"><field name="functionContent">return true</field></block>\
 	</category>\
 	<category name="Param">\
 		<block type="list_condition_param"></block>\
@@ -147,7 +149,7 @@ div.altui-rule-acknowledged { cursor: pointer; background: url("http://vosmont.g
 .altui-rule-xml-content { width: 100%; height: 200px; }\
 #rulesengine-blockly-panel {  }\
 #rulesengine-blockly-workspace { width: 100%; height: ' + _workspaceHeight + 'px; }\
-div.blocklyToolboxDiv { height: auto!important; /*position: fixed;*/ }\
+div.blocklyToolboxDiv { /*height: auto!important;*/ /*position: fixed;*/ }\
 div.blocklyWidgetDiv { z-index: 1050; }\
 #blocklyArea { height: 100%; }\
 #rulesengine-lua-editor { height: 200px; } \
@@ -170,52 +172,72 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 		}
 		if ( device.device_type === "urn:schemas-upnp-org:device:RulesEngine:1" ) {
 			// Seems to be called at each change in the system, not just our device
-			for ( var i = 0; i < device.states.length; i++ ) {
-				if ( device.states[ i ].variable === "LastUpdate" ) {
-					if ( _lastUpdate !== device.states[ i ].value ) {
-						_lastUpdate = device.states[ i ].value;
-						var ruleIds = MultiBox.getStatus( device, "urn:upnp-org:serviceId:RulesEngine1", "LastModifiedRules" ) || "";
-						ruleIds = $.map( ruleIds.split( "," ), function( value ) {
-							return parseInt( value, 10 );
-						} );
-//console.log("Change on RulesEngine " + _convertTimestampToLocaleString(_lastUpdate), ruleIds );
-						if ( $( "#rulesengine-blockly-workspace" ).length > 0 ) {
-							//console.log("rulesengine-blockly-workspace")
-							//_clearIndexBlocklyConditionBlocks();
-							// Update the rule currently displayed (readonly mode)
-							var ruleId = $( "#rulesengine-blockly-workspace" ).data( "rule_id" );
-							if ( $( "#rulesengine-blockly-workspace" ).data( "read_only" ) && ( ruleIds.indexOf( ruleId ) > -1 ) ) {
-								$.when( _getRulesInfosAsync( device, { "ruleId": ruleId } ) )
-									.done( function( rulesInfos ) {
-										_updateViewPageRule( rulesInfos, ruleId );
-									} );
-							}
-						} else {
-							// Update the page of the rules
-							$.when( _getRulesInfosAsync( device ) )
-								.done( function( rulesInfos ) {
-									_updatePageRules( device, rulesInfos );
-								} );
-						}
-					}
-				} else if ( device.states[ i ].variable === "RulePanel" ) {
-					//_updatePanel( device, device.states[ i ].value );
+			var variables = {};
+			$.map( device.states, function( state ) {
+				variables[ state.variable ] = state.value;
+			} );
+			var isMainUpdate = false, isUpdate = false;
+			if ( _lastMainUpdate !== variables[ "LastMainUpdate" ] ) {
+				// Update the main page
+				_lastMainUpdate = variables[ "LastMainUpdate" ];
+				isMainUpdate = true;
+				Utils.logDebug( "Main change on engine" );
+				if ( $( ".altui-rules" ).length > 0 ) {
+					_pageRules( device.altuiid );
 				}
 			}
+			var ruleIds
+			if ( _lastUpdate !== variables[ "LastUpdate" ] ) {
+				_lastUpdate = variables[ "LastUpdate" ];
+				isUpdate = true;
+				ruleIds = MultiBox.getStatus( device, "urn:upnp-org:serviceId:RulesEngine1", "LastModifiedRules" ) || "";
+				ruleIds = $.map( ruleIds.split( "," ), function( value ) {
+					return parseInt( value, 10 );
+				} );
+				Utils.logDebug( "Change on engine for rule(s) #" + ruleIds );
+			}
+			if ( isMainUpdate || isUpdate ) {
+				if ( $( "#rulesengine-blockly-workspace" ).length > 0 ) {
+					//console.log("rulesengine-blockly-workspace")
+					//_clearIndexBlocklyConditionBlocks();
+					// Update the rule currently displayed (readonly mode)
+					var ruleId = $( "#rulesengine-blockly-workspace" ).data( "rule_id" );
+					if ( $( "#rulesengine-blockly-workspace" ).data( "read_only" ) && ( ( ruleIds == null ) || ( ruleIds.indexOf( ruleId ) > -1 ) ) ) {
+						$.when( _getRulesInfosAsync( { "ruleId": ruleId } ) )
+							.done( function( rulesInfos ) {
+								_updateViewPageRule( rulesInfos, ruleId );
+							} );
+					}
+				} else if ( $( ".altui-rules" ).length > 0 ) {
+					// Update the page of the rules
+					$.when( _getRulesInfosAsync() )
+						.done( function( rulesInfos ) {
+							_updatePageRules( device, rulesInfos );
+						} );
+				}
+			}
+			/*} else if ( device.states[ i ].variable === "RulePanel" ) {
+				//_updatePanel( device, device.states[ i ].value );
+			}*/
 		}
 	}
 
 	function _init( device ) {
 		_version = MultiBox.getStatus( device, "urn:upnp-org:serviceId:RulesEngine1", "PluginVersion" );
 		_debugMode = parseInt( MultiBox.getStatus( device, "urn:upnp-org:serviceId:RulesEngine1", "Debug" ) || "0", 10 );
+		_lastMainUpdate = MultiBox.getStatus( device, "urn:upnp-org:serviceId:RulesEngine1", "LastMainUpdate" );
 	}
 
 	// *************************************************************************************************
 	// Load informations from Backend
 	// *************************************************************************************************
 
-	function _getTimelineAsync( device, params ) {
-		// seul un device répond via le handler : que se passe-t-il si plusieurs device se sont enregistrés ?
+	function _getEngineStatus() {
+		var device = MultiBox.getDeviceByAltuiID( _altuiid );
+		return parseInt( MultiBox.getStatus( device, "urn:upnp-org:serviceId:SwitchPower1", "Status" ), 10 );
+	}
+
+	function _getTimelineAsync( params ) {
 		var d = $.Deferred();
 		var params = params || {};
 		var url = window.location.pathname + "?id=lr_RulesEngine&command=getTimeline"
@@ -244,7 +266,7 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 		return d.promise();
 	}
 
-	function _getRulesInfosAsync( device, params ) {
+	function _getRulesInfosAsync( params ) {
 		var d = $.Deferred();
 		var params = params || {};
 		var url = window.location.pathname + "?id=lr_RulesEngine&command=getRulesInfos"
@@ -274,7 +296,7 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 		return d.promise();
 	}
 
-	function _getRulesAsync( device ) {
+	function _getRulesAsync() {
 		var d = $.Deferred();
 		$.when(
 			$.ajax( {
@@ -297,7 +319,7 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 		return d.promise();
 	}
 
-	function _getRules() {
+	function _getRuleList() {
 		var rules = [];
 		$.each( _rulesInfos, function( i, ruleInfos ) {
 			rules.push( { "id": ruleInfos.id, "name": ruleInfos.name } );
@@ -305,24 +327,28 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 		return rules;
 	}
 
-	function _getRooms() {
-		var result = [];
-		var deviceController = MultiBox.controllerOf( _altuiid ).controller;
-		MultiBox.getRooms( null, function( room, idx ) {
-			return ( MultiBox.controllerOf( room.altuiid ).controller == deviceController );
-		}, function( rooms ) {
-			if ( rooms ) {
-				$.each( rooms, function( idx, room ) {
-					result.push( { "id": room.id, "name": room.name } );
-				} );
+	function _getRoomList( controllerId ) {
+		var rooms = [];
+		var controllerId = controllerId ? controllerId : MultiBox.controllerOf( _altuiid ).controller;
+		$.each( MultiBox.getRoomsSync(), function( i, room ) {
+			if ( ( controllerId != null ) && ( controllerId > -1 ) && MultiBox.controllerOf( room.altuiid ).controller !== controllerId ) {
+				return;
 			}
+			rooms.push( {
+				"id": room.id,
+				"name": room.name
+			} );
 		} );
-		return result;
+		return rooms;
 	}
 
-	function _getScenes() {
+	function _getSceneList( controllerId ) {
 		var scenes = [];
-		$.each( jsonp.ud.scenes, function( i, scene ) {
+		var controllerId = controllerId ? controllerId : MultiBox.controllerOf( _altuiid ).controller;
+		$.each( MultiBox.getScenesSync(), function( i, scene ) {
+			if ( ( controllerId != null ) && ( controllerId > -1 ) && MultiBox.controllerOf( scene.altuiid ).controller !== controllerId ) {
+				return;
+			}
 			var room = ( scene.room ? api.getRoomObject( scene.room ) : null );
 			scenes.push( {
 				"id": scene.id,
@@ -511,40 +537,23 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 	}
 
 	function _checkXmlRulesIds( xmlRules, rulesInfos ) {
-		if ( xmlRules.length !== rulesInfos.length ) {
-			PageMessage.message( "Desynchronization : expected " + rulesInfos.length + " rule(s) and found " + xmlRules.length + " in the xml file", "warning");
-		}
-		// Sort the rulesInfos by idx
-		rulesInfos.sort( function( a,b ) { return a.idx - b.idx; } );
+		var indexRulesInfos = {};
+		$.each( rulesInfos, function( i, ruleInfos ) {
+			indexRulesInfos[ ruleInfos.idx ] = ruleInfos;
+		} );
 		xmlRules.each( function( idx, xmlRule ) {
-			if ( idx >= rulesInfos.length ) {
+			var ruleInfos = indexRulesInfos[ idx + 1 ];
+			if ( ruleInfos == null ) {
+				Utils.logDebug( "Rule at position " + idx + " in the xml file does not correspond to a loaded rule." );
 				return;
 			}
-			var ruleInfos = rulesInfos[ idx ];
-			if ((ruleInfos.idx - 1) !== idx) {
-				PageMessage.message( "Desynchronization: rule at position " + idx + " in the xml file does not correspond to the former known rule #" + ruleInfos.id + ". You should not save.", "warning");
-			}
 			var xmlRuleId = parseInt( $( xmlRule ).children( "field[name=\"id\"]:first" ).text(), 10);
+			if ( xmlRuleId !== ruleInfos.id ) {
+				PageMessage.message( "Desynchronization: id #" + xmlRuleId + " of the rule at position " + idx + " in the xml file is not the expected id #" + ruleInfos.id + ". You should not save.", "warning");
+			}
 			var xmlRuleName = $( xmlRule ).children( "value[name=\"name\"]:first" ).text().trim();
-			if ( xmlRuleId != null ) {
-				if ( xmlRuleId !== ruleInfos.id ) {
-					PageMessage.message( "Desynchronization: id #" + xmlRuleId + " of the rule at position " + idx + " in the xml file is not the expected id #" + ruleInfos.id + ". You should not save.", "warning");
-				}
-				if ( xmlRuleName !== ruleInfos.name ) {
-					PageMessage.message( "Desynchronization: name '" + xmlRuleName + "' of the rule at position " + idx + " in the xml file is not the expected name '" + ruleInfos.name + "'. You should not save.", "warning");
-				}
-			} else {
-				// DEPRECATED : the id of the rule is know written by the back
-				/*
-				// The rule has not an id; add it (calculated by the LUA part of the plugin)
-				if ( xmlRuleName !== ruleInfos.name ) {
-					PageMessage.message( "Desynchronization: name '" + xmlRuleName + "' of the rule at position " + idx + " in the xml file is not the expected name '" + ruleInfos.name + "'. You should not save.", "warning");
-				} else {
-					$( xmlRule ).children( "field[name=\"id\"]" ).remove();
-					$( xmlRule ).append( '<field name="id">' + ruleInfos.id + '</field>' );
-				}
-				*/
-				PageMessage.message( "Desynchronization: rule at position " + idx + " in the xml file has no id. You should not save.", "warning");
+			if ( xmlRuleName !== ruleInfos.name ) {
+				PageMessage.message( "Desynchronization: name '" + xmlRuleName + "' of the rule at position " + idx + " in the xml file is not the expected name '" + ruleInfos.name + "'. You should not save.", "warning");
 			}
 		} );
 	}
@@ -683,7 +692,7 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 		);
 		dialog.modal();
 
-		$.when( _loadResourcesAsync( [ "https://cdnjs.cloudflare.com/ajax/libs/ace/1.2.2/ace.js" ] ) )
+		$.when( _loadResourcesAsync( [ "https://cdnjs.cloudflare.com/ajax/libs/ace/1.2.5/ace.js" ] ) )
 			.done( function() {
 				var html = '<div id="rulesengine-lua-editor">' + code + '</div>'; // TODO : escape
 				$( dialog ).find( ".row-fluid" ).append( html );
@@ -917,7 +926,7 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 				"modal-lg"
 			)
 		);
-		$.when( _getTimelineAsync( device, params ) )
+		$.when( _getTimelineAsync( params ) )
 			.done( function( timeline ) {
 
 				var html = '<div class="panel panel-default">'
@@ -985,7 +994,7 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 	}
 
 	function _drawRules( device, filters ) {
-		$.when( _getRulesInfosAsync( device ) )
+		$.when( _getRulesInfosAsync() )
 			.done( function( rulesInfos ) {
 				// Sort by rule name
 				rulesInfos.sort( function( a, b ) {
@@ -1207,7 +1216,7 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 
 	function _drawRuleList( altuiid ) {
 		var device = MultiBox.getDeviceByAltuiID( altuiid );
-		$.when( _getRulesInfosAsync( device ) )
+		$.when( _getRulesInfosAsync() )
 			.done( function( rulesInfos ) {
 				var model = {
 					domcontainer : $( "#rulesengine-rule-list" ),
@@ -1281,7 +1290,7 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 		UIManager.clearPage( _T( "Control Panel" ), "Timeline - {0} <small>#{1}</small>".format( device.name , altuiid ), UIManager.oneColumnLayout );
 		show_loading();
 		$(".altui-mainpanel").append( '<div class="timeline"></div>' );
-		$.when( _getTimelineAsync( device ) )
+		$.when( _getTimelineAsync() )
 			.done( function( timeline ) {
 				_updateTimeline( timeline );
 				hide_loading();
@@ -1633,8 +1642,8 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 				}
 				$.when(
 					_loadRulesAsync( device, fileName ),
-					_getRulesInfosAsync( device, { fileName: fileName } ),
-					( id ? _getRulesInfosAsync( device, { fileName: fileName, ruleId: id } ) : true )
+					_getRulesInfosAsync( { fileName: fileName } ),
+					( id ? _getRulesInfosAsync( { fileName: fileName, ruleId: id } ) : true )
 				)
 					.done( function( xmlRules, rulesInfos, extendedRulesInfos ) {
 						if ( id ) {
@@ -1680,22 +1689,42 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 			} );
 	}
 
-	function _changeSvgBlocks( blocks, id, infos ) {
+	function _saveSvgBlockColour( block ) {
+		if ( block.fillColour_ !== block.svgPath_.style.fill ) {
+			block.fillColour_ = block.svgPath_.style.fill;
+		}
+	}
+	function _restoreSvgBlockColour( block ) {
+		if ( block.fillColour_ != null ) {
+			block.svgPath_.style.fill = block.fillColour_;
+		}
+	}
+
+	function _changeSvgBlocks( blocks, id, infos, engineStatus ) {
 		if ( !blocks ) {
 			return;
 		}
 		$.each( blocks, function( i, block ) {
-			if ( infos.isArmed === false ) {
+			if ( engineStatus === 0 ) {
+				_saveSvgBlockColour( block );
+				block.setTooltip( id + " - Engine stopped" );
+				block.svgPath_.style.stroke = "";
+				block.svgPath_.style["stroke-width"] = "";
+				block.svgPath_.style.fill = "#BBBBBB";
+			} else if ( infos.isArmed === false ) {
+				_saveSvgBlockColour( block );
 				block.setTooltip( id + " - Disarmed" );
 				block.svgPath_.style.stroke = "";
 				block.svgPath_.style["stroke-width"] = "";
 				block.svgPath_.style.fill = "#AAAAAA";
 			} else if ( infos.status === 1 ) {
+				_restoreSvgBlockColour( block );
 				block.setTooltip( id + " - ON since " + _convertTimestampToLocaleString( infos.lastStatusUpdateTime ) + ( infos.level ? ' (level ' + infos.level + ')' : '' ) );
 				block.svgPath_.style.stroke = "#FF0000";
 				block.svgPath_.style["stroke-width"] = "4";
 				//block.svgPath_.style["stroke-dasharray"] = "5,5";
 			} else {
+				_restoreSvgBlockColour( block );
 				if ( infos.nextCheckTime && ( infos.nextCheckTime > 0 ) ) {
 					block.setTooltip( id + " - Could be ON - Check at " + _convertTimestampToLocaleString( infos.nextCheckTime ) );
 					block.svgPath_.style.stroke = "#FFA500";
@@ -1716,9 +1745,10 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 		if ( !ruleInfos ) {
 			return;
 		}
-		_changeSvgBlocks( _getBlocklyConditionBlocks( ruleInfos.id ), ruleInfos.id, ruleInfos );
+		var engineStatus = _getEngineStatus();
+		_changeSvgBlocks( _getBlocklyConditionBlocks( ruleInfos.id ), ruleInfos.id, ruleInfos, engineStatus );
 		$.each( ruleInfos.conditions, function( conditionId, conditionInfos) {
-			_changeSvgBlocks( _getBlocklyConditionBlocks( conditionId ), conditionId, conditionInfos );
+			_changeSvgBlocks( _getBlocklyConditionBlocks( conditionId ), conditionId, conditionInfos, engineStatus );
 		} );
 	}
 
@@ -1810,9 +1840,10 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 		getDeviceActionNames: _getDeviceActionNames,
 		getDeviceAction: _getDeviceAction,
 		getDeviceTypes: _getDeviceTypes,
-		getRooms: _getRooms,
-		getRules: _getRules,
-		getScenes: _getScenes
+		getRoomList: _getRoomList,
+		getRuleList: _getRuleList,
+		getSceneList: _getSceneList,
+		getEngineStatus: _getEngineStatus
 	};
 
 	// Register

@@ -548,7 +548,7 @@ Blockly.Blocks[ "property_room" ] = {
 		this.setColour( Blockly.Blocks.properties.HUE );
 
 		var roomOptions = [ [ "No room", "" ] ];
-		$.each( ALTUI_RulesEngine.getRooms(), function( i, rule ) {
+		$.each( ALTUI_RulesEngine.getRoomList(), function( i, rule ) {
 			roomOptions.push( [ rule.name, rule.id.toString() ] );
 		} );
 		this.appendDummyInput()
@@ -858,11 +858,17 @@ function _updateDeviceFilterInput( inputName, filters, filteredDevices ) {
 		case "device_room":
 			// Get the all the room for the controller
 			var indexRooms = { "0": "no room" };
+			$.each( ALTUI_RulesEngine.getRoomList( filters.controller_id ), function ( i, room ) {
+				indexRooms[ room.id.toString() ] = room.name;
+			} );
+			/*
+			// TODO : à enlever
 			$.each( MultiBox.getRoomsSync(), function( idx, room ) {
 				if ( ( filters.controller_id > -1 ) && ( MultiBox.controllerOf( room.altuiid ).controller === filters.controller_id ) ) {
 					indexRooms[ room.id.toString() ] = room.name;
 				}
 			} );
+			*/
 			fillOptions = function( devices ) {
 				$.each( devices, function( i, device ) {
 					if ( !device.room ) {
@@ -1564,7 +1570,7 @@ Blockly.Blocks[ "device" ] = {
 		_setFiltersFromFieldValues.call( this );
 		// TODO : stocker autre part le controllerId ?
 		this.filters_.controller_id = $( "#rulesengine-blockly-workspace" ).data( "controller_id" );
-		if ( !this.filters_.controller_id ) { // TODO : is this a typo ?
+		if ( this.filters_.controller_id ) {
 			this.filters_.controller_id = parseInt( this.filters_.controller_id, 10 );
 		}
 	},
@@ -1906,6 +1912,7 @@ Blockly.Msg.CONDITION_TIME_TOOLTIP = "Condition on time.";
 Blockly.Msg.CONDITION_TIME_BETWEEN_TOOLTIP = "Condition on time between two boundaries.";
 Blockly.Msg.CONDITION_RULE_TOOLTIP = "Condition on the status of another rule.";
 Blockly.Msg.CONDITION_INVERTER_TOOLTIP = "Inverts the linked condition (NOT).";
+Blockly.Msg.CONDITION_FUNCTION_TOOLTIP = "Execute LUA code and use the result as a condition.";
 Blockly.Msg.CONDITION_MQTT_TOOLTIP = "(TODO)Condition on a received message from MQTT broker.";
 
 Blockly.Msg.CONTROLS_CONDITION_TITLE = "condition";
@@ -2617,10 +2624,10 @@ Blockly.Blocks[ "condition_rule" ] = {
 	init: function() {
 		this.setColour( Blockly.Blocks.conditions.HUE1 );
 		this.prefix_ = "condition";
-		this.inputs_ = [ "params" ];
+		this.inputs_ = [ "params", "actions" ];
 
 		var options = [ [ "...", "" ] ];
-		var rules = ALTUI_RulesEngine.getRules();
+		var rules = ALTUI_RulesEngine.getRuleList();
 		for ( var i = 0; i < rules.length; i++ ) {
 			options.push( [ rules[ i ].name, rules[ i ].id.toString() ] );
 		}
@@ -2662,13 +2669,52 @@ Blockly.Blocks[ "condition_inverter" ] = {
 	init: function() {
 		this.setColour( Blockly.Blocks.conditions.HUE1 );
 
+		this.prefix_ = "condition";
+		this.params_ = {};
+		this.inputs_ = [ "params", "actions" ];
+
 		this.appendValueInput( "condition" )
 			.setCheck( "Boolean" )
 			.appendField( "not" );
 
+		_setMutator.call( this );
+
 		this.setInputsInline( false );
 		this.setOutput( true, "Boolean" );
 		this.setTooltip( Blockly.Msg.CONDITION_INVERTER_TOOLTIP );
+	},
+
+	mutationToDom: function() {
+		var container = document.createElement( "mutation" );
+		_updateMutationWithRemovableInputs.call( this, container );
+		return container;
+	},
+
+	domToMutation: function( xmlElement ) {
+		_createInputsFromMutation.call( this, xmlElement );
+	},
+
+	decompose: function( workspace ) {
+		return _decompose.call( this, workspace );
+	},
+
+	compose: function( containerBlock ) {
+		_compose.call( this, containerBlock );
+	}
+};
+
+Blockly.Blocks[ "condition_function" ] = {
+	init: function() {
+		this.setColour( Blockly.Blocks.conditions.HUE1 );
+
+		this.appendDummyInput()
+			.appendField( "LUA function" );
+		this.appendDummyInput()
+			.appendField( new Blockly.FieldCodeArea( "" ), "functionContent" );
+
+		this.setInputsInline( false );
+		this.setOutput( true, "Boolean" );
+		this.setTooltip( Blockly.Msg.CONDITION_FUNCTION_TOOLTIP );
 	}
 };
 
@@ -3353,7 +3399,7 @@ Blockly.Blocks['action_scene'] = {
 		this.setColour( Blockly.Blocks.actions.HUE2 );
 
 		var options = [ [ "...", "" ] ];
-		$.each( ALTUI_RulesEngine.getScenes(), function( i, scene ) {
+		$.each( ALTUI_RulesEngine.getSceneList(), function( i, scene ) {
 			options.push( [ scene.roomName + " - " + scene.name, scene.id.toString() ] );
 		} );
 		options.sort( _sortOptionsByName );

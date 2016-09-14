@@ -22,7 +22,7 @@ end
 
 _NAME = "RulesEngine"
 _DESCRIPTION = "Rules Engine for the Vera with visual editor"
-_VERSION = "0.14.1"
+_VERSION = "0.15"
 _AUTHOR = "vosmont"
 
 -- **************************************************
@@ -57,6 +57,7 @@ local VARIABLE = {
 	PLUGIN_VERSION = { "urn:upnp-org:serviceId:RulesEngine1", "PluginVersion", true },
 	DEBUG_MODE = { "urn:upnp-org:serviceId:RulesEngine1", "Debug", true },
 	LAST_UPDATE = { "urn:upnp-org:serviceId:RulesEngine1", "LastUpdate", true },
+	LAST_MAIN_UPDATE = { "urn:upnp-org:serviceId:RulesEngine1", "LastMainUpdate", true },
 	LAST_MODIFIED_RULES = { "urn:upnp-org:serviceId:RulesEngine1", "LastModifiedRules", true },
 	LAST_MESSAGE = { "urn:upnp-org:serviceId:RulesEngine1", "LastMessage", true },
 	LAST_ERROR = { "urn:upnp-org:serviceId:RulesEngine1", "LastError", true },
@@ -64,7 +65,8 @@ local VARIABLE = {
 	TOOLBOX_CONFIG = { "urn:upnp-org:serviceId:RulesEngine1", "ToolboxConfig", true },
 	STARTUP_FILES = { "urn:upnp-org:serviceId:RulesEngine1", "StartupFiles", true },
 	RULES_FILES = { "urn:upnp-org:serviceId:RulesEngine1", "RuleFiles", true },
-	STORE_PATH = { "urn:upnp-org:serviceId:RulesEngine1", "StorePath", true }
+	STORE_PATH = { "urn:upnp-org:serviceId:RulesEngine1", "StorePath", true },
+	NO_LOAD_IF_DISABLED = { "urn:upnp-org:serviceId:RulesEngine1", "NoLoadIfDisabled", true },
 }
 local indexVariable = {}
 for _, variable in pairs( VARIABLE ) do
@@ -926,11 +928,13 @@ Event = {
 			value = lul_value_new,
 			lastUpdateTime = os.time()
 		}
+		local conditionIds = {}
 		for _, condition in ipairs(linkedConditions) do
 			log( "This event is linked to rule #" .. tostring( condition._ruleId ) .. " and condition #" .. tostring( condition.id ), "Event.onDeviceVariableIsUpdated", 2 )
+			table.insert( conditionIds, condition.id )
 		end
 		-- Update the status of the conditions (asynchronously to release the lock the fatest possible)
-		ScheduledTasks.add( nil, Conditions.updateStatus, 0, { linkedConditions, { context = context } } )
+		ScheduledTasks.add( { conditionIds = conditionIds }, Conditions.updateStatus, 0, { linkedConditions, { context = context } } )
 	end,
 
 	-- Callback on timer triggered (mios call)
@@ -946,11 +950,13 @@ Event = {
 			local context = {
 				lastUpdateTime = os.time()
 			}
+			local conditionIds = {}
 			for _, condition in ipairs( linkedConditions ) do
 				log( "This event is linked to rule #" .. tostring( condition._ruleId ) .. " and condition #" .. tostring( condition.id ), "Event.onTimerIsTriggered", 2 )
+				table.insert( conditionIds, condition.id )
 			end
 			-- Update the status of the conditions (asynchronously to release the lock the fatest possible)
-			ScheduledTasks.add( nil, Conditions.updateStatus, 0, { linkedConditions, { context = context, event = data } } )
+			ScheduledTasks.add( { conditionIds = conditionIds }, Conditions.updateStatus, 0, { linkedConditions, { context = context, event = data } } )
 		else
 			log( "Engine is not enabled - Do nothing", "Event.onTimerIsTriggered" )
 		end
@@ -962,15 +968,15 @@ Event = {
 
 	-- Callback on rule status update (inside call)
 	onRuleStatusIsUpdated = function( watchedRuleId, newStatus )
-		local eventName = "RuleStatus-" .. tostring(watchedRuleId)
-		log("Event '" .. eventName .. "' - New status:'" .. tostring(newStatus) .. "'", "Event.onRuleStatusIsUpdated")
+		local eventName = "RuleStatus-" .. tostring( watchedRuleId )
+		log( "Event '" .. eventName .. "' - New status:'" .. tostring( newStatus ) .. "'", "Event.onRuleStatusIsUpdated" )
 		-- Check if engine is enabled
-		if (not isEnabled()) then
-			log("Engine is not enabled - Do nothing", "Event.onRuleStatusIsUpdated")
+		if not isEnabled() then
+			log( "Engine is not enabled - Do nothing", "Event.onRuleStatusIsUpdated" )
 			return false
 		end
-		local linkedConditions = Events.getRegisteredItems(eventName)
-		if (linkedConditions == nil) then
+		local linkedConditions = Events.getRegisteredItems( eventName )
+		if ( linkedConditions == nil ) then
 			return false
 		end
 		-- Update status of the linked conditions for this event
@@ -979,21 +985,18 @@ Event = {
 			ruleStatus = newStatus,
 			lastUpdateTime = os.time()
 		}
+		local conditionIds = {}
 		for _, condition in ipairs(linkedConditions) do
-			log("This event is linked to rule #" .. tostring(ruleId) .. " and condition #" .. tostring(condition.id), "Event.onRuleStatusIsUpdated")
-			-- Update the context of the condition
-			--condition._context.ruleStatus = newStatus
-			--condition._context.lastUpdateTime = os.time()
-			-- Update the status of the condition
-			--Condition.updateStatus(condition, { context = context })
+			log( "This event is linked to rule #" .. tostring( ruleId ) .. " and condition #" .. tostring( condition.id ), "Event.onRuleStatusIsUpdated" )
+			table.insert( conditionIds, condition.id )
 		end
 		-- Update the status of the conditions (asynchronously to release the lock the fatest possible)
-		ScheduledTasks.add(nil, Conditions.updateStatus, 0, { linkedConditions, { context = context } })
+		ScheduledTasks.add( { conditionIds = conditionIds }, Conditions.updateStatus, 0, { linkedConditions, { context = context } } )
 	end,
 
 	-- Change debug level log
-	onDebugValueIsUpdated = function (lul_device, lul_service, lul_variable, lul_value_old, lul_value_new)
-		setVerbosity(lul_value_new)
+	onDebugValueIsUpdated = function( lul_device, lul_service, lul_variable, lul_value_old, lul_value_new )
+		setVerbosity( lul_value_new )
 	end
 }
 
@@ -1016,6 +1019,7 @@ ScheduledTasks = {
 	end,
 
 	getTaskInfo = function (task)
+		--[[
 		local ids = {}
 		function _getIds( params, depth )
 			if ( depth < 0 ) then
@@ -1032,14 +1036,15 @@ ScheduledTasks = {
 			end
 		end
 		_getIds( task.callbackParams, 3 )
+		--]]
 
 		local taskInfo = {
-			timeout = os.date( "%X", task.timeout ),
+			timeout = os.date( "%Y-%m-%d %X", task.timeout ),
 			duration = _getDuration( task.delay ),
 			delay = task.delay,
 			callback = ( _indexFunctionNames[ tostring( task.callback ) ] or "Unknown name" ),
 			--callbackParams = task.callbackParams,
-			callbackParams_ids = ids,
+			--callbackParams_ids = ids,
 			attributes = task.attributes
 		}
 		return tostring( json.encode( taskInfo ) )
@@ -1050,7 +1055,7 @@ ScheduledTasks = {
 		for i = #_nextWakeUps, 1, -1 do
 			if (_nextWakeUps[i] <= now) then
 				if _isLogLevel(4) then
-					log("Wake-up #" .. tostring(i) .. "/" .. tostring(#_nextWakeUps) .. " at " .. os.date("%X", _nextWakeUps[i]) .. " (" .. tostring(_nextWakeUps[i]) .. ") is expired", "ScheduledTasks.purgeExpiredWakeUp", 4)
+					log("Wake-up #" .. tostring(i) .. "/" .. tostring(#_nextWakeUps) .. " at " .. os.date("%Y-%m-%d %X", _nextWakeUps[i]) .. " (" .. tostring(_nextWakeUps[i]) .. ") is expired", "ScheduledTasks.purgeExpiredWakeUp", 4)
 				end
 				table.remove(_nextWakeUps, i)
 			end
@@ -1091,11 +1096,12 @@ ScheduledTasks = {
 	end,
 
 	-- Add a scheduled task
-	add = function (attributes, callback, delay, callbackParams)
+	add = function( attributes, callback, delay, callbackParams )
+		delay = ( tonumber( delay ) or 0 )
 		local _newScheduledTask = {
 			attributes = attributes or {},
-			timeout = (os.time() + (tonumber(delay) or 0)),
-			delay = (tonumber(delay) or 0),
+			timeout = ( os.time() + delay ),
+			delay = delay,
 			callback = callback,
 			callbackParams = callbackParams
 		}
@@ -1105,21 +1111,21 @@ ScheduledTasks = {
 		for i = #_scheduledTasks, 0, -1 do
 			if (i == 0) then
 				index = 1
-			elseif (_newScheduledTask.timeout >= _scheduledTasks[i].timeout) then
+			elseif ( _newScheduledTask.timeout >= _scheduledTasks[i].timeout ) then
 				index = i + 1
 				break
 			end
 		end
-		table.insert(_scheduledTasks, index, _newScheduledTask)
-		if _isLogLevel(4) then
-			log("Add task at index #" .. tostring(index) .. "/" .. tostring(#_scheduledTasks) .. ": " .. ScheduledTasks.getTaskInfo(_newScheduledTask), "ScheduledTasks.add", 4)
+		table.insert( _scheduledTasks, index, _newScheduledTask )
+		if _isLogLevel( 4 ) then
+			log( "Add task at index #" .. tostring( index ) .. "/" .. tostring( #_scheduledTasks ) .. ": " .. ScheduledTasks.getTaskInfo( _newScheduledTask ), "ScheduledTasks.add", 4 )
 		end
 
 		ScheduledTasks.prepareNextWakeUp()
 	end,
 
 	-- Remove all scheduled actions for given attributes
-	remove = function (attributes)
+	remove = function( attributes )
 		attributes = attributes or {}
 		local msg = "Remove"
 		if (attributes == nil) then
@@ -1130,78 +1136,59 @@ ScheduledTasks = {
 		local nbTaskRemoved = 0
 		for i = #_scheduledTasks, 1, -1 do
 			local isMatching = true
-			if (attributes ~= nil) then
+			if ( attributes ~= nil ) then
 				for name, value in pairs (attributes) do
-					if ((_scheduledTasks[i].attributes[name] == nil) or (_scheduledTasks[i].attributes[name] ~= value)) then
+					if ( ( _scheduledTasks[i].attributes[name] == nil ) or ( _scheduledTasks[i].attributes[name] ~= value ) ) then
 						isMatching = false
 						break
 					end
 				end
 			end
-			if (isMatching) then
-				if (_scheduledTasks[i].attributes.isCritical) then
-					log("Can not remove critical task #" .. tostring(i) .. "/" .. tostring(#_scheduledTasks) .. ": " .. ScheduledTasks.getTaskInfo(_scheduledTasks[i]), "ScheduledTasks.remove", 2)
+			if isMatching then
+				if _scheduledTasks[i].attributes.isCritical then
+					log( "Can not remove critical task #" .. tostring(i) .. "/" .. tostring(#_scheduledTasks) .. ": " .. ScheduledTasks.getTaskInfo( _scheduledTasks[i] ), "ScheduledTasks.remove", 2 )
 				else
-					if _isLogLevel(4) then
-						log("Remove task #" .. tostring(i) .. "/" .. tostring(#_scheduledTasks) .. ": " .. ScheduledTasks.getTaskInfo(_scheduledTasks[i]), "ScheduledTasks.remove", 4)
+					if _isLogLevel( 4 ) then
+						log( "Remove task #" .. tostring(i) .. "/" .. tostring(#_scheduledTasks) .. ": " .. ScheduledTasks.getTaskInfo( _scheduledTasks[i]), "ScheduledTasks.remove", 4 )
 					end
-					table.remove(_scheduledTasks, i)
+					table.remove( _scheduledTasks, i )
 					nbTaskRemoved = nbTaskRemoved + 1
 				end
 			end
 		end
-		log(msg .. ": " .. tostring(nbTaskRemoved) .. " task(s) removed", "ScheduledTasks.remove", 3)
+		log( msg .. ": " .. tostring(nbTaskRemoved) .. " task(s) removed", "ScheduledTasks.remove", 3 )
 		ScheduledTasks.prepareNextWakeUp()
 	end,
 
 	-- Do all scheduled tasks that have expired
-	execute = function ()
+	execute = function()
 		local current = os.time()
-		if _isLogLevel(2) then
-			log("Now is " .. os.date("%X", os.time()) .. " (" .. tostring(os.time()) .. ") - Do sheduled tasks", "ScheduledTasks.execute", 2)
+		if _isLogLevel( 2 ) then
+			log("Now is " .. os.date( "%X", os.time() ) .. " (" .. tostring( os.time() ) .. ") - Do sheduled tasks", "ScheduledTasks.execute", 2 )
 		end
 		ScheduledTasks.purgeExpiredWakeUp()
-		if (#_scheduledTasks > 0) then
-			local i = 1
+		if ( #_scheduledTasks > 0 ) then
 			local scheduledTask = _scheduledTasks[1]
 			while ( scheduledTask ) do
-				if (scheduledTask.timeout <= current) then
+				if ( scheduledTask.timeout <= current ) then
+					table.remove( _scheduledTasks, 1 )
 					if _isLogLevel(4) then
-						log("Timeout reached for task #" .. tostring(i) .. "/" .. tostring(#_scheduledTasks) .. ":\n" .. ScheduledTasks.getTaskInfo(scheduledTask), "ScheduledTasks.execute", 4)
+						log( "Timeout reached for task (still " .. tostring( #_scheduledTasks ) .. " task(s)) : " .. ScheduledTasks.getTaskInfo( scheduledTask ), "ScheduledTasks.execute", 4 )
 					end
-					table.remove(_scheduledTasks, 1)
 					if ( type( scheduledTask.callback ) == "function" ) then
 						scheduledTask.callback( unpack( scheduledTask.callbackParams ) )
 					else
 						error( "callback is not a function", "ScheduledTasks.execute" )
 					end
 					scheduledTask = _scheduledTasks[1]
-					i = i + 1
 				else
 					scheduledTask = nil
 				end
 			end
-			--[[
-			for i = #_scheduledTasks, 1, -1 do
-				local scheduledTask = _scheduledTasks[i]
-				if (scheduledTask.timeout <= current) then
-					if _isLogLevel(4) then
-						log("Timeout reached for task #" .. tostring(i) .. "/" .. tostring(#_scheduledTasks) .. ":\n" .. ScheduledTasks.getTaskInfo(scheduledTask), "ScheduledTasks.execute", 4)
-					end
-					table.remove(_scheduledTasks, i)
-					if ( type( scheduledTask.callback ) == "function" ) then
-						scheduledTask.callback( unpack( scheduledTask.callbackParams ) )
-					else
-						error( "callback is not a function", "ScheduledTasks.execute" )
-					end
-				end
-			end
-			--]]
-			--_nextScheduledTimeout = -1
-			if (table.getn(_scheduledTasks) > 0) then
+			if ( #_scheduledTasks > 0 ) then
 				ScheduledTasks.prepareNextWakeUp()
 			else
-				log("There's no more sheduled task to do", "ScheduledTasks.execute", 2)
+				log( "There's no more sheduled task to do", "ScheduledTasks.execute", 2 )
 				notifyTimelineUpdate()
 			end
 		else
@@ -1491,8 +1478,8 @@ Sun = {
 		local sunrise, sunset = luup.sunrise(), luup.sunset()
 		_update( _sunrises, sunrise )
 		_update( _sunsets, sunset )
-		log( "Sunrise: " .. os.date( "%c", _sunrises[1] ) .. " / " .. ( _sunrises[2] and os.date( "%c", _sunrises[2] ) or "" ), "Sun.update", 2 )
-		log( "Sunset : " .. os.date( "%c", _sunsets[1] ) .. " / " ..  ( _sunsets[2] and os.date( "%c", _sunsets[2] ) or "" ), "Sun.update", 2 )
+		log( "Sunrise: " .. os.date( "%Y-%m-%d %X", _sunrises[1] ) .. " / " .. ( _sunrises[2] and os.date( "%Y-%m-%d %X", _sunrises[2] ) or "" ), "Sun.update", 2 )
+		log( "Sunset : " .. os.date( "%Y-%m-%d %X", _sunsets[1] ) .. " / " ..  ( _sunsets[2] and os.date( "%Y-%m-%d %X", _sunsets[2] ) or "" ), "Sun.update", 2 )
 
 		local nextUpdate = os.difftime( math.min( sunrise, sunset ), os.time() )
 		log( "Next update in " .. tostring( nextUpdate ) .. " seconds", "Sun.update", 3 )
@@ -1551,11 +1538,11 @@ do
 				"ConditionUnknown.start"
 			)
 		end,
-		updateStatus = function (condition)
+		computeStatus = function (condition)
 			log(
 				"SETTING WARNING - " .. _getItemSummary(condition) ..
 				" - Condition type '" .. tostring(condition.type) .. "' is unknown",
-				"ConditionUnknown.updateStatus"
+				"ConditionUnknown.computeStatus"
 			)
 		end
 	}
@@ -1719,7 +1706,7 @@ log( "DEBUG service:" .. tostring(condition.service) .. ", variable:" .. tostrin
 			end
 		end,
 
-		updateStatus = function( condition, params )
+		computeStatus = function( condition, params )
 			local msg = _getItemSummary( condition )
 			local context = condition._context
 			local deviceId = condition.deviceId
@@ -1770,7 +1757,7 @@ log( "DEBUG service:" .. tostring(condition.service) .. ", variable:" .. tostrin
 				-- a threshold or a pattern is defined
 				local conditionValue = tonumber( condition.value ) or condition.value
 				local contextValue   = tonumber( context.value )   or context.value
-				log( "condition.operator:" .. tostring( condition.operator ) .. ", conditionValue:" .. tostring( conditionValue ) .. ", contextValue:" .. tostring( contextValue ), "ConditionValue.updateStatus", 3 )
+				log( "condition.operator:" .. tostring( condition.operator ) .. ", conditionValue:" .. tostring( conditionValue ) .. ", contextValue:" .. tostring( contextValue ), "ConditionValue.computeStatus", 3 )
 				if ((context.value == nil)
 					or (OPERATORS[condition.operator] == nil)
 					or (type(contextValue) ~= type(conditionValue))
@@ -1792,31 +1779,9 @@ log( "DEBUG service:" .. tostring(condition.service) .. ", variable:" .. tostrin
 				msg = msg .. " - The condition has no value condition"
 			end
 			params.lastUpdateTime = context.lastUpdateTime
-			log( msg, "ConditionValue.updateStatus", 3 )
+			log( msg, "ConditionValue.computeStatus", 3 )
 
-			-- Check since interval if exists
-			local hasToCheckConditionStatusLater
-			if ( condition.modifiers and condition.modifiers.sinceInterval ) then
-				status, hasToCheckConditionStatusLater = Condition.manageSinceInterval( condition, status, params )
-			end
-
-			-- Update the status
-			local hasStatusChanged, hasParentStatusChanged = Condition.setStatus( condition, status, params )
-
-			-- Report the change of the child condition to the parent if needed
-			if (
-				hasStatusChanged and not hasParentStatusChanged
-				and condition.isChildConditionValue and condition._parent.isMainConditionValue
-				and ( condition._parent.actions ~= nil )
-			) then
-				if ( ( status == 1 ) and ActionGroups.isMatchingEvent( condition._parent.actions, "conditionStart" ) ) then
-					ActionGroups.execute( condition._parent.actions, condition._ruleId, "conditionStart", nil, params )
-				elseif ( ( status == 0 ) and ActionGroups.isMatchingEvent(condition._parent.actions, "conditionEnd" ) ) then
-					ActionGroups.execute( condition._parent.actions, condition._ruleId, "conditionEnd", nil, params )
-				end
-			end
-
-			return hasStatusChanged or hasToCheckConditionStatusLater
+			return status
 		end
 
 	}
@@ -1850,7 +1815,7 @@ log( "DEBUG service:" .. tostring(condition.service) .. ", variable:" .. tostrin
 			Events.registerItem( "RuleStatus-" .. tostring( condition.ruleId ), condition )
 		end,
 
-		updateStatus = function( condition, params )
+		computeStatus = function( condition, params )
 			local msg = _getItemSummary( condition ) .. " for rule #" .. tostring( condition.ruleId )
 			local context = condition._context
 			local status = 1
@@ -1866,10 +1831,9 @@ log( "DEBUG service:" .. tostring(condition.service) .. ", variable:" .. tostrin
 				msg = msg .. " - Respects the condition '{status:" .. tostring( context.ruleStatus ) .. "}==" ..tostring( condition.ruleStatus ) .. "'"
 				status = 1
 			end
-			log( msg, "ConditionRule.updateStatus", 3 )
+			log( msg, "ConditionRule.computeStatus", 3 )
 
-			-- Update the status
-			return Condition.setStatus( condition, status, params )
+			return status
 		end
 	}
 
@@ -1990,9 +1954,10 @@ log( "DEBUG service:" .. tostring(condition.service) .. ", variable:" .. tostrin
 			end
 		end,
 
-		updateStatus = function( condition, params )
+		computeStatus = function( condition, params )
 			local msg = _getItemSummary( condition )
 			local status = 1
+			local params = params or {}
 
 			local now = os.time()
 			local currentTime = os.date( "%H:%M:%S", os.time() )
@@ -2026,18 +1991,18 @@ log( "DEBUG service:" .. tostring(condition.service) .. ", variable:" .. tostrin
 				end
 			end
 
-			log( msg, "ConditionTime.updateStatus", 3 )
+			log( msg, "ConditionTime.computeStatus", 3 )
 
-			-- TODO time of untrip (like motion sensor)
+			-- TODO time of untrip (like motion sensor) - for the moment 1 second (should be a parameter ?)
 			if ( status == 1 ) then
 				ScheduledTasks.add(
 					{ ruleId = condition._ruleId, conditionId = condition.id, condition = tostring( condition ), summary = "Pulse off " .. _getItemSummary( condition ) },
-					Condition.setStatus, 1, { condition, 0, params }
+					--Condition.setStatus, 1, { condition, 0, params }
+					Condition.updateStatus, 1, { condition }
 				)
 			end
 
-			-- Update the status
-			return Condition.setStatus( condition, status, params )
+			return status
 		end
 	}
 
@@ -2099,7 +2064,7 @@ log( "DEBUG service:" .. tostring(condition.service) .. ", variable:" .. tostrin
 			end
 		end,
 
-		updateStatus = function( condition, params )
+		computeStatus = function( condition, params )
 			local msg = _getItemSummary( condition )
 			local status = 1
 
@@ -2157,10 +2122,8 @@ log( "DEBUG service:" .. tostring(condition.service) .. ", variable:" .. tostrin
 				end
 			end
 
-			log( msg, "ConditionTimeBetween.updateStatus", 3 )
-
-			-- Update the status
-			return Condition.setStatus( condition, status, params )
+			log( msg, "ConditionTimeBetween.computeStatus", 3 )
+			return status
 		end
 	}
 
@@ -2185,10 +2148,10 @@ log( "DEBUG service:" .. tostring(condition.service) .. ", variable:" .. tostrin
 			Condition.start( condition.condition )
 		end,
 
-		updateStatus = function( condition, params )
+		computeStatus = function( condition, params )
 			local status = Condition.getStatus( condition.condition )
 			local level = 0
-			log( _getItemSummary( condition ) .. " for rule #" .. tostring( condition.ruleId ) .. " - Invert condition " .. _getItemSummary( condition.condition ) .. " (status:" .. tostring( status ) .. ")", "ConditionInverter.updateStatus", 3 )
+			log( _getItemSummary( condition ) .. " for rule #" .. tostring( condition.ruleId ) .. " - Invert condition " .. _getItemSummary( condition.condition ) .. " (status:" .. tostring( status ) .. ")", "ConditionInverter.computeStatus", 3 )
 			if ( status == 1 ) then
 				status = 0
 			else
@@ -2198,11 +2161,7 @@ log( "DEBUG service:" .. tostring(condition.service) .. ", variable:" .. tostrin
 				end
 			end
 
-			-- Update the level
-			params.levelHasChanged = Condition.setLevel( condition, level )
-
-			-- Update the status
-			return Condition.setStatus( condition, status, params )
+			return status, level
 		end
 	}
 
@@ -2257,7 +2216,7 @@ log( "DEBUG " .. _getItemSummary( condition ) .. " - Actions: "..tostring(json.e
 			end
 		end,
 
-		updateStatus = function( condition, params )
+		computeStatus = function( condition, params )
 			local params = params or {}
 			local status, lastUpdateTime = 0, 0
 			local level = 0
@@ -2306,18 +2265,9 @@ log( "DEBUG " .. _getItemSummary( condition ) .. " - Actions: "..tostring(json.e
 
 			condition._context.lastUpdateTime = math.max( ( condition._context.lastUpdateTime or 0 ), ( params.lastUpdateTime or 0 ), lastUpdateTime )
 			params.lastUpdateTime = condition._context.lastUpdateTime
-			log( _getItemSummary(condition) .. " - " .. msg, "ConditionGroup.updateStatus", 4 )
+			log( _getItemSummary(condition) .. " - " .. msg, "ConditionGroup.computeStatus", 4 )
 
-			-- Check since interval if exists
-			if ( condition.modifiers and condition.modifiers.sinceInterval ) then
-				status = Condition.manageSinceInterval( condition, status, params )
-			end
-
-			-- Update the level
-			params.levelHasChanged = Condition.setLevel( condition, level )
-
-			-- Update the status
-			return Condition.setStatus( condition, status, params )
+			return status, level
 		end
 	}
 	ConditionTypes["list_with_operator_condition"] = ConditionTypes["list_with_operators_condition"]
@@ -2365,7 +2315,7 @@ log( "DEBUG " .. _getItemSummary( condition ) .. " - Actions: "..tostring(json.e
 			end
 		end,
 
-		updateStatus = function( sequence, params )
+		computeStatus = function( sequence, params )
 			if ( sequence.items == nil ) then
 				return
 			end
@@ -2419,13 +2369,8 @@ log( "DEBUG " .. _getItemSummary( condition ) .. " - Actions: "..tostring(json.e
 				end
 			end
 
-			log( _getItemSummary( sequence ) .. " - " .. msg, "ConditionSequence.updateStatus", 4 )
-
-			-- Update the level
-			params.hasLevelChanged = Condition.setLevel( sequence, level )
-
-			--params.lastUpdateTime = context.lastUpdateTime
-			return Condition.setStatus( sequence, status, params )
+			log( _getItemSummary( sequence ) .. " - " .. msg, "ConditionSequence.computeStatus", 4 )
+			return status, level
 		end
 	}
 	ConditionTypes["condition_sequence_separator"] = {
@@ -2441,6 +2386,51 @@ log( "DEBUG " .. _getItemSummary( condition ) .. " - Actions: "..tostring(json.e
 				sequenceItem.condition.id = sequenceItem.id .. ".1"
 				Condition.init( sequenceItem.condition, sequenceItem._ruleId, sequenceItem._parent, ruleContext )
 			end
+		end
+	}
+
+	-- Condition of type 'function'
+	ConditionTypes["condition_function"] = {
+		init = function( condition, ruleContext )
+			condition.mainType = "Function"
+			if (condition.functionContent == nil) then
+				return
+			end
+			local chunk, strError = loadstring( "return function(context) \n" .. condition.functionContent .. "\nend" )
+			if ( chunk == nil ) then
+				Rule.addError( condition._ruleId, "Init rule condition", "Error in functionContent: " .. tostring( strError ) )
+			else
+				-- Put the chunk in the plugin environment
+				setfenv( chunk, getfenv( 1 ) )
+				condition.callback = chunk()
+				condition.functionContent = nil
+			end
+		end,
+
+		check = function( condition )
+			if not _checkParameters( condition, { "callback" } ) then
+				return false
+			end
+			return true
+		end,
+
+		start = function( condition )
+		end,
+
+		computeStatus = function( condition, params )
+			local status = 0
+			if ( type( condition.callback ) == "function" ) then
+				-- Execute function
+				log( _getItemSummary( condition ) .. " - Do custom function with context :" .. tostring( json.encode( condition._context ) ), "ConditionFunction.computeStatus", 3 )
+				local ok, result = pcall( condition.callback, condition._context )
+				if not ok then
+					Rule.addError( condition._ruleId, "RuleCondition", _getItemSummary( condition ) .. " - " .. tostring( result ) )
+				end
+				if ( result == true ) then
+					status = 1
+				end
+			end
+			return status
 		end
 	}
 
@@ -2531,20 +2521,83 @@ Condition = {
 			end
 		end
 		log( msg, "Condition.updateStatus", 4 )
-		local hasSomethingChange = ConditionTypes[condition.type].updateStatus( condition, params )
 
+		local params = params or {}
+		local status, level = ConditionTypes[condition.type].computeStatus( condition, params )
+
+		-- Check since interval if exists
+		local hasToCheckConditionStatusLater
+		if ( condition.modifiers and condition.modifiers.sinceInterval ) then
+			status, hasToCheckConditionStatusLater = Condition.manageSinceInterval( condition, status, params )
+		end
+
+		-- Update the level
+		if ( level ~= nil ) then
+			params.levelHasChanged = Condition.setLevel( condition, level )
+		end
+
+		-- Update the status
+		local hasStatusChanged = Condition.setStatus( condition, status, params )
+
+		-- Execute the condition actions of the parent if needed
+		-- TODO : enlever condition hasParentStatusChanged mais ne pas exécuter action parent au changement de statut (déjà fait par enfants)
+		local isConditionActionToDo = false
+		if (
+			hasStatusChanged
+			and condition.isChildConditionValue and condition._parent.isMainConditionValue
+			and ( condition._parent.actions ~= nil )
+		) then
+			if ( ( status == 1 ) and ActionGroups.isMatchingEvent( condition._parent.actions, "conditionStart" ) ) then
+				isConditionActionToDo = true
+				ActionGroups.execute( condition._parent.actions, condition._ruleId, "conditionStart", nil, params )
+			elseif ( ( status == 0 ) and ActionGroups.isMatchingEvent(condition._parent.actions, "conditionEnd" ) ) then
+				isConditionActionToDo = true
+				ActionGroups.execute( condition._parent.actions, condition._ruleId, "conditionEnd", nil, params )
+			end
+		end
+
+		-- Update the parent
+		local hasParentStatusChanged = false
+		-- TODO : if lastUpdateTime > lastStatusUpdateTime transmettre params.context pour update
+		local parent = condition._parent
+		if ( ( parent ~= nil ) and not params.noPropagation and ( hasStatusChanged or params.levelHasChanged or not parent.hasOnlyTriggers ) ) then
+			log( msg .. " - Update parent " .. _getItemSummary( parent ), "Condition.setStatus", 3 )
+			local updateMethod, updateParams
+			if ( parent.mainType == "Rule" ) then
+				updateMethod = Rule.updateStatus
+			elseif ( parent.mainType ~= "ActionGroup" ) then
+				updateMethod = Condition.updateStatus
+				updateParams = { lastUpdateTime = condition._context.lastStatusUpdateTime, context = params.context }
+			else
+				log( msg .. " - No update for parent " .. parent.mainType, "Condition.setStatus", 3 )
+			end
+			if updateMethod then
+				if isConditionActionToDo then
+					ScheduledTasks.add(
+						{ ruleId = condition._ruleId, summary = "Update status of " .. _getItemSummary( parent ) },
+						updateMethod, 0, { parent, updateParams }
+					)
+				else
+					hasParentStatusChanged = updateMethod( parent, updateParams )
+				end
+			end
+		end
+
+		local hasSomethingChange = ( hasStatusChanged or hasToCheckConditionStatusLater )
 		if ( hasSomethingChange and params and params.saveRulesInfosOnChange ) then
 			RulesInfos.save( { condition._ruleId } )
 		end
 
+log( _getItemSummary( condition ) .. " " .. json.encode( params ), "Condition.updateStatus", 5 )
 		return hasSomethingChange
 	end,
 
 	-- Modify status of the condition
 	setStatus = function( condition, status, params )
 		local msg = _getItemSummary( condition )
-		local hasStatusChanged, hasParentStatusChanged = false, false
+		local hasStatusChanged = false
 		local params = params or {}
+log( _getItemSummary( condition ) .. " " .. json.encode( params ), "Condition.setStatus", 4 )
 		local elapsedTime = os.difftime( os.time(), math.max( ( condition._context.lastUpdateTime or 0 ), ( params.lastUpdateTime or 0 ) ) ) -- If elapsedTime > 0, the change could come from a reload
 		if ( ( condition._context.status < 1 ) and ( status == 1 ) ) then
 			-- The condition has just been activated
@@ -2553,7 +2606,7 @@ Condition = {
 			condition._context.lastStatusUpdateTime = os.time()
 			hasStatusChanged = true
 			--if ( condition.actions and not ( condition.isMainConditionValue == true ) ) then
-			if ( condition.actions ) then
+			if ( condition.actions and not condition.isMainConditionValue ) then
 				--ActionGroups.execute(condition.actions, condition._ruleId, "conditionStart", condition.level, params )
 				ActionGroups.execute( condition.actions, condition._ruleId, "conditionStart", nil, params )
 			end
@@ -2564,7 +2617,7 @@ Condition = {
 			condition._context.lastStatusUpdateTime = os.time()
 			hasStatusChanged = true
 			--if ( condition.actions and not ( condition.isMainConditionValue == true ) ) then
-			if ( condition.actions ) then
+			if ( condition.actions and not condition.isMainConditionValue ) then
 				--ActionGroups.execute(condition.actions, condition._ruleId, "conditionEnd", condition.level, params )
 				ActionGroups.execute( condition.actions, condition._ruleId, "conditionEnd", nil, params )
 			end
@@ -2586,24 +2639,10 @@ Condition = {
 			condition._context.status = 0
 			log( msg .. " is inactive", "Condition.setStatus", 3 )
 		end
-
-		-- TODO : if lastUpdateTime > lastStatusUpdateTime transmettre params.context pour update
-		-- Update the parent of the condition
-		if ( ( hasStatusChanged or params.levelHasChanged ) and ( condition._parent ~= nil ) and not params.noPropagation ) then
-			local parent = condition._parent
-			log( msg .. " - Update parent " .. _getItemSummary( parent ), "Condition.setStatus", 3 )
-			if ( parent.mainType == "Rule" ) then
-				hasParentStatusChanged = Rule.updateStatus( parent )
-			elseif ( parent.mainType ~= "ActionGroup" ) then
-				hasParentStatusChanged = Condition.updateStatus( parent, { lastUpdateTime = condition._context.lastStatusUpdateTime, context = params.context } )
-			else
-				log( msg .. " - No update for parent " .. parent.mainType, "Condition.setStatus", 3 )
-			end
-		end
-
-		return hasStatusChanged, hasParentStatusChanged
+		return hasStatusChanged
 	end,
 
+	-- Get the status of the condition
 	getStatus = function( condition )
 		--log(_getItemSummary(condition) .. " - Get status", "Condition.getStatus", 4)
 		local context = condition._context
@@ -4121,11 +4160,6 @@ Rules = {
 			end
 		end
 
-		-- Update the last known free rule id
-		if (rule.id > _lastRuleId) then
-			_lastRuleId = rule.id
-		end
-
 		-- Add the rule
 		table.insert(_rules, rule)
 		-- Add to indexes
@@ -4171,15 +4205,13 @@ Rules = {
 		return true
 	end,
 
-	addRulesWithoutId = function ()
+	addRulesWithoutId = function()
 		-- Add remaining rules without id
-		-- For the moment, I've not found a way to edit safely the XML files
-		-- So it's done by the UI client which upload the modified XML file
-		for _, rule in ipairs(_rulesWithoutId) do
+		for _, rule in ipairs( _rulesWithoutId ) do
 			rule.id = Rules.getNextFreeId()
-			log("Set id to #" .. tostring(rule.id) .. " for rule '" .. rule.name .. "' in file '" .. rule.fileName .. "' at position " .. tostring(rule.idx), "Rules.addRulesWithoutId")
-			Rule.saveId(rule)
-			Rules.add(rule, true)
+			log( "Set id to #" .. tostring( rule.id ) .. " for rule '" .. rule.name .. "' in file '" .. rule.fileName .. "' at position " .. tostring( rule.idx ), "Rules.addRulesWithoutId" )
+			Rule.saveId( rule )
+			Rules.add( rule, true )
 		end
 		_rulesWithoutId = {}
 	end,
@@ -4308,54 +4340,63 @@ Rules = {
 -- **************************************************
 
 RulesFile = {
-	getContent = function (fileName)
-		local lfs = require("lfs")
+	getContent = function( fileName )
+		local lfs = require( "lfs" )
 		local fileName = fileName or "C_RulesEngine_Rules.xml"
 		local path = ""
 		local wasCompressed = false
 
-		if lfs.attributes("/etc/cmh-ludl/" .. fileName .. ".lzo", "mode") then
+		if lfs.attributes( "/etc/cmh-ludl/" .. fileName .. ".lzo", "mode" ) then
 			wasCompressed = true
-			log("Decompress file '/etc/cmh-ludl/" .. fileName .. ".lzo'", "RulesFile.getContent")
+			log( "Decompress file '/etc/cmh-ludl/" .. fileName .. ".lzo'", "RulesFile.getContent" )
 			path = "/tmp/"
-			os.execute(decompressScript .. "decompress_lzo_file_in_tmp " .. fileName)
+			os.execute( decompressScript .. "decompress_lzo_file_in_tmp " .. fileName )
 		end
 
-		log("Load content from file '" .. path .. fileName .. "'", "RulesFile.getContent")
-		local file = io.open(path .. fileName)
-		if (file == nil) then
-			log("File '" .. path .. fileName .. "' does not exist", "RulesFile.getContent")
+		log( "Load content from file '" .. path .. fileName .. "'", "RulesFile.getContent" )
+		local file = io.open( path .. fileName )
+		if ( file == nil ) then
+			log( "File '" .. path .. fileName .. "' does not exist", "RulesFile.getContent" )
 			return
 		end
 
-		local content = file:read("*a")
+		local content = file:read( "*a" )
 		file:close()
 
 		return content, path, wasCompressed
 	end,
 
-	saveContent = function (path, fileName, content, hasToCompress)
-		log("Save content into file '" .. path .. fileName .. "'", "RulesFile.saveContent")
+	saveContent = function( path, fileName, content, hasToCompress )
+		log( "Save content into file '" .. path .. fileName .. "'", "RulesFile.saveContent" )
 		local file = io.open(path .. fileName, "w")
 		if (file == nil) then
-			log("File '" .. path .. fileName .. "' can not be created", "RulesFile.saveContent")
+			log( "File '" .. path .. fileName .. "' can not be created", "RulesFile.saveContent" )
 			return
 		end
-		file:write(content)
+		file:write( content )
 		file:close()
-		if (hasToCompress) then
-			log("Compress file '/etc/cmh-ludl/" .. fileName .. ".lzo'", "RulesFile.saveContent")
-			os.execute(compressScript .. "compress_lzo_file_in_tmp " .. fileName)
+		if hasToCompress then
+			log( "Compress file '/etc/cmh-ludl/" .. fileName .. ".lzo'", "RulesFile.saveContent" )
+			os.execute( compressScript .. "compress_lzo_file_in_tmp " .. fileName )
 		end
 	end,
 
 	-- Load rules from xml file (Blockly format)
 	-- Get the rule descriptions in the file lzo uploaded by javascript client
 	-- For openLuup, this file is save in etc/cmh-ludl
-	load = function (fileName, keepFormerRuleWithSameId, ruleIdxes)
-		debugLogBegin("RulesFile.load")
-		ruleIdxes = string.split(ruleIdxes, ",", tonumber)
-		log("Load rules from file '" .. fileName .. "' and idx " .. json.encode(ruleIdxes), "RulesFile.load")
+	load = function( fileName, keepFormerRuleWithSameId, ruleIdxes, ruleNames )
+		debugLogBegin( "RulesFile.load" )
+		local fileName = fileName or "C_RulesEngine_Rules.xml"
+		local msg = "Load rules from file '" .. fileName .. "'"
+		ruleIdxes = string.split( ruleIdxes, ",", tonumber )
+		if ( #ruleIdxes > 0 ) then
+			msg = msg .. " and idx " .. json.encode( ruleIdxes )
+		end
+		ruleNames = string.split( ruleNames, "," )
+		if ( #ruleNames > 0 ) then
+			msg = msg .. " and ruleNames " .. json.encode( ruleNames )
+		end
+		log( msg, "RulesFile.load" )
 
 		-- Parser of an LOM item
 		function parseXmlItem (xmlItem, lvl)
@@ -4489,18 +4530,18 @@ RulesFile = {
 		end
 
 		-- Parse the XML string into LOM (Lua Object Model from LuaExpat)
-		local content = RulesFile.getContent(fileName)
+		local content = RulesFile.getContent( fileName )
 		if (content == nil) then
 			RulesInfos.save()
-			debugLogEnd("RulesFile.load")
+			debugLogEnd( "RulesFile.load" )
 			return
 		end
-		local lom = require("lxp.lom")
-		xmltable = lom.parse(content)
+		local lom = require( "lxp.lom" )
+		xmltable = lom.parse( content )
 	--log(json.encode(xmltable))
 	--print("")
 
-		-- Add the rules parsed from XML
+		-- Add the rules parsed from XML (eventually filtered by idx or name)
 		local idx = 1
 		if ( ( type( xmltable ) == "table" ) and ( xmltable.tag == "xml" ) ) then
 			for _, xmlRule in ipairs( xmltable ) do
@@ -4509,14 +4550,20 @@ RulesFile = {
 						local rule = parseXmlItem( xmlRule, 0 )
 						log( "Rule parsed from XML: " .. json.encode(rule), "RulesFile.load", 5 )
 						rule.id = tonumber( rule.id or "" )
+						-- Update the last known free rule id
+						if ( rule.id and ( rule.id > _lastRuleId ) ) then
+							_lastRuleId = rule.id
+						end
 						rule.fileName = fileName
 						rule.idx = idx -- Index in the XML file
-						Rules.add( rule, keepFormerRuleWithSameId )
+						if ( ( #ruleNames == 0 ) or ( table.contains( ruleNames, rule.name ) ) ) then
+							Rules.add( rule, keepFormerRuleWithSameId )
+						end
 					end
 					idx = idx +1
 				end
 			end
-			if (isInitialized()) then
+			if isInitialized() then
 				Rules.addRulesWithoutId()
 				RulesInfos.save()
 			end
@@ -4524,6 +4571,8 @@ RulesFile = {
 		else
 			log("File '" .. fileName .. "' does not contain XML", "RulesFile.load")
 		end
+
+		Variable.set( g_deviceId, VARIABLE.LAST_MAIN_UPDATE, tostring( os.time() ) )
 
 		debugLogEnd("RulesFile.load")
 	end
@@ -4534,8 +4583,8 @@ RulesFile = {
 -- Main methods
 -- **************************************************
 
-function loadModules ()
-	debugLogBegin("loadModules")
+function loadModules()
+	debugLogBegin( "loadModules" )
 
 	local moduleNames = string.split( _params.modules, "," )
 	for _, moduleName in ipairs( moduleNames ) do
@@ -4551,30 +4600,30 @@ function loadModules ()
 		end
 	end
 
-	debugLogEnd("loadModules")
+	debugLogEnd( "loadModules" )
 end
 
-function loadStartupFiles ()
-	debugLogBegin("loadStartupFiles")
+function loadStartupFiles()
+	debugLogBegin( "loadStartupFiles" )
 
-	local lfs = require("lfs")
-	local fileNames = string.split(_params.startupFiles, ",")
-	for _, fileName in ipairs(fileNames) do
+	local lfs = require( "lfs" )
+	local fileNames = string.split( _params.startupFiles, "," )
+	for _, fileName in ipairs( fileNames ) do
 		-- Load and execute startup LUA file
 		local path = ""
-		if lfs.attributes("/etc/cmh-ludl/" .. fileName .. ".lzo", "mode") then
-			log("Decompress LUA startup file '/etc/cmh-ludl/" .. tostring(fileName) .. ".lzo'", "loadStartupFiles")
+		if lfs.attributes( "/etc/cmh-ludl/" .. fileName .. ".lzo", "mode" ) then
+			log( "Decompress LUA startup file '/etc/cmh-ludl/" .. tostring( fileName ) .. ".lzo'", "loadStartupFiles" )
 			path = "/tmp/"
-			os.execute(decompressScript .. "decompress_lzo_file_in_tmp " .. fileName)
+			os.execute( decompressScript .. "decompress_lzo_file_in_tmp " .. fileName )
 		end
-		log("Load LUA startup from file '" .. path .. tostring(fileName) .. "'", "loadStartupFiles")
-		if lfs.attributes(path .. fileName, "mode") then
-			local startup, errorMessage = loadfile(path .. fileName)
-			if (startup ~= nil) then
-				log("Execute startup LUA code", "loadStartupFiles")
+		log( "Load LUA startup from file '" .. path .. tostring( fileName ) .. "'", "loadStartupFiles" )
+		if lfs.attributes( path .. fileName, "mode" ) then
+			local startup, errorMessage = loadfile( path .. fileName )
+			if ( startup ~= nil ) then
+				log( "Execute startup LUA code", "loadStartupFiles" )
 				-- Put the startup in the plugin environment
-				setfenv(startup, getfenv(1))
-				local status, result = pcall(startup)
+				setfenv( startup, getfenv(1) )
+				local status, result = pcall( startup )
 				if not status then
 					error( result, "startup" )
 				end
@@ -4586,41 +4635,53 @@ function loadStartupFiles ()
 		end
 	end
 
-	debugLogEnd("loadStartupFiles")
+	debugLogEnd( "loadStartupFiles" )
 end
 
-function loadRulesFiles ()
-	debugLogBegin("loadRulesFiles")
+function loadRulesFiles()
+	debugLogBegin( "loadRulesFiles" )
 
-	local fileNames = string.split(_params.rulesFiles, ",")
-	log("Load rules from files", "loadRulesFiles")
+	local fileNames = string.split( _params.rulesFiles, "," )
+	log( "Load rules from files", "loadRulesFiles" )
 	-- Add rules from XML files
-	for _, fileName in ipairs(fileNames) do
-		RulesFile.load(fileName, true)
+	for _, fileName in ipairs( fileNames ) do
+		RulesFile.load( fileName, true )
 	end
 	Rules.addRulesWithoutId()
 
-	debugLogEnd("loadRulesFiles")
+	debugLogEnd( "loadRulesFiles" )
 end
 
 function isEnabled()
-	return (_isEnabled == true)
+	return ( _isEnabled == true )
 end
 
 function isStarted()
-	return (_isStarted == true)
+	return ( _isStarted == true )
 end
 
 function isInitialized()
-	return (_isInitialized == true)
+	return ( _isInitialized == true )
+end
+
+-- Initialize engine
+function initialize( hasToLoadRules )
+	if not ( hasToLoadRules == false ) then
+		-- Load rules
+		History.load()
+		RulesInfos.load()
+		loadRulesFiles()
+		RulesInfos.remove( { isFormer = true } )
+	end
+	_isInitialized = true
 end
 
 -- Start engine
-function start ()
+function start()
 	debugLogBegin( "start" )
 
-	if ( _isStarted ) then
-		log("RulesEngine already started", "start")
+	if _isStarted then
+		log( "RulesEngine already started", "start" )
 		return
 	end
 
@@ -4631,58 +4692,56 @@ function start ()
 	RulesInfos.save()
 	_isStarted = true
 
-	debugLogEnd("start")
+	debugLogEnd( "start" )
 end
 
 -- Stop engine
-function stop ()
-	debugLogBegin("stop")
+function stop()
+	debugLogBegin( "stop" )
 
-	if (not _isStarted) then
-		log("RulesEngine already stopped", "stop")
+	if not _isStarted then
+		log( "RulesEngine already stopped", "stop" )
 		return
 	end
 
-	log("Stop RulesEngine", "stop")
+	log( "Stop RulesEngine", "stop" )
 	History.add( nil, "General", "Stop engine" )
 	Rules.stop()
 	RulesInfos.save()
 	_isStarted = false
 
-	debugLogEnd("stop")
+	debugLogEnd( "stop" )
 end
 
 -- Enable engine
-function enable ()
-	log("Enable RulesEngine", "enable")
+function enable( hasToLoadRules )
+	log( "Enable RulesEngine", "enable" )
 	if (_isEnabled) then
-		log("RulesEngine is already enabled", "enable")
+		log( "RulesEngine is already enabled", "enable" )
 		return
 	end
 	_isEnabled = true
 	History.add( nil, "General", "Enable engine" )
+	if not _isInitialized then
+		initialize( hasToLoadRules )
+	end
 	start()
 	Variable.set( g_deviceId, VARIABLE.SWITCH_POWER, "1" )
+	Variable.set( g_deviceId, VARIABLE.LAST_MAIN_UPDATE, tostring( os.time() ) )
 end
 
 -- Disable engine
-function disable ()
-	log("Disable RulesEngine", "disable")
-	if (not _isEnabled) then
-		log("RulesEngine is already disabled", "disable")
+function disable()
+	log( "Disable RulesEngine", "disable" )
+	if not _isEnabled then
+		log( "RulesEngine is already disabled", "disable" )
 		return
 	end
 	_isEnabled = false
 	History.add( nil, "General", "Disable engine" )
 	stop()
-	Variable.set(g_deviceId, VARIABLE.SWITCH_POWER, "0")
-end
-
--- Dump for debug
-function dump ()
-	log("Dump RulesEngine datas", "dump", 4)
-	log("rules:" .. json.encode(_rules), "dump", 4)
-	log("_indexRulesByEvent:" .. json.encode(_indexRulesByEvent), "dump", 4)
+	Variable.set( g_deviceId, VARIABLE.SWITCH_POWER, "0" )
+	Variable.set( g_deviceId, VARIABLE.LAST_MAIN_UPDATE, tostring( os.time() ) )
 end
 
 -- Sets the verbosity level
@@ -4704,22 +4763,28 @@ end
 -- Unit tests
 -- **************************************************
 
--- Reset (just for unit tests)
-function reset ()
-	log("Reset RulesEngine", "reset")
-	-- Initialisations of rules
-	-- for ruleId, rule in pairs(_rules) do
-		-- Rule.init(rule)
-	-- end
-	_rules = {}
-	_indexRulesById = {}
-	_indexRulesByName = {}
-	_indexRulesByEvent = {}
-	_params = {}
+-- Just for unit tests
+Test = {
+	resetTasks = function()
+		log("Reset scheduled tasks", "Test.resetTasks")
+		_scheduledTasks = {}
+		_nextWakeUps = {}
+	end,
 
-	_scheduledTasks = {}
-	_nextWakeUps = {}
-end
+	resetRules = function()
+		log("Reset rules", "Test.resetRules")
+		-- Initialisations of rules
+		-- for ruleId, rule in pairs(_rules) do
+			-- Rule.init(rule)
+		-- end
+		_rules = {}
+		_indexRulesById = {}
+		_indexRulesByName = {}
+		_rulesInfos = {}
+		_indexItemsByEvent = {}
+		--_params = {}
+	end
+}
 
 
 -- **************************************************
@@ -4856,7 +4921,7 @@ local _handlerCommands = {
 				result = { success = success, errormsg = msg }
 			elseif (actionName == "setAck") then
 				--local success, msg = Rule.setAcknowledgement(deviceId, actionParam)
-				-- TODO : acknoledgement in ImperiHome can not be canceled
+				-- TODO : acknowledgement in ImperiHome can not be canceled
 				local success, msg = Rule.setAcknowledgement(deviceId, "1")
 				result = { success = success, errormsg = msg }
 			else
@@ -4929,12 +4994,14 @@ local function _initPluginInstance()
 	_isEnabled = ( Variable.getOrInit( g_deviceId, VARIABLE.SWITCH_POWER, "0" ) == "1" )
 	Variable.getOrInit( g_deviceId, VARIABLE.LAST_MESSAGE, "" )
 	Variable.getOrInit( g_deviceId, VARIABLE.LAST_UPDATE, "" )
+	Variable.getOrInit( g_deviceId, VARIABLE.LAST_MAIN_UPDATE, "" )
 	_params = {
 		deviceId = g_deviceId,
 		modules = Variable.getOrInit( g_deviceId, VARIABLE.MODULES, "" ) or "",
 		toolboxConfig = Variable.getOrInit( g_deviceId, VARIABLE.TOOLBOX_CONFIG, "" ) or "",
 		startupFiles = Variable.getOrInit( g_deviceId, VARIABLE.STARTUP_FILES, "C_RulesEngine_Startup.lua" ) or "",
-		rulesFiles = Variable.getOrInit( g_deviceId, VARIABLE.RULES_FILES, "C_RulesEngine_Rules.xml" ) or ""
+		rulesFiles = Variable.getOrInit( g_deviceId, VARIABLE.RULES_FILES, "C_RulesEngine_Rules.xml" ) or "",
+		noLoadIfDisabled = ( Variable.get( g_deviceId, VARIABLE.NO_LOAD_IF_DISABLED ) == "1" )
 	}
 
 	--[[
@@ -4961,15 +5028,10 @@ local function _deferredStartup()
 	-- Load custom Lua Startup
 	loadStartupFiles()
 
-	-- Load rules
-	History.load()
-	RulesInfos.load()
-	loadRulesFiles()
-	RulesInfos.remove( { isFormer = true } )
-
-	_isInitialized = true
-
-	if isEnabled() then
+	if _params.noLoadIfDisabled and not isEnabled() then
+		UI.show( "Engine disabled : no rule load" )
+	else
+		initialize()
 		start()
 	end
 end
@@ -5068,7 +5130,9 @@ local RulesEngine = {
 	setVerbosity = setVerbosity,
 	setMinRecurrentInterval = setMinRecurrentInterval,
 	--
-	startup = startup
+	startup = startup,
+	--
+	Test = Test
 }
 -- Expose the RulesEngine in the Global Name Space for custom scripts
 _G["RulesEngine"] = RulesEngine
