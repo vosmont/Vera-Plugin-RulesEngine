@@ -22,7 +22,7 @@ end
 
 _NAME = "RulesEngine"
 _DESCRIPTION = "Rules Engine for the Vera with visual editor"
-_VERSION = "0.15.1"
+_VERSION = "0.16"
 _AUTHOR = "vosmont"
 
 -- **************************************************
@@ -3576,7 +3576,7 @@ Hooks = {
 				local status, result = pcall(callback, rule)
 				if not status then
 					log( Rule.getSummary(rule) .. " - Event '" .. event .. "' - ERROR: " .. tostring(result), "Hooks.execute", 1 )
-					Rule.addError( rule, "Hook " .. event, tostring( result ) )
+					Rule.addError( rule.id, "Hook " .. event, tostring( result ) )
 				elseif not result then
 					isHookOK = false
 				end
@@ -4125,6 +4125,7 @@ Rules = {
 	-- Add a rule
 	add = function( rule, keepFormerRuleWithSameId )
 		debugLogBegin( "Rules.add" )
+		local ok, result
 		local msg = Rule.getSummary( rule )
 
 		if ( ( rule == nil ) or ( type( rule ) ~= "table" ) ) then
@@ -4156,7 +4157,7 @@ Rules = {
 				Rules.remove( formerRule.fileName, formerRule.idx, formerRule.id )
 				formerRule = nil
 			else
-				Rule.addError( rule, "Rules.add", "Duplicate rule with id #" .. formerRule.id .. "(" .. formerRule.name .. ")" )
+				Rule.addError( rule.id, "Rules.add", "Duplicate rule with id #" .. formerRule.id .. "(" .. formerRule.name .. ")" )
 			end
 		end
 
@@ -4167,7 +4168,10 @@ Rules = {
 		_indexRulesByName[rule.name] = rule
 
 		-- Init
-		Rule.init(rule)
+		ok, result = pcall( Rule.init, rule )
+		if not ok then
+			Rule.addError( rule.id, "RuleInit", _getItemSummary( rule ) .. " - " .. tostring( result ) )
+		end
 
 		-- Informations of the rule
 		if ( formerRuleInformations ~= nil ) then
@@ -4300,16 +4304,24 @@ Rules = {
 	end,
 
 	-- Start all the rules
-	start = function ()
-		for ruleId, rule in pairs(_rules) do
-			Rule.start(rule)
+	start = function()
+		local ok, result
+		for ruleId, rule in pairs( _rules ) do
+			ok, result = pcall( Rule.start, rule )
+			if not ok then
+				Rule.addError( ruleId, "RuleStart", _getItemSummary( rule ) .. " - " .. tostring( result ) )
+			end
 		end
 	end,
 
 	-- Stop all the rules
 	stop = function ()
-		for ruleId, rule in pairs(_rules) do
-			Rule.stop(rule)
+		local ok, result
+		for ruleId, rule in pairs( _rules ) do
+			ok, result = pcall( Rule.stop, rule )
+			if not ok then
+				Rule.addError( ruleId, "RuleStop", _getItemSummary( rule ) .. " - " .. tostring( result ) )
+			end
 		end
 	end,
 

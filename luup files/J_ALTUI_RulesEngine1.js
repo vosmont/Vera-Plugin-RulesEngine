@@ -1535,13 +1535,25 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 	function _getDeviceTypes() {
 		return _devicesTypes;
 	}
+	function _getDeviceTypeEventList( deviceType ) {
+		var eventList = {};
+		var devicetypesDB = MultiBox.getDeviceTypesDB( "0" ); // TODO : controller_id
+		var dt = devicetypesDB[ deviceType ];
+		if ( dt.ui_static_data && dt.ui_static_data.eventList2 ) {
+			for ( var i = 0; i < dt.ui_static_data.eventList2.length; i++ ) {
+				var event = dt.ui_static_data.eventList2[ i ];
+				eventList[ event.id.toString() ] = event;
+			}
+		}
+		return eventList;
+	}
 
 	function _pageRuleEdit( altuiid, fileName, idx, id, readOnly ) {
 		var device = MultiBox.getDeviceByAltuiID( altuiid );
 
 		// Page preparation
-		//UIManager.clearPage( _T( "Control Panel" ), ( readOnly ? _T( "View rule" ) : _T( "Edit rule" ) ) + " - {0} <small>#{1}</small>".format( device.name , altuiid ), UIManager.oneColumnLayout );
-		UIManager.clearPage( _T( "Rule" ), ( readOnly ? _T( "View rule" ) : _T( "Edit rule" ) ) + " - {0} <small>#{1}</small>".format( device.name , altuiid ), UIManager.oneColumnLayout );
+		UIManager.clearPage( _T( "Control Panel" ), ( readOnly ? _T( "View rule" ) : _T( "Edit rule" ) ) + " - {0} <small>#{1}</small>".format( device.name , altuiid ), UIManager.oneColumnLayout );
+		//UIManager.clearPage( _T( "Rule" ), ( readOnly ? _T( "View rule" ) : _T( "Edit rule" ) ) + " - {0} <small>#{1}</small>".format( device.name , altuiid ), UIManager.oneColumnLayout );
 		$(window).scrollTop(0);
 
 		// Rules in the XML file
@@ -1840,6 +1852,7 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 		getDeviceActionNames: _getDeviceActionNames,
 		getDeviceAction: _getDeviceAction,
 		getDeviceTypes: _getDeviceTypes,
+		getDeviceTypeEventList: _getDeviceTypeEventList,
 		getRoomList: _getRoomList,
 		getRuleList: _getRuleList,
 		getSceneList: _getSceneList,
