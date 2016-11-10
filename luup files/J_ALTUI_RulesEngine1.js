@@ -494,7 +494,7 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 		var xmlRoot = $.parseXML( '<xml xmlns="http://www.w3.org/1999/xhtml"></xml>' );
 		var $xml = $( xmlRoot ).children(0);
 		_encodeCarriageReturns( xmlRules );
-		xmlRules.each( function( idx, xmlRule ) {
+		$(xmlRules).each( function( idx, xmlRule ) {
 			$xml.append( xmlRule );
 		} );
 		// Clean the XML file (domToPrettyText adds some text between nodes)
