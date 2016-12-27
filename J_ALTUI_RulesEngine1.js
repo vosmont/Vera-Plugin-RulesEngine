@@ -1288,7 +1288,7 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 
 	function _pageTimeline( altuiid ) {
 		var device = MultiBox.getDeviceByAltuiID( altuiid );
-		UIManager.clearPage( "Control Panel", "Timeline - {0} <small>#{1}</small>".format( device.name , altuiid ), UIManager.oneColumnLayout );
+		UIManager.clearPage( "Control Panel", "Timeline - {0} <small>#{1}</small>".format( device.name , altuiid ), UIManager.oneColumnLayout, [altuiid],ALTUI_RulesEngine._pageTimeline,this);
 		show_loading();
 		$(".altui-mainpanel").append( '<div class="timeline"></div>' );
 		$.when( _getTimelineAsync() )
@@ -1553,7 +1553,8 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 		var device = MultiBox.getDeviceByAltuiID( altuiid );
 
 		// Page preparation
-		UIManager.clearPage( "Control Panel", ( readOnly ? _T( "View rule" ) : _T( "Edit rule" ) ) + " - {0} <small>#{1}</small>".format( device.name , altuiid ), UIManager.oneColumnLayout );
+		// UIManager.clearPage( "Control Panel", ( readOnly ? _T( "View rule" ) : _T( "Edit rule" ) ) + " - {0} <small>#{1}</small>".format( device.name , altuiid ), UIManager.oneColumnLayout );
+		UIManager.clearPage( "Control Panel", ( readOnly ? _T( "View rule" ) : _T( "Edit rule" ) ) + " - {0} <small>#{1}</small>".format( device.name , altuiid ), UIManager.oneColumnLayout, [altuiid, fileName, idx, id, readOnly], ALTUI_RulesEngine.pageRuleEdit,this);
 		//UIManager.clearPage( _T( "Rule" ), ( readOnly ? _T( "View rule" ) : _T( "Edit rule" ) ) + " - {0} <small>#{1}</small>".format( device.name , altuiid ), UIManager.oneColumnLayout );
 		$(window).scrollTop(0);
 
