@@ -1130,7 +1130,7 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 		};
 
 		// Page preparation
-		UIManager.clearPage( "Control Panel", "Rules - {0} <small>#{1}</small>".format( device.name , altuiid ), UIManager.oneColumnLayout, [ altuiid ], ALTUI_RulesEngine.pageRules, ALTUI_RulesEngine );
+		UIManager.clearPage( "Control Panel", "Rules - {0} <small>#{1}</small>".format( device.name , altuiid ), null, [ altuiid ], ALTUI_RulesEngine.pageRules, ALTUI_RulesEngine );
 		//UIManager.clearPage( "Rules", "Rules - {0} <small>#{1}</small>".format( device.name , altuiid ) );
 		$( "#altui-pagetitle" )
 			.css( "display", "inline" )
