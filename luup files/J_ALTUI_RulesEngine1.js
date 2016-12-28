@@ -13,7 +13,6 @@ var ALTUI_RulesEngine = ( function( window, undefined ) {
 	var _location = window.location.pathname.replace( "/data_request", "" ) + "/";
 	var _resourceLoaded = {};
 	var _settings = {};
-	var _registerIsDone = false;
 	var _rulesInfos = {};
 	var _altuiid, _version, _debugMode;
 	var _lastUpdate = 0;
@@ -494,7 +493,7 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 		var xmlRoot = $.parseXML( '<xml xmlns="http://www.w3.org/1999/xhtml"></xml>' );
 		var $xml = $( xmlRoot ).children(0);
 		_encodeCarriageReturns( xmlRules );
-		$(xmlRules).each( function( idx, xmlRule ) {
+		$( xmlRules ).each( function( idx, xmlRule ) {
 			$xml.append( xmlRule );
 		} );
 		// Clean the XML file (domToPrettyText adds some text between nodes)
@@ -1027,7 +1026,7 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 						+				'<div class="pull-right text-muted"><small>#' + ruleInfos.id + '</small></div>'
 						+				'<div class="panel-title altui-device-title" data-toggle="tooltip" data-placement="left">'
 						+					'<span class="altui-rule-arm glyphicon glyphicon-off" aria-hidden="true"></span>'
-						+					'<small class="altui-rule-title-name">' + ruleInfos.name + '</small>'
+						+					'<small class="altui-rule-title-name">' + ruleInfos.name.replace( /_/g, "-" ) + '</small>'
 						+				'</div>'
 						+			'</div>'
 						+			'<div class="panel-body altui-rule-body" title="' + _T( "View rule" ) + '">'
@@ -1131,11 +1130,14 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 		};
 
 		// Page preparation
-		UIManager.clearPage( _T( "Control Panel" ), "Rules - {0} <small>#{1}</small>".format( device.name , altuiid ) );
-		//UIManager.clearPage( _T( "Rules" ), "Rules - {0} <small>#{1}</small>".format( device.name , altuiid ) );
+		UIManager.clearPage( "Control Panel", "Rules - {0} <small>#{1}</small>".format( device.name , altuiid ), UIManager.oneColumnLayout, [ altuiid ], ALTUI_RulesEngine.pageRules, ALTUI_RulesEngine );
+		//UIManager.clearPage( "Rules", "Rules - {0} <small>#{1}</small>".format( device.name , altuiid ) );
 		$( "#altui-pagetitle" )
 			.css( "display", "inline" )
 			.after( "<div class='altui-device-toolbar'></div>" );
+
+		// Register
+		EventBus.registerEventHandler("on_ui_deviceStatusChanged", myModule, "onDeviceStatusChanged");
 
 		// On the left, get the rooms
 		$(".altui-leftnav").empty();
@@ -1287,7 +1289,7 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 
 	function _pageTimeline( altuiid ) {
 		var device = MultiBox.getDeviceByAltuiID( altuiid );
-		UIManager.clearPage( _T( "Control Panel" ), "Timeline - {0} <small>#{1}</small>".format( device.name , altuiid ), UIManager.oneColumnLayout );
+		UIManager.clearPage( "Control Panel", "Timeline - {0} <small>#{1}</small>".format( device.name , altuiid ), UIManager.oneColumnLayout, [ altuiid ], ALTUI_RulesEngine.pageTimeline, ALTUI_RulesEngine );
 		show_loading();
 		$(".altui-mainpanel").append( '<div class="timeline"></div>' );
 		$.when( _getTimelineAsync() )
@@ -1552,9 +1554,12 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 		var device = MultiBox.getDeviceByAltuiID( altuiid );
 
 		// Page preparation
-		UIManager.clearPage( _T( "Control Panel" ), ( readOnly ? _T( "View rule" ) : _T( "Edit rule" ) ) + " - {0} <small>#{1}</small>".format( device.name , altuiid ), UIManager.oneColumnLayout );
+		UIManager.clearPage( "Control Panel", ( readOnly ? _T( "View rule" ) : _T( "Edit rule" ) ) + " - {0} <small>#{1}</small>".format( device.name , altuiid ), UIManager.oneColumnLayout, [ altuiid, fileName, idx, id, readOnly ], ALTUI_RulesEngine.pageRuleEdit, ALTUI_RulesEngine );
 		//UIManager.clearPage( _T( "Rule" ), ( readOnly ? _T( "View rule" ) : _T( "Edit rule" ) ) + " - {0} <small>#{1}</small>".format( device.name , altuiid ), UIManager.oneColumnLayout );
 		$(window).scrollTop(0);
+
+		// Register
+		EventBus.registerEventHandler("on_ui_deviceStatusChanged", myModule, "onDeviceStatusChanged");
 
 		// Rules in the XML file
 		var _currentXmlRules = [];
@@ -1845,6 +1850,7 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 
 		onDeviceStatusChanged: _onDeviceStatusChanged,
 		pageRules: _pageRules,
+		pageRuleEdit: _pageRuleEdit,
 		pageTimeline: _pageTimeline,
 		showLuaEditor: _showLuaEditor,
 		hasDeviceActionService: _hasDeviceActionService,
@@ -1858,12 +1864,6 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 		getSceneList: _getSceneList,
 		getEngineStatus: _getEngineStatus
 	};
-
-	// Register
-	if ( !_registerIsDone ) {
-		EventBus.registerEventHandler("on_ui_deviceStatusChanged", myModule, "onDeviceStatusChanged");
-		_registerIsDone = true;
-	}
 
 	return myModule;
 })( window );
