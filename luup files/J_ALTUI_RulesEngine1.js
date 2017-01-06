@@ -1,5 +1,5 @@
 //# sourceURL=J_ALTUI_RulesEngine1.js
-"use strict";
+//"use strict";
 
 /**
  * This file is part of the plugin RulesEngine.
