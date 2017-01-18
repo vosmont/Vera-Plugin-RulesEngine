@@ -69,5 +69,16 @@
 				return 4, nil
 			</job>
 		</action>
+		<!-- Debug -->
+		<action>
+			<serviceId>urn:upnp-org:serviceId:RulesEngine1</serviceId>
+			<name>SetConditionStatus</name>
+			<job>
+				if (RulesEngine ~= nil) then
+					RulesEngine.Condition.updateStatus( lul_settings.conditionId, { isForced = true, status = lul_settings.status, level = lul_settings.level, lastUpdateTime = os.time() } )
+				end
+				return 4, nil
+			</job>
+		</action>
 	</actionList>
 </implementation>

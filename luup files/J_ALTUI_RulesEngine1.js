@@ -18,6 +18,9 @@ var ALTUI_RulesEngine = ( function( window, undefined ) {
 	var _lastUpdate = 0;
 	var _lastMainUpdate = 0;
 	var _workspaceHeight = 2000;
+	var _requestInterval = 3;
+	var _requestMaxInterval = 10;
+	var _lastRuleInfos = {};
 
 	var htmlControlPanel = '\
 <div id="rulesengine-blockly-panel">\
@@ -108,6 +111,7 @@ var ALTUI_RulesEngine = ( function( window, undefined ) {
 			<block type="action_device"><mutation action_type="dim"></mutation></block>\
 		</category>\
 		<block type="action_scene"></block>\
+		<block type="action_mqtt"></block>\
 	</category>\
 	<category name="Param">\
 		<block type="list_action_param"></block>\
@@ -124,6 +128,10 @@ var ALTUI_RulesEngine = ( function( window, undefined ) {
 	<block type="time"></block>\
 </category>\
 ';
+
+	function _debug( message ) {
+		Utils.logDebug( " RulesEngine:" + message );
+	}
 
 	// return styles needed by this plugin module
 	function _getStyle() {
@@ -146,6 +154,8 @@ div.altui-rule-acknowledged { cursor: pointer; background: url("http://vosmont.g
 .altui-rule-body .altui-rule-errors { color:red; font-size:0.8em; }\
 .altui-rule-xml .panel-body { padding: 0px; }\
 .altui-rule-xml-content { width: 100%; height: 200px; }\
+.altui-condition-info1 { text-decoration: underline overline; font-weight: bold; cursor: pointer !important; }\
+.altui-condition-info2 { font-style: italic; font-size: 0.8em !important; }\
 #rulesengine-blockly-panel {  }\
 #rulesengine-blockly-workspace { width: 100%; height: ' + _workspaceHeight + 'px; }\
 div.blocklyToolboxDiv { /*height: auto!important;*/ /*position: fixed;*/ }\
@@ -175,39 +185,18 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 			$.map( device.states, function( state ) {
 				variables[ state.variable ] = state.value;
 			} );
-			var isMainUpdate = false, isUpdate = false;
 			if ( _lastMainUpdate !== variables[ "LastMainUpdate" ] ) {
 				// Update the main page
 				_lastMainUpdate = variables[ "LastMainUpdate" ];
-				isMainUpdate = true;
-				Utils.logDebug( "Main change on engine" );
+				_debug( "Main change on engine" );
 				if ( $( ".altui-rules" ).length > 0 ) {
+					// Reload the page of the rules
 					_pageRules( device.altuiid );
 				}
-			}
-			var ruleIds
-			if ( _lastUpdate !== variables[ "LastUpdate" ] ) {
+			} else if ( _lastUpdate !== variables[ "LastUpdate" ] ) {
 				_lastUpdate = variables[ "LastUpdate" ];
-				isUpdate = true;
-				ruleIds = MultiBox.getStatus( device, "urn:upnp-org:serviceId:RulesEngine1", "LastModifiedRules" ) || "";
-				ruleIds = $.map( ruleIds.split( "," ), function( value ) {
-					return parseInt( value, 10 );
-				} );
-				Utils.logDebug( "Change on engine for rule(s) #" + ruleIds );
-			}
-			if ( isMainUpdate || isUpdate ) {
-				if ( $( "#rulesengine-blockly-workspace" ).length > 0 ) {
-					//console.log("rulesengine-blockly-workspace")
-					//_clearIndexBlocklyConditionBlocks();
-					// Update the rule currently displayed (readonly mode)
-					var ruleId = $( "#rulesengine-blockly-workspace" ).data( "rule_id" );
-					if ( $( "#rulesengine-blockly-workspace" ).data( "read_only" ) && ( ( ruleIds == null ) || ( ruleIds.indexOf( ruleId ) > -1 ) ) ) {
-						$.when( _getRulesInfosAsync( { "ruleId": ruleId } ) )
-							.done( function( rulesInfos ) {
-								_updateViewPageRule( rulesInfos, ruleId );
-							} );
-					}
-				} else if ( $( ".altui-rules" ).length > 0 ) {
+				_debug( "Change on engine" );
+				if ( $( ".altui-rules" ).length > 0 ) {
 					// Update the page of the rules
 					$.when( _getRulesInfosAsync() )
 						.done( function( rulesInfos ) {
@@ -543,7 +532,7 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 		xmlRules.each( function( idx, xmlRule ) {
 			var ruleInfos = indexRulesInfos[ idx + 1 ];
 			if ( ruleInfos == null ) {
-				Utils.logDebug( "Rule at position " + idx + " in the xml file does not correspond to a loaded rule." );
+				_debug( "Rule at position " + idx + " in the xml file does not correspond to a loaded rule." );
 				return;
 			}
 			var xmlRuleId = parseInt( $( xmlRule ).children( "field[name=\"id\"]:first" ).text(), 10);
@@ -1079,6 +1068,7 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 		} else {
 			altuiid = _altuiid;
 		}
+		_debug( "Display rules for engine #" + altuiid );
 		var device = MultiBox.getDeviceByAltuiID( altuiid );
 		_init( device );
 
@@ -1130,8 +1120,11 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 		};
 
 		// Page preparation
-		UIManager.clearPage( "Control Panel", "Rules - {0} <small>#{1}</small>".format( device.name , altuiid ), null, [ altuiid ], ALTUI_RulesEngine.pageRules, ALTUI_RulesEngine );
-		//UIManager.clearPage( "Rules", "Rules - {0} <small>#{1}</small>".format( device.name , altuiid ) );
+		if ( UIControler && UIControler.addPage ) {
+			UIManager.clearPage( "Rules", "Rules - {0} <small>#{1}</small>".format( device.name , altuiid ), null, [ altuiid ], ALTUI_RulesEngine.pageRules, ALTUI_RulesEngine );
+		} else {
+			UIManager.clearPage( "Control Panel", "Rules - {0} <small>#{1}</small>".format( device.name , altuiid ), null, [ altuiid ], ALTUI_RulesEngine.pageRules, ALTUI_RulesEngine );
+		}
 		$( "#altui-pagetitle" )
 			.css( "display", "inline" )
 			.after( "<div class='altui-device-toolbar'></div>" );
@@ -1550,16 +1543,31 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 		return eventList;
 	}
 
+	function _askForConditionStatusChange( device, conditionId ) {
+		if ( _lastRuleInfos.conditions && ( _lastRuleInfos.conditions[ conditionId ] ) ) {
+			var newStatus = ( _lastRuleInfos.conditions[ conditionId ].status == 1 ) ? 0 : 1;
+			DialogManager.confirmDialog( "Do you want to set condition #" + conditionId + " to " + ( newStatus == 1 ? "ON" : "OFF" ) + " ?", function( result ) {
+				if ( result === true ) {
+					_debug( "Set condition #" + conditionId + " status to " + newStatus );
+					MultiBox.runAction( device, "urn:upnp-org:serviceId:RulesEngine1", "SetConditionStatus", {
+						"conditionId": conditionId,
+						"status": newStatus
+					});
+				}
+			});
+		}
+	}
+
 	function _pageRuleEdit( altuiid, fileName, idx, id, readOnly ) {
 		var device = MultiBox.getDeviceByAltuiID( altuiid );
 
 		// Page preparation
-		UIManager.clearPage( "Control Panel", ( readOnly ? _T( "View rule" ) : _T( "Edit rule" ) ) + " - {0} <small>#{1}</small>".format( device.name , altuiid ), UIManager.oneColumnLayout, [ altuiid, fileName, idx, id, readOnly ], ALTUI_RulesEngine.pageRuleEdit, ALTUI_RulesEngine );
-		//UIManager.clearPage( _T( "Rule" ), ( readOnly ? _T( "View rule" ) : _T( "Edit rule" ) ) + " - {0} <small>#{1}</small>".format( device.name , altuiid ), UIManager.oneColumnLayout );
+		//UIManager.clearPage( "Control Panel", ( readOnly ? _T( "View rule" ) : _T( "Edit rule" ) ) + " - {0} <small>#{1}</small>".format( device.name , altuiid ), UIManager.oneColumnLayout, [ altuiid, fileName, idx, id, readOnly ], ALTUI_RulesEngine.pageRuleEdit, ALTUI_RulesEngine );
+		UIManager.clearPage( "Rule" , ( readOnly ? _T( "View rule" ) : _T( "Edit rule" ) ) + " - {0} <small>#{1}</small>".format( device.name , altuiid ), UIManager.oneColumnLayout, [ altuiid, fileName, idx, id, readOnly ], ALTUI_RulesEngine.pageRuleEdit, ALTUI_RulesEngine );
 		$(window).scrollTop(0);
 
 		// Register
-		EventBus.registerEventHandler("on_ui_deviceStatusChanged", myModule, "onDeviceStatusChanged");
+		//EventBus.registerEventHandler("on_ui_deviceStatusChanged", myModule, "onDeviceStatusChanged");
 
 		// Rules in the XML file
 		var _currentXmlRules = [];
@@ -1645,7 +1653,12 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 				_exportXml();
 				$( "#altui-rule-export" ).toggleClass( "collapse", false );
 				Blockly.fireUiEvent(window, 'resize');
-			} );
+			} )
+			.on( "click", ".altui-condition-info1", function() {
+				var conditionId = $(this).text();
+				_askForConditionStatusChange( device, conditionId );
+			} )
+			;
 		// Draw the rule editor after having loaded all the xml rules 
 		// and eventually show the rule to edit
 		$.when( 
@@ -1660,13 +1673,13 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 				$.when(
 					_loadRulesAsync( device, fileName ),
 					_getRulesInfosAsync( { fileName: fileName } ),
-					( id ? _getRulesInfosAsync( { fileName: fileName, ruleId: id } ) : true )
+					( id ? _getRulesInfosAsync( { fileName: fileName, ruleId: id } ) : [] )
 				)
-					.done( function( xmlRules, rulesInfos, extendedRulesInfos ) {
+					.done( function( xmlRules, rulesInfos, rulesExtendedInfos ) {
 						if ( id ) {
 							$( "#rulesengine-blockly-workspace" )
 								.data( "rule_id", id )
-								.data( "rule_version", ( extendedRulesInfos[0] ? extendedRulesInfos[0].version : "unknown" ) )
+								.data( "rule_version", ( rulesExtendedInfos[0] ? rulesExtendedInfos[0].version : "unknown" ) )
 						}
 						$( "#rulesengine-blockly-workspace" )
 							.data( "plugin_version", _version );
@@ -1683,7 +1696,7 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 								_moveFirstBlocklyBlockToTopLeftCorner();
 								if ( readOnly ) {
 									_updateIndexBlocklyConditionBlocks();
-									_updateViewPageRule( extendedRulesInfos, id );
+									_updateViewPageRule( id, rulesExtendedInfos );
 								}
 								_adaptWorkspaceHeightToRule();
 							}
@@ -1706,67 +1719,94 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 			} );
 	}
 
-	function _saveSvgBlockColour( block ) {
-		if ( block.fillColour_ !== block.svgPath_.style.fill ) {
-			block.fillColour_ = block.svgPath_.style.fill;
-		}
-	}
-	function _restoreSvgBlockColour( block ) {
-		if ( block.fillColour_ != null ) {
-			block.svgPath_.style.fill = block.fillColour_;
-		}
-	}
-
 	function _changeSvgBlocks( blocks, id, infos, engineStatus ) {
 		if ( !blocks ) {
 			return;
 		}
 		$.each( blocks, function( i, block ) {
+			var style = block.svgPath_.style;
 			if ( engineStatus === 0 ) {
-				_saveSvgBlockColour( block );
-				block.setTooltip( id + " - Engine stopped" );
-				block.svgPath_.style.stroke = "";
-				block.svgPath_.style["stroke-width"] = "";
-				block.svgPath_.style.fill = "#BBBBBB";
+				if ( block.showInfos ) {
+					block.showInfos( id, "Engine stopped" );
+				}
+				style["fill"] = "#BBBBBB";
+				style["stroke"] = "";
+				style["stroke-width"] = "1";
 			} else if ( infos.isArmed === false ) {
-				_saveSvgBlockColour( block );
-				block.setTooltip( id + " - Disarmed" );
-				block.svgPath_.style.stroke = "";
-				block.svgPath_.style["stroke-width"] = "";
-				block.svgPath_.style.fill = "#AAAAAA";
+				if ( block.showInfos ) {
+					block.showInfos( id, "Disarmed" );
+				}
+				style["fill"] = "#AAAAAA";
+				style["stroke"] = "";
+				style["stroke-width"] = "1";
 			} else if ( infos.status === 1 ) {
-				_restoreSvgBlockColour( block );
-				block.setTooltip( id + " - ON since " + _convertTimestampToLocaleString( infos.lastStatusUpdateTime ) + ( infos.level ? ' (level ' + infos.level + ')' : '' ) );
-				block.svgPath_.style.stroke = "#FF0000";
-				block.svgPath_.style["stroke-width"] = "4";
-				//block.svgPath_.style["stroke-dasharray"] = "5,5";
+				if ( block.showInfos ) {
+					block.showInfos( id, "(ON" + (infos.lastStatusUpdateTime > 0 ? " " + _convertTimestampToLocaleString( infos.lastStatusUpdateTime ) : "" ) + ")" + ( infos.level ? " (level " + infos.level + ")" : "" ) );
+				}
+				style["fill"] = "url(#diagonal-stripe-1)";
+				style["fill-opacity"] = "0.3";
+				style["stroke"] = "#FF0000";
+				style["stroke-width"] = "3";
 			} else {
-				_restoreSvgBlockColour( block );
+				style["fill"] = "";
 				if ( infos.nextCheckTime && ( infos.nextCheckTime > 0 ) ) {
-					block.setTooltip( id + " - Could be ON - Check at " + _convertTimestampToLocaleString( infos.nextCheckTime ) );
-					block.svgPath_.style.stroke = "#FFA500";
-					block.svgPath_.style["stroke-width"] = "4";
+					if ( block.showInfos ) {
+						block.showInfos( id, "(ON? " + _convertTimestampToLocaleString( infos.nextCheckTime ) + ")" );
+					}
+					style["stroke"] = "#FFA500";
+					style["stroke-width"] = "3";
 				} else {
-					block.setTooltip( id + " - OFF since " + _convertTimestampToLocaleString( infos.lastStatusUpdateTime ) );
-					block.svgPath_.style.stroke = "";
-					block.svgPath_.style["stroke-width"] = "";
+					if ( block.showInfos ) {
+						block.showInfos( id, "(OFF" + (infos.lastStatusUpdateTime > 0 ? " " + _convertTimestampToLocaleString( infos.lastStatusUpdateTime ) : "" ) + ")" );
+					}
+					style["stroke"] = "";
+					style["stroke-width"] = "1";
 				}
 			}
 		} );
 	}
 
-	function _updateViewPageRule( rulesInfos, ruleId ) {
-		var ruleInfos = $.grep( rulesInfos, function( infos ) {
-			return infos.id === ruleId;
-		} )[ 0 ];
-		if ( !ruleInfos ) {
+	function _updateViewPageRule( ruleId, rulesInfos ) {
+		_debug( "Update view page for rule #" + ruleId );
+		if ( $( "#rulesengine-blockly-workspace" ).length === 0 ) {
+			_debug( "Rule page is not shown" );
 			return;
 		}
-		var engineStatus = _getEngineStatus();
-		_changeSvgBlocks( _getBlocklyConditionBlocks( ruleInfos.id ), ruleInfos.id, ruleInfos, engineStatus );
-		$.each( ruleInfos.conditions, function( conditionId, conditionInfos) {
-			_changeSvgBlocks( _getBlocklyConditionBlocks( conditionId ), conditionId, conditionInfos, engineStatus );
-		} );
+		if ( $( "#rulesengine-blockly-workspace" ).data( "read_only" ) !== true ) {
+			_debug( "Rule page in not in view mode" );
+			return;
+		}
+		if ( $( "#rulesengine-blockly-workspace" ).data( "rule_id" ) !== ruleId ) {
+			_debug( "Current displayed rule has not #" + ruleId );
+		}
+		//_clearIndexBlocklyConditionBlocks();
+		// Update the rule currently displayed (readonly mode)
+		var requestTime = new Date().getTime();
+		$.when( ( rulesInfos !== undefined ) ? rulesInfos : _getRulesInfosAsync( { "ruleId": ruleId } ) )
+			.done( function( rulesInfos ) {
+				var ruleInfos = $.grep( rulesInfos, function( infos ) {
+					return infos.id === ruleId;
+				} )[ 0 ];
+				if ( !ruleInfos ) {
+					_lastRuleInfos = {};
+					return;
+				}
+				_lastRuleInfos = ruleInfos;
+				var engineStatus = _getEngineStatus();
+				_changeSvgBlocks( _getBlocklyConditionBlocks( ruleInfos.id ), ruleInfos.id, ruleInfos, engineStatus );
+				$.each( ruleInfos.conditions, function( conditionId, conditionInfos) {
+					_changeSvgBlocks( _getBlocklyConditionBlocks( conditionId ), conditionId, conditionInfos, engineStatus );
+				} );
+				// 
+				var requestInterval = _requestInterval * 1000;
+				var processTime = new Date().getTime() - requestTime;
+				if ( processTime > 20 ) {
+					requestInterval += Math.min( processTime * 2, _requestMaxInterval * 1000 );
+					_debug( "The request has been too long (" +  processTime + "ms), next poll in " + requestInterval + "ms" );
+				}
+				setTimeout( _updateViewPageRule, requestInterval, ruleId );
+				//_updateViewPageRule( rulesInfos, ruleId );
+			} );
 	}
 
 	function _importXml() {
@@ -1864,6 +1904,24 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 		getSceneList: _getSceneList,
 		getEngineStatus: _getEngineStatus
 	};
+
+	// Add page in breadcrumbs
+	if ( UIControler && UIControler.addPage ) {
+		var rulesPageId = UIControler.addPage({
+			id     : 1,
+			title  : "Rules",
+			htmlid : "#menu_rules",
+			onclick: _pageRules,
+			args   : [],
+			//parent : 0
+			parent : 2
+		});
+		UIControler.addPage({
+			id     : 1,
+			title  : "Rule",
+			parent : rulesPageId
+		});
+	}
 
 	return myModule;
 })( window );

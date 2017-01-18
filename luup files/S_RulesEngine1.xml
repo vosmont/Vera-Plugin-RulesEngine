@@ -50,6 +50,16 @@
 			<sendEventsAttribute>no</sendEventsAttribute>
 			<dataType>string</dataType>
 		</stateVariable>
+		<stateVariable>
+			<name>A_ARG_TYPE_ConditionId</name>
+			<sendEventsAttribute>no</sendEventsAttribute>
+			<dataType>string</dataType>
+		</stateVariable>
+		<stateVariable>
+			<name>A_ARG_TYPE_ConditionStatus</name>
+			<sendEventsAttribute>no</sendEventsAttribute>
+			<dataType>ui1</dataType>
+		</stateVariable>
 	</serviceStateTable>
 	<actionList>
 		<action>
@@ -114,6 +124,22 @@
 					<name>acknowledgement</name>
 					<direction>in</direction>
 					<relatedStateVariable>A_ARG_TYPE_Acknowledgement</relatedStateVariable>
+				</argument>
+			</argumentList>
+		</action>
+		<!-- Debug -->
+		<action>
+			<name>SetConditionStatus</name>
+			<argumentList>
+				<argument>
+					<name>conditionId</name>
+					<direction>in</direction>
+					<relatedStateVariable>A_ARG_TYPE_ConditionId</relatedStateVariable>
+				</argument>
+				<argument>
+					<name>status</name>
+					<direction>in</direction>
+					<relatedStateVariable>A_ARG_TYPE_RuleIdx</relatedStateVariable>
 				</argument>
 			</argumentList>
 		</action>

@@ -22,13 +22,14 @@ goog.require( "Blockly.Msg" );
  * Must be in the range of 0 (inclusive) to 1 (exclusive).
  */
 //Blockly.HSV_SATURATION = 0.45;
-Blockly.HSV_SATURATION = 0.70;
+//Blockly.HSV_SATURATION = 0.70;
+Blockly.HSV_SATURATION = 0.90;
 /**
  * The intensity of block colours, regardless of the hue.
  * Must be in the range of 0 (inclusive) to 1 (exclusive).
  */
 //Blockly.HSV_VALUE = 0.65;
-Blockly.HSV_VALUE = 0.65;
+Blockly.HSV_VALUE = 0.80;
 
 
 // ****************************************************************************
@@ -382,7 +383,10 @@ Blockly.Blocks[ "lua_code" ] = {
 // ****************************************************************************
 
 goog.provide( "Blockly.Blocks.rules" );
-Blockly.Blocks.rules.HUE = 140;
+// TODO : attention à la version de Blockly
+//goog.require( "Blockly.utils" );
+Blockly.Blocks.rules.HUE = 224;
+//Blockly.Blocks.texts.HUE = 120;
 
 Blockly.Msg.RULE_TITLE = "Rule";
 Blockly.Msg.RULE_TOOLTIP = "Define a rule.";
@@ -409,6 +413,32 @@ Blockly.Blocks[ "rule" ] = {
 
 	init: function() {
 		this.setColour( Blockly.Blocks.rules.HUE );
+
+		var workspace = Blockly.getMainWorkspace();
+		if (workspace.options.readOnly ) {
+			//var patternElement = Blockly.utils.createSvgElement(
+			var patternElement = Blockly.createSvgElement(
+				'pattern', {
+					'id': 'diagonal-stripe-1',
+					'patternUnits': 'userSpaceOnUse',
+					'x':'0', 'y':'0',
+					'width': '10',
+					'height': '10'
+				},
+				workspace.svgBlockCanvas_
+			);
+			//var file = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHdpZHRoPScxMCcgaGVpZ2h0PScxMCc+DQogIDxwYXRoIGQ9J00tMSwxIGwyLC0yDQogICAgICAgICAgIE0wLDEwIGwxMCwtMTANCiAgICAgICAgICAgTTksMTEgbDIsLTInIHN0cm9rZT0nbGltZScgc3Ryb2tlLXdpZHRoPScyJy8+DQo8L3N2Zz4=';
+			//var file = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI3MCIgaGVpZ2h0PSI3MCI+Cgo8ZyB0cmFuc2Zvcm09InJvdGF0ZSgtNDUpIj4KPHJlY3QgeD0iLTUwIiB5PSI1MCIgd2lkdGg9Ijk5IiBoZWlnaHQ9IjUiIGZpbGw9IiNmZjAwMDAiPjwvcmVjdD4KPHJlY3QgeD0iLTUwIiB5PSIwIiB3aWR0aD0iOTkiIGhlaWdodD0iNSIgZmlsbD0iI2ZmMDAwMCI+PC9yZWN0Pgo8L2c+Cjwvc3ZnPg==';
+			// Black hatching 
+			//var file = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMCIgaGVpZ2h0PSIxMCI+CiAgPHBhdGggZD0iTS0xLDEgbDIsLTIKICAgICAgICAgICBNMCwxMCBsMTAsLTEwCiAgICAgICAgICAgTTksMTEgbDIsLTIiIHN0cm9rZT0iIzAwMDAwMCIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2Utb3BhY2l0eT0iMC4yIj48L3BhdGg+Cjwvc3ZnPg==';
+			// White hatching
+			var file = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMCIgaGVpZ2h0PSIxMCI+CiAgPHBhdGggZD0iTS0xLDEgbDIsLTIKICAgICAgICAgICBNMCwxMCBsMTAsLTEwCiAgICAgICAgICAgTTksMTEgbDIsLTIiIHN0cm9rZT0iI0ZGRkZGRiIgc3Ryb2tlLXdpZHRoPSIyIj48L3BhdGg+Cjwvc3ZnPg==';
+			
+			//var imageElement = Blockly.utils.createSvgElement('image', { 'height': '10px', 'width': '10px' }, patternElement );
+			var imageElement = Blockly.createSvgElement('image', { 'x':'0', 'y':'0', 'width': '10', 'height': '10'}, patternElement );
+			//imageElement.setValue( file );
+			imageElement.setAttributeNS( 'http://www.w3.org/1999/xlink', 'xlink:href', file );
+		}
 
 		var thatBlock = this;
 		this.appendValueInput( "name" )
@@ -468,7 +498,7 @@ Blockly.Blocks[ "rule" ] = {
 // ****************************************************************************
 
 goog.provide( "Blockly.Blocks.properties" );
-Blockly.Blocks.properties.HUE = 160;
+Blockly.Blocks.properties.HUE = 224;
 
 Blockly.Msg.LIST_PROPERTY_TOOLTIP = "List of the properties of the rule.";
 Blockly.Msg.LIST_RULE_PROPERTY_TOOLTIP = "List of rule properties";
@@ -1458,6 +1488,35 @@ function _setFiltersFromFieldValues() {
 	}
 }
 
+function _getField( fieldName ) {
+	if ( !this.fieldRow ) {
+		return;
+	}
+	for ( var i = 0, field; field = this.fieldRow[i]; i++ ) {
+		if ( field.name === fieldName ) {
+			return field;
+		}
+	}
+}
+
+function _showInfos( infos1, infos2 ) {
+	var infosBlock1 = this.getInput( "infos1" );
+	if ( !infosBlock1 ) {
+		return;
+	}
+	var content = _getField.call( infosBlock1, "content" );
+	if ( content ) {
+		content.setValue( infos1 );
+		_getField.call( this.getInput( "infos2" ), "content" ).setValue( infos2 );
+	} else {
+		infosBlock1
+			.appendField( new Blockly.FieldLabel( infos1, "altui-condition-info1" ), "content" );
+		this.getInput( "infos2" )
+			.appendField( new Blockly.FieldLabel( infos2, "altui-condition-info2" ), "content" );
+	}
+}
+
+
 // ****************************************************************************
 // List of devices
 // ****************************************************************************
@@ -1536,6 +1595,11 @@ Blockly.Blocks[ "device" ] = {
 		this.parent_ = null;
 		this.inputs_ = [ "id", "room", "type", "category" ];
 
+		if ( Blockly.mainWorkspace.options.readOnly ) {
+			this.appendDummyInput( "infos1" );
+			this.appendDummyInput( "infos2" );
+		}
+
 		this.appendDummyInput( "number_of_device" )
 			.appendField( "device", "deviceLabel" );
 
@@ -1544,6 +1608,10 @@ Blockly.Blocks[ "device" ] = {
 		this.setInputsInline( false );
 		this.setOutput( true, "Device" );
 		this.setTooltip( Blockly.Msg.DEVICE_TOOLTIP );
+	},
+
+	showInfos: function( infos1, infos2 ) {
+		_showInfos.call( this, infos1, infos2 );
 	},
 
 	mutationToDom: function() {
@@ -1731,9 +1799,9 @@ Blockly.Blocks[ "controls_device_category" ] = {
 goog.require( "Blockly.Blocks" );
 
 goog.provide( "Blockly.Blocks.conditions" );
-Blockly.Blocks.conditions.HUE1 = 40;
-Blockly.Blocks.conditions.HUE2 = 40;
-Blockly.Blocks.conditions.HUE3 = 50;
+Blockly.Blocks.conditions.HUE1 = 30;
+Blockly.Blocks.conditions.HUE2 = 30;
+Blockly.Blocks.conditions.HUE3 = 30;
 
 Blockly.Msg.LIST_CONDITION_WITH_OPERATOR_TITLE = "List of conditions.";
 Blockly.Msg.LIST_CONDITION_EMPTY_TITLE = "no condition";
@@ -1747,10 +1815,19 @@ Blockly.Blocks[ "list_with_operator_condition" ] = {
 		this.inputs_ = [ "ADD", "actions" ];
 		_setMutator.call( this );
 
+		if ( Blockly.mainWorkspace.options.readOnly ) {
+			this.appendDummyInput( "infos1" );
+			this.appendDummyInput( "infos2" );
+		}
+
 		this.updateShape_();
 		this.setInputsInline( false );
 		this.setOutput( true, "Boolean" );
 		this.setTooltip(Blockly.Msg.LIST_CONDITION_WITH_OPERATOR_TITLE);
+	},
+
+	showInfos: function( infos1, infos2 ) {
+		_showInfos.call( this, infos1, infos2 );
 	},
 
 	mutationToDom: function() {
@@ -1829,10 +1906,19 @@ Blockly.Blocks[ "list_with_operators_condition" ] = {
 		this.inputs_ = [ "ADD", "actions" ];
 		_setMutator.call( this );
 
+		if ( Blockly.mainWorkspace.options.readOnly ) {
+			this.appendDummyInput( "infos1" );
+			this.appendDummyInput( "infos2" );
+		}
+
 		this.updateShape_();
 		this.setInputsInline( false );
 		this.setOutput( true, "Boolean" );
 		this.setTooltip(Blockly.Msg.LIST_CONDITION_WITH_OPERATOR_TITLE);
+	},
+
+	showInfos: function( infos1, infos2 ) {
+		_showInfos.call( this, infos1, infos2 );
 	},
 
 	mutationToDom: function() {
@@ -2193,6 +2279,11 @@ Blockly.Blocks[ "condition_value" ] = {
 		this.params_ = {};
 		this.inputs_ = [ "actions", "params", "device_type", "variable", "service" ];
 
+		if ( Blockly.mainWorkspace.options.readOnly ) {
+			this.appendDummyInput( "infos1" );
+			this.appendDummyInput( "infos2" );
+		}
+
 		this.appendValueInput( "device" )
 			.appendField( "device", "conditionDeviceLabel" )
 			.setAlign( Blockly.ALIGN_RIGHT )
@@ -2203,6 +2294,10 @@ Blockly.Blocks[ "condition_value" ] = {
 		this.setInputsInline( false );
 		this.setOutput( true, "Boolean" );
 		this.setTooltip( Blockly.Msg.CONDITION_DEVICE_VALUE_TOOLTIP );
+	},
+
+	showInfos: function( infos1, infos2 ) {
+		_showInfos.call( this, infos1, infos2 );
 	},
 
 	mutationToDom: function() {
@@ -2474,6 +2569,11 @@ Blockly.Blocks[ "condition_time" ] = {
 		this.params_ = {};
 		this.inputs_ = [ "timer_type", "params", "actions" ];
 
+		if ( Blockly.mainWorkspace.options.readOnly ) {
+			this.appendDummyInput( "infos1" );
+			this.appendDummyInput( "infos2" );
+		}
+
 		this.appendDummyInput()
 			.appendField( "time is" );
 
@@ -2482,9 +2582,13 @@ Blockly.Blocks[ "condition_time" ] = {
 
 		_setMutator.call( this );
 
-		this.setInputsInline( true );
+		this.setInputsInline( !Blockly.mainWorkspace.options.readOnly );
 		this.setOutput( true, "Boolean" );
 		this.setTooltip( Blockly.Msg.CONDITION_TIME_TOOLTIP );
+	},
+
+	showInfos: function( infos1, infos2 ) {
+		_showInfos.call( this, infos1, infos2 );
 	},
 
 	mutationToDom: function() {
@@ -2540,6 +2644,11 @@ Blockly.Blocks[ "condition_time_between" ] = {
 		this.params_ = {};
 		this.inputs_ = [ "timer_type", "params", "actions" ];
 
+		if ( Blockly.mainWorkspace.options.readOnly ) {
+			this.appendDummyInput( "infos1" );
+			this.appendDummyInput( "infos2" );
+		}
+
 		this.appendDummyInput()
 			.appendField( "time is between" );
 
@@ -2554,9 +2663,13 @@ Blockly.Blocks[ "condition_time_between" ] = {
 
 		_setMutator.call( this );
 
-		this.setInputsInline( true );
+		this.setInputsInline( !Blockly.mainWorkspace.options.readOnly );
 		this.setOutput( true, "Boolean" );
 		this.setTooltip( Blockly.Msg.CONDITION_TIME_BETWEEN_TOOLTIP );
+	},
+
+	showInfos: function( infos1, infos2 ) {
+		_showInfos.call( this, infos1, infos2 );
 	},
 
 	mutationToDom: function() {
@@ -2611,6 +2724,11 @@ Blockly.Blocks[ "condition_rule" ] = {
 		this.prefix_ = "condition";
 		this.inputs_ = [ "params", "actions" ];
 
+		if ( Blockly.mainWorkspace.options.readOnly ) {
+			this.appendDummyInput( "infos1" );
+			this.appendDummyInput( "infos2" );
+		}
+
 		var options = [ [ "...", "" ] ];
 		var rules = ALTUI_RulesEngine.getRuleList();
 		for ( var i = 0; i < rules.length; i++ ) {
@@ -2626,9 +2744,13 @@ Blockly.Blocks[ "condition_rule" ] = {
 
 		_setMutator.call( this );
 
-		this.setInputsInline( true );
+		this.setInputsInline( !Blockly.mainWorkspace.options.readOnly );
 		this.setOutput( true, "Boolean" );
 		this.setTooltip( Blockly.Msg.CONDITION_RULE_TOOLTIP );
+	},
+
+	showInfos: function( infos1, infos2 ) {
+		_showInfos.call( this, infos1, infos2 );
 	},
 
 	mutationToDom: function() {
@@ -2664,7 +2786,7 @@ Blockly.Blocks[ "condition_inverter" ] = {
 
 		_setMutator.call( this );
 
-		this.setInputsInline( false );
+		this.setInputsInline( !Blockly.mainWorkspace.options.readOnly );
 		this.setOutput( true, "Boolean" );
 		this.setTooltip( Blockly.Msg.CONDITION_INVERTER_TOOLTIP );
 	},
@@ -2692,6 +2814,11 @@ Blockly.Blocks[ "condition_function" ] = {
 	init: function() {
 		this.setColour( Blockly.Blocks.conditions.HUE1 );
 
+		if ( Blockly.mainWorkspace.options.readOnly ) {
+			this.appendDummyInput( "infos1" );
+			this.appendDummyInput( "infos2" );
+		}
+
 		this.appendDummyInput()
 			.appendField( "LUA function" );
 		this.appendDummyInput()
@@ -2700,6 +2827,10 @@ Blockly.Blocks[ "condition_function" ] = {
 		this.setInputsInline( false );
 		this.setOutput( true, "Boolean" );
 		this.setTooltip( Blockly.Msg.CONDITION_FUNCTION_TOOLTIP );
+	},
+
+	showInfos: function( infos1, infos2 ) {
+		_showInfos.call( this, infos1, infos2 );
 	}
 };
 
@@ -2810,6 +2941,11 @@ Blockly.Blocks[ "condition_sequence" ] = {
 		this.inputs_ = [ "actions" ];
 		_setMutator.call( this );
 
+		if ( Blockly.mainWorkspace.options.readOnly ) {
+			this.appendDummyInput( "infos1" );
+			this.appendDummyInput( "infos2" );
+		}
+
 		this.appendDummyInput()
 			.appendField( "sequence of conditions" );
 
@@ -2819,6 +2955,10 @@ Blockly.Blocks[ "condition_sequence" ] = {
 		this.setInputsInline( false );
 		this.setOutput( true, "Boolean" );
 		this.setTooltip( Blockly.Msg.CONDITION_SEQUENCE_TITLE );
+	},
+
+	showInfos: function( infos1, infos2 ) {
+		_showInfos.call( this, infos1, infos2 );
 	},
 
 	mutationToDom: function() {
@@ -2860,14 +3000,23 @@ Blockly.Blocks[ "condition_sequence_item" ] = {
 	init: function() {
 		this.setColour( Blockly.Blocks.conditions.HUE3 );
 
+		if ( Blockly.mainWorkspace.options.readOnly ) {
+			this.appendDummyInput( "infos1" );
+			this.appendDummyInput( "infos2" );
+		}
+
 		// Condition
 		this.appendValueInput( "condition" )
 			.setCheck( "Boolean" )
 			.appendField( "if" );
 
-		this.setInputsInline( true );
+		this.setInputsInline( !Blockly.mainWorkspace.options.readOnly );
 		this.setPreviousStatement( true, "ConditionSequenceItem" );
 		this.setNextStatement( true, "ConditionSequenceItem" );
+	},
+
+	showInfos: function( infos1, infos2 ) {
+		_showInfos.call( this, infos1, infos2 );
 	}
 };
 
@@ -2947,7 +3096,8 @@ Blockly.Blocks[ "condition_param_since" ] = {
 goog.require( "Blockly.Blocks" );
 
 goog.provide( "Blockly.Blocks.actions" );
-Blockly.Blocks.actions.HUE1 = 224;
+//Blockly.Blocks.actions.HUE1 = 224;
+Blockly.Blocks.actions.HUE1 = 240;
 Blockly.Blocks.actions.HUE2 = 240;
 Blockly.Msg.ACTION_GROUP_TOOLTIP = "Group of actions. Choose the event linked to these actions and eventually parameters and specific conditions.";
 Blockly.Msg.CONTROLS_ACTION_GROUP_TITLE = "group of actions";
@@ -2959,23 +3109,16 @@ Blockly.Msg.CONTROLS_ACTION_GROUP_PARAMS_TOOLTIP = "Parameter which can change t
 Blockly.Msg.CONTROLS_ACTION_GROUP_CONDITION_TITLE = "condition";
 Blockly.Msg.CONTROLS_ACTION_GROUP_CONDITION_TOOLTIP = "Specific condition for the group of actions. If this condition is not realized, the group of actions is not executed (the status of the rule is not impacted).";
 
-Blockly.Blocks[ "action_group" ] = {
+Blockly.Blocks[ "action_group" ] = { // should have been "rule_group_action" (it's not possible to change)
 	init: function() {
 		this.setColour( Blockly.Blocks.actions.HUE1 );
 		this.prefix_ = "action_group";
 
 		// Event
-		this.appendDummyInput( "action_group_event" )
+		this.appendDummyInput( "event" )
 			.appendField( "for event" )
 			.appendField(
 				new Blockly.FieldDropdown(
-					/*
-					[
-						[ "START of the rule", "start" ],
-						[ "REPEAT as long as the rule is active", "reminder" ],
-						[ "END of the rule", "end" ]
-					],
-					*/
 					[
 						[ "OnRuleStart", "start" ],
 						[ "OnRuleReminder", "reminder" ],
@@ -3026,19 +3169,26 @@ Blockly.Blocks[ "action_group" ] = {
 
 	updateShape_: function( recurrentIntervalInput ) {
 		// Add or remove a Value Input.
-		var inputExists = this.getInput( "action_group_recurrent_interval" );
+		var inputExists = this.getInput( "recurrent_interval" );
 		if ( recurrentIntervalInput ) {
 			if ( !inputExists ) {
+				// Start immediately
+				this.appendDummyInput( "recurrent_immediate" )
+					.appendField( "and on rule start" )
+					.appendField(new Blockly.FieldCheckbox('FALSE'), 'recurrentImmediate')
+					.setAlign( Blockly.ALIGN_RIGHT );
+				_moveInputBefore.call( this, "recurrent_immediate",[ "description", "params", "conditions", "do" ] );
 				// Recurrent interval
-				this.appendDummyInput( "action_group_recurrent_interval" )
+				this.appendDummyInput( "recurrent_interval" )
 					.appendField( "every" )
 					.appendField( new Blockly.FieldTextInput( "0", Blockly.FieldTextInput.numberValidator ), "recurrentInterval" )
 					.appendField( new Blockly.FieldDropdown( [ [ "seconds", "S" ], [ "minutes", "M" ], [ "hours", "H" ] ] ), "unit" )
 					.setAlign( Blockly.ALIGN_RIGHT );
-				_moveInputBefore.call( this, "action_group_recurrent_interval",[ "action_group_description", "action_group_params", "action_group_conditions", "do" ] );
+				_moveInputBefore.call( this, "recurrent_interval",[ "recurrent_immediate" ] );
 			}
 		} else if ( inputExists ) {
-			this.removeInput( "action_group_recurrent_interval" );
+			this.removeInput( "recurrent_immediate" );
+			this.removeInput( "recurrent_interval" );
 		}
 	}
 };
@@ -3049,20 +3199,13 @@ Blockly.Blocks[ "condition_action_group" ] = {
 		this.prefix_ = "action_group";
 
 		// Event
-		this.appendDummyInput( "action_group_event" )
+		this.appendDummyInput( "event" )
 			.appendField( "for event" )
 			.appendField(
 				new Blockly.FieldDropdown(
-					/*
-					[
-						[ "START - the condition is filled", "conditionStart" ],
-						[ "(TODO) REPEAT as long as the condition is filled", "conditionReminder" ],
-						[ "END - the condition is no more filled", "conditionEnd" ]
-					],
-					*/
 					[
 						[ "OnConditionStart", "conditionStart" ],
-						//[ "(TODO) OnConditionReminder", "conditionReminder" ],
+						//[ "(TODO?) OnConditionReminder", "conditionReminder" ],
 						[ "OnConditionEnd", "conditionEnd" ]
 					],
 					function( option ) {
@@ -3110,19 +3253,26 @@ Blockly.Blocks[ "condition_action_group" ] = {
 
 	updateShape_: function( recurrentIntervalInput ) {
 		// Add or remove a Value Input.
-		var inputExists = this.getInput( "action_group_recurrent_interval" );
+		var inputExists = this.getInput( "recurrent_interval" );
 		if ( recurrentIntervalInput ) {
 			if ( !inputExists ) {
+				// Start immediately
+				this.appendDummyInput( "recurrent_immediate" )
+					.appendField( "and on condition start" )
+					.appendField(new Blockly.FieldCheckbox('FALSE'), 'recurrentImmediate')
+					.setAlign( Blockly.ALIGN_RIGHT );
+				_moveInputBefore.call( this, "recurrent_immediate",[ "description", "params", "do" ] );
 				// Recurrent interval
-				this.appendDummyInput( "action_group_recurrent_interval" )
+				this.appendDummyInput( "recurrent_interval" )
 					.appendField( "every" )
 					.appendField( new Blockly.FieldTextInput( "0", Blockly.FieldTextInput.numberValidator ), "recurrentInterval" )
 					.appendField( new Blockly.FieldDropdown( [ [ "seconds", "S" ], [ "minutes", "M" ], [ "hours", "H" ] ] ), "unit" )
 					.setAlign( Blockly.ALIGN_RIGHT );
-				_moveInputBefore.call( this, "action_group_recurrent_interval",[ "action_group_description", "action_group_params", "action_group_conditions", "do" ] );
+				_moveInputBefore.call( this, "recurrent_interval",[ "recurrent_immediate" ] );
 			}
 		} else if ( inputExists ) {
-			this.removeInput( "action_group_recurrent_interval" );
+			this.removeInput( "recurrent_immediate" );
+			this.removeInput( "recurrent_interval" );
 		}
 	}
 };
@@ -3183,7 +3333,7 @@ Blockly.Msg.ACTION_WAIT_TOOLTIP = "Wait a defined time.";
 Blockly.Msg.ACTION_FUNCTION_TOOLTIP = "Execute LUA code.";
 Blockly.Msg.ACTION_DEVICE_TOOLTIP = "Execute an action of a device.";
 Blockly.Msg.ACTION_SCENE_TOOLTIP = "Execute a scene.";
-Blockly.Msg.ACTION_MQTT_TOOLTIP = "(TODO)Publish a message on MQTT broker.";
+Blockly.Msg.ACTION_MQTT_TOOLTIP = "Publish an MQTT message.";
 
 Blockly.Blocks['action_wait'] = {
 	init: function () {
@@ -3405,7 +3555,7 @@ Blockly.Blocks[ "action_mqtt" ] = {
 		this.setColour( Blockly.Blocks.actions.HUE2 );
 
 		this.appendDummyInput()
-			.appendField( "MQTT (TODO)" );
+			.appendField( "MQTT" );
 
 		this.appendDummyInput()
 			.appendField( "topic" )

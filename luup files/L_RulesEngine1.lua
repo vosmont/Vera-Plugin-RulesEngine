@@ -22,7 +22,7 @@ end
 
 _NAME = "RulesEngine"
 _DESCRIPTION = "Rules Engine for the Vera with visual editor"
-_VERSION = "0.16.3"
+_VERSION = "0.17"
 _AUTHOR = "vosmont"
 
 -- **************************************************
@@ -36,25 +36,12 @@ _AUTHOR = "vosmont"
 -- 3) true if the variable is not updated when the value is unchanged
 -- 4) variable that is used for the timestamp
 local VARIABLE = {
-	TEMPERATURE = { "urn:upnp-org:serviceId:TemperatureSensor1", "CurrentTemperature", true },
-	HUMIDITY = { "urn:micasaverde-com:serviceId:HumiditySensor1", "CurrentLevel", true },
 	SWITCH_POWER = { "urn:upnp-org:serviceId:SwitchPower1", "Status", true },
-	DIMMER_LEVEL = { "urn:upnp-org:serviceId:Dimming1", "LoadLevelStatus", true },
-
-	-- Security
-	ARMED = { "urn:micasaverde-com:serviceId:SecuritySensor1", "Armed", true },
-	TRIPPED = { "urn:micasaverde-com:serviceId:SecuritySensor1", "Tripped", false, "LAST_TRIP" },
-	LAST_TRIP = { "urn:micasaverde-com:serviceId:SecuritySensor1", "LastTrip", true },
-	-- Battery
-	BATTERY_LEVEL = { "urn:micasaverde-com:serviceId:HaDevice1", "BatteryLevel", true, "BATTERY_DATE" },
-	BATTERY_DATE = { "urn:micasaverde-com:serviceId:HaDevice1", "BatteryDate", true },
-	-- Alarm
-	ALARM_TYPE = { "urn:micasaverde-com:serviceId:HaDevice1", "sl_Alarm", true },
-	TAMPER_ALARM = { "urn:micasaverde-com:serviceId:HaDevice1", "sl_TamperAlarm", false, "LAST_TAMPER" },
-	LAST_TAMPER = { "urn:micasaverde-com:serviceId:HaDevice1", "LastTamper", true },
 	COMM_FAILURE = { "urn:micasaverde-com:serviceId:HaDevice1", "CommFailure", true },
+	MQTT_CONNECTED = { "urn:upnp-sensor-mqtt-se:serviceId:SensorMqtt1", "mqttServerConnected", true },
 	-- Specific RulesEngine
 	PLUGIN_VERSION = { "urn:upnp-org:serviceId:RulesEngine1", "PluginVersion", true },
+	--PLUGIN_OPTIONS = { "urn:upnp-org:serviceId:RulesEngine1", "PluginOptions", true },
 	DEBUG_MODE = { "urn:upnp-org:serviceId:RulesEngine1", "Debug", true },
 	LAST_UPDATE = { "urn:upnp-org:serviceId:RulesEngine1", "LastUpdate", true },
 	LAST_MAIN_UPDATE = { "urn:upnp-org:serviceId:RulesEngine1", "LastMainUpdate", true },
@@ -73,6 +60,11 @@ for _, variable in pairs( VARIABLE ) do
 	indexVariable[variable[1] .. ";" .. variable[2]] = variable
 end
 
+local DEVICE = {
+	MQTT = {
+		type = "urn:schemas-sensor-mqtt-se:device:SensorMqtt:1", file = "D_SensorMqtt1.xmll"
+	}
+}
 
 -- **************************************************
 -- Globals
@@ -362,12 +354,12 @@ local function debugLogEnd (methodName)
 	_memoryLevel = _memoryLevel - 1
 end
 
-local function debug (msg, methodName)
-	
+local function debug( msg, methodName )
+	log( msg, methodName, 1 )
 end
 
-local function warning (msg, methodName)
-	luup.log(getFormatedMethodName(methodName) .. " WARNING: " .. msg, 2)
+local function warning( msg, methodName )
+	luup.log( getFormatedMethodName( methodName ) .. " WARNING: " .. msg, 2 )
 end
 
 local function error( msg, methodName )
@@ -607,7 +599,7 @@ Variable = {
 
 
 -- **************************************************
--- UI messages
+-- RulesEngine.UI
 -- **************************************************
 
 UI = {
@@ -624,6 +616,20 @@ UI = {
 
 	clearError = function()
 		Variable.set( g_deviceId, VARIABLE.LAST_ERROR, "" )
+	end,
+
+	setToolboxConfig = function( toolboxConfig )
+		if ( type( toolboxConfig ) ~= "table" ) then
+			debug( "Toolbox config is not a table", "UI.addToolboxConfig" )
+			return
+		end
+		local newToolboxConfig = {}
+		for _, itemConfig in ipairs( toolboxConfig ) do
+			table.insert( newToolboxConfig, itemConfig )
+		end
+		local jsonToolboxConfig = json.encode( newToolboxConfig )
+		debug( "New toolbox config: " .. tostring( jsonToolboxConfig ), "UI.addToolboxConfig" )
+		Variable.set( g_deviceId, VARIABLE.TOOLBOX_CONFIG, jsonToolboxConfig )
 	end
 }
 
@@ -635,44 +641,45 @@ UI = {
 local _storePath
 
 Store = {
-	setPath = function (path)
-		if (Store.checkPath(path)) then
-			warning("Path is set to '" .. tostring(path) .. "'", "Store.setPath")
+	setPath = function( path )
+		if Store.checkPath( path ) then
+			warning( "Path is set to '" .. tostring( path ) .. "'", "Store.setPath" )
 			_storePath = path
 		else
+			-- TODO
 		end
 	end,
 
-	getDefaultPath = function ()
-		local lfs = require("lfs")
+	getDefaultPath = function()
+		local lfs = require( "lfs" )
 		local storePath = ""
-		if (lfs.attributes("/tmp/log/cmh", "mode") == "directory") then
+		if ( lfs.attributes( "/tmp/log/cmh", "mode" ) == "directory" ) then
 			-- Directory "/tmp/log/cmh" is stored on sda1 in Vera box
 			storePath = "/tmp/log/cmh/"
-		elseif (lfs.attributes("/tmp", "mode") == "directory") then
+		elseif ( lfs.attributes( "/tmp", "mode" ) == "directory" ) then
 			-- Directory "/tmp" is stored in memory in Vera box (lost on reboot)
 			storePath = "/tmp/"
 		else
 			-- Use current directory ("./etc/cmh-ludl" in openLuup)
 			storePath = ""
 		end
-		log("Path to store datas : '" .. storePath .. "'", "Store.getDefaultPath")
+		log( "Path to store datas : '" .. storePath .. "'", "Store.getDefaultPath" )
 		return storePath
 	end,
 
-	getPath = function ()
-		if (_storePath == nil) then
+	getPath = function()
+		if ( _storePath == nil ) then
 			_storePath = Store.getDefaultPath()
 		end
 		return _storePath
 	end,
 
-	checkPath = function (path)
-		local lfs = require("lfs")
-		if (lfs.attributes(path, "mode") == "directory") then
+	checkPath = function( path )
+		local lfs = require( "lfs" )
+		if ( lfs.attributes( path, "mode" ) == "directory" ) then
 			return true
 		else
-			warning("'" .. tostring(path) .. "' is not a valid folder", "Store.checkPath")
+			warning( "'" .. tostring( path ) .. "' is not a valid folder", "Store.checkPath" )
 			return false
 		end
 	end
@@ -806,51 +813,52 @@ local function _getTimeAgoFull( timestamp )
 	return timeAgo
 end
 
---RulesEngine.Tools.formatMessage
-function getEnhancedMessage( message, context )
-	if ( message == nil ) then
-		return false
-	end
-	if ( context == nil ) then
-		return message
-	end
-	log("DEBUG context:" .. json.encode(context), "Tools.getEnhancedMessage", 5)
-	local mainConditionContext
-	if ( context.conditions and context.conditions[ tostring( context.id ) .. ".1" ] ) then
-		mainConditionContext = context.conditions[ tostring( context.id ) .. ".1" ]
-	else
-		mainConditionContext = context
-	end
-	if ( string.find( message, "#duration#" ) ) then
-		message = string.gsub( message, "#duration#", _getTimeAgo( context.lastStatusUpdateTime ) )
-	end
-	if (string.find(message, "#durationfull#")) then
-		message = string.gsub( message, "#durationfull#", _getTimeAgoFull( context.lastStatusUpdateTime ) )
-	end
-	if (string.find(message, "#leveldurationfull#")) then
-		message = string.gsub( message, "#leveldurationfull#", _getTimeAgoFull( context.lastLevelUpdateTime ) )
-	end
-	if (string.find(message, "#value#")) then
-		-- Most recent value from conditions
-		message = string.gsub( message, "#value#", tostring(mainConditionContext.value ) )
-	end
-	if ( string.find( message, "#devicename#" ) ) then
-		local deviceId = tonumber( mainConditionContext.deviceId or "0" ) or 0
-		if (deviceId > 0) then
-			local device = luup.devices[deviceId]
-			if (device) then
-				message = string.gsub(message, "#devicename#", device.description)
+Tools = {
+	format = function( text, context )
+		if ( text == nil ) then
+			return false
+		end
+		if ( context == nil ) then
+			return text
+		end
+		log( "DEBUG context:" .. json.encode(context), "Tools.format", 5 )
+		local mainConditionContext
+		if ( context.conditions and context.conditions[ tostring( context.id ) .. ".1" ] ) then
+			mainConditionContext = context.conditions[ tostring( context.id ) .. ".1" ]
+		else
+			mainConditionContext = context
+		end
+		if ( string.find( text, "#duration#" ) ) then
+			text = string.gsub( text, "#duration#", _getTimeAgo( context.lastStatusUpdateTime ) )
+		end
+		if (string.find(text, "#durationfull#")) then
+			text = string.gsub( text, "#durationfull#", _getTimeAgoFull( context.lastStatusUpdateTime ) )
+		end
+		if (string.find(text, "#leveldurationfull#")) then
+			text = string.gsub( text, "#leveldurationfull#", _getTimeAgoFull( context.lastLevelUpdateTime ) )
+		end
+		if (string.find(text, "#value#")) then
+			-- Most recent value from conditions
+			text = string.gsub( text, "#value#", tostring(mainConditionContext.value ) )
+		end
+		if ( string.find( text, "#devicename#" ) ) then
+			local deviceId = tonumber( mainConditionContext.deviceId or "0" ) or 0
+			if (deviceId > 0) then
+				local device = luup.devices[deviceId]
+				if (device) then
+					text = string.gsub(text, "#devicename#", device.description)
+				end
 			end
 		end
+		if (string.find(text, "#lastupdate#")) then
+			text = string.gsub(text, "#lastupdate#", _getTimeAgo(mainConditionContext.lastUpdateTime))
+		end
+		if (string.find(text, "#lastupdatefull#")) then
+			text = string.gsub(text, "#lastupdatefull#", _getTimeAgoFull(mainConditionContext.lastUpdateTime))
+		end
+		return text
 	end
-	if (string.find(message, "#lastupdate#")) then
-		message = string.gsub(message, "#lastupdate#", _getTimeAgo(mainConditionContext.lastUpdateTime))
-	end
-	if (string.find(message, "#lastupdatefull#")) then
-		message = string.gsub(message, "#lastupdatefull#", _getTimeAgoFull(mainConditionContext.lastUpdateTime))
-	end
-	return message
-end
+}
 
 
 -- **************************************************
@@ -881,9 +889,9 @@ Events = {
 		return registeredItems
 	end,
 
-	removeRule = function (ruleId)
+	removeRule = function( ruleId )
 		local nbRemoved = 0
-		for eventName, registeredItems in pairs(_indexItemsByEvent) do
+		for eventName, registeredItems in pairs( _indexItemsByEvent ) do
 			for i = #registeredItems, 1, -1 do
 				if (registeredItems[i]._ruleId == ruleId) then
 					nbRemoved = nbRemoved + 1
@@ -891,7 +899,7 @@ Events = {
 				end
 			end
 		end
-		log("Unregister events for rule #" .. tostring(ruleId) .. ": " .. tostring(nbRemoved) .. " event(s) unregistered", "Events.removeRule", 2)
+		log( "Unregister events for rule #" .. tostring( ruleId ) .. ": " .. tostring( nbRemoved ) .. " event(s) unregistered", "Events.removeRule", 2 )
 	end,
 
 	setIsWatched = function (eventName)
@@ -1302,6 +1310,7 @@ Modifiers = {
 		return modifiers
 	end
 }
+
 
 -- **************************************************
 -- Rule properties
@@ -2439,8 +2448,8 @@ end
 
 -- **************************************************
 -- RulesEngine.Condition
---  Conditions of a rule
---  Conditions of a group of actions
+--  Condition of a rule
+--  Condition of a group of actions
 -- **************************************************
 
 Condition = {
@@ -2470,6 +2479,8 @@ Condition = {
 			lastUpdateTime = 0
 		}
 		log( _getItemSummary( condition ) .. " - Init condition", "Condition.init", 3 )
+		-- Add to index
+		Conditions.addToIndex( condition )
 		-- Modifiers
 		if ( condition.params ~= nil ) then
 			condition.modifiers = Modifiers.get( condition.params )
@@ -2511,7 +2522,11 @@ Condition = {
 	end,
 
 	-- Update the status of the condition
-	updateStatus = function( condition, params )
+	updateStatus = function( conditionId, params )
+		local condition = Conditions.get( conditionId )
+		if ( condition == nil ) then
+			return false
+		end
 		msg = _getItemSummary( condition ) .. " - Update status"
 		if ( params ~= nil ) then
 			msg = msg .. " with params " .. json.encode( params )
@@ -2522,8 +2537,13 @@ Condition = {
 		end
 		log( msg, "Condition.updateStatus", 4 )
 
+		local status, level
 		local params = params or {}
-		local status, level = ConditionTypes[condition.type].computeStatus( condition, params )
+		if params.isForced then
+			status, level = params.status, params.level
+		else
+			status, level = ConditionTypes[condition.type].computeStatus( condition, params )
+		end
 
 		-- Check since interval if exists
 		local hasToCheckConditionStatusLater
@@ -2583,7 +2603,7 @@ Condition = {
 			end
 		end
 
-		local hasSomethingChange = ( hasStatusChanged or hasToCheckConditionStatusLater )
+		local hasSomethingChange = ( hasStatusChanged or hasToCheckConditionStatusLater or params.isForced )
 		if ( hasSomethingChange and params and params.saveRulesInfosOnChange ) then
 			RulesInfos.save( { condition._ruleId } )
 		end
@@ -2593,11 +2613,16 @@ log( _getItemSummary( condition ) .. " " .. json.encode( params ), "Condition.up
 	end,
 
 	-- Modify status of the condition
-	setStatus = function( condition, status, params )
+	setStatus = function( conditionId, status, params )
+		local condition = Conditions.get( conditionId )
+		if ( condition == nil ) then
+			return false
+		end
+		status = tonumber( status )
 		local msg = _getItemSummary( condition )
 		local hasStatusChanged = false
 		local params = params or {}
-log( _getItemSummary( condition ) .. " " .. json.encode( params ), "Condition.setStatus", 4 )
+--log( _getItemSummary( condition ) .. " " .. json.encode( params ), "Condition.setStatus", 4 )
 		local elapsedTime = os.difftime( os.time(), math.max( ( condition._context.lastUpdateTime or 0 ), ( params.lastUpdateTime or 0 ) ) ) -- If elapsedTime > 0, the change could come from a reload
 		if ( ( condition._context.status < 1 ) and ( status == 1 ) ) then
 			-- The condition has just been activated
@@ -2731,7 +2756,53 @@ log( _getItemSummary( condition ) .. " " .. json.encode( params ), "Condition.se
 	end
 }
 
+
+-- **************************************************
+-- RulesEngine.Conditions
+-- **************************************************
+
+local _indexConditionsById = {}
+
 Conditions = {
+	get = function( conditionId )
+		local condition
+		if ( type( conditionId ) == "string" ) then
+			-- Try to get by id
+			condition = _indexConditionsById[ conditionId ]
+			if ( condition == nil ) then
+				log( "WARNING - Condition #" .. conditionId .. " is unknown", "Conditions.get" )
+			end
+		elseif ( type( conditionId ) == "table" ) then
+			if ( conditionId.id ~= nil ) then
+				condition = Conditions.get( conditionId.id )
+				if ( condition ~= conditionId ) then
+					error( "Given condition is not the condition added with this id", "Conditions.get" )
+				end
+			else
+				error( "Given condition has not been retrieved", "Conditions.get" )
+			end
+
+		else
+			error( "Parameter #1 is not a table", "Conditions.get" )
+		end
+		return condition
+	end,
+
+	addToIndex = function( condition )
+		_indexConditionsById[condition.id] = condition
+	end,
+
+	removeRule = function( ruleId )
+		local nbRemoved = 0
+		for conditionId, condition in pairs( _indexConditionsById ) do
+			if ( condition._ruleId == ruleId ) then
+				nbRemoved = nbRemoved + 1
+				_indexConditionsById[conditionId] = nil
+			end
+		end
+		log( "Unregister conditions for rule #" .. tostring( ruleId ) .. ": " .. tostring( nbRemoved ) .. " condition(s) removed from index", "Conditions.removeRule", 2 )
+	end,
+
 	updateStatus = function( conditions, params )
 		local hasSomethingChange = false
 		local modifiedRuleIds = {}
@@ -2799,7 +2870,7 @@ do
 			-- Get device ids
 			action.deviceIds = _getDeviceIds( action )
 			action.device = nil
-			log( "Action '" .. tostring( json.encode( action ) ), "ActionType.action_device.init", 4 )
+			log( "Action " .. tostring( json.encode( action ) ), "ActionType.action_device.init", 4 )
 		end,
 		check = function( action )
 			if not _checkParameters( action, { "deviceIds", "service", "action", { "noArgument", "arguments" } } ) then
@@ -2860,7 +2931,7 @@ do
 	_actionTypes["action_scene"] = {
 		init = function( action )
 			action.sceneId = tonumber( action.sceneId )
-			log( "Action '" .. tostring( json.encode( action ) ), "ActionType.action_scene.init", 4 )
+			log( "Action " .. tostring( json.encode( action ) ), "ActionType.action_scene.init", 4 )
 		end,
 		check = function( action )
 			if not _checkParameters( action, { "sceneId" } ) then
@@ -2885,6 +2956,44 @@ do
 			-- Call luup action
 			History.add( action._ruleId, "RuleAction", _getItemSummary( action ) .. " - Run scene #" .. tostring( action.sceneId ) .. "(" .. luup.scenes[ action.sceneId ].description .. ")" )
 			luup.call_action( "urn:micasaverde-com:serviceId:HomeAutomationGateway1", "RunScene", { SceneNum = action.sceneId }, 0 )
+		end
+	}
+
+	_actionTypes["action_mqtt"] = {
+		getMqttDeviceId = function()
+			-- Search for the MQTT plugin
+			if ( _actionTypes["action_mqtt"].mqttDeviceId == nil ) then
+				for deviceId, device in pairs( luup.devices ) do
+					if ( device.device_type == DEVICE.MQTT.type ) then
+						log( "Found MQTT plugin device #" .. tostring( deviceId ), "ActionType.action_mqtt.init", 4 )
+						_actionTypes["action_mqtt"].mqttDeviceId = deviceId
+						return deviceId
+					end
+				end
+			else
+				return _actionTypes["action_mqtt"].mqttDeviceId
+			end
+		end,
+		init = function( action )
+			action.mqttDeviceId = _actionTypes["action_mqtt"].getMqttDeviceId()
+			log( "Action " .. tostring( json.encode( action ) ), "ActionType.action_mqtt.init", 4 )
+		end,
+		check = function( action )
+			if not _checkParameters( action, { "mqttDeviceId", "topic", "payload" } ) then
+				return false
+			end
+			return true
+		end,
+		execute = function( action, context )
+			-- Check if the plugin MQTT is connected
+			if ( Variable.get( action.mqttDeviceId, VARIABLE.MQTT_CONNECTED ) ~= "1" ) then
+				Rule.addError( action._ruleId, "Execute rule actions", "MQTT plugin is not connected" )
+				return false
+			end
+			-- Call luup action
+			local payload = RulesEngine.Tools.format( action.payload, context )
+			History.add( action._ruleId, "RuleAction", _getItemSummary( action ) .. " - Send MQTT message [" .. tostring( action.topic ) .. "] " .. tostring( payload ) )
+			luup.call_action( VARIABLE.MQTT_CONNECTED[1], "Publish", { topic = action.topic, payload = payload }, action.mqttDeviceId )
 		end
 	}
 end
@@ -2923,7 +3032,8 @@ ActionTypes = {
 -- **************************************************
 
 -- TODO : use syslog ?
-
+-- TODO : ne sauver que toutes les 30 secondes
+-- TODO : limiter la taille en mémoire
 local _history = {}
 
 History = {
@@ -3099,19 +3209,20 @@ ActionGroup = {
 		local params = params or {}
 
 		local delayInterval
-		if (not isRecurrent) then
+		if not isRecurrent then
 			-- Get first delay
-			if (type(actionGroup.delayInterval) == "function") then
-				delayInterval = tonumber(actionGroup.delayInterval()) or 0
+			if ( type( actionGroup.delayInterval ) == "function" ) then
+				-- Deprecated
+				delayInterval = tonumber( actionGroup.delayInterval() ) or 0
 			else
 				delayInterval = tonumber( actionGroup.modifiers.delayInterval ) or 0
 			end
-			if ((delayInterval == 0) and (actionGroup.event == "reminder")) then
+			if ( ( delayInterval == 0 ) and ( actionGroup.event == "reminder" ) and ( actionGroup.recurrentImmediate ~= "TRUE" ) ) then
 				isRecurrent = true
 			end
 		end
 
-		if (not isRecurrent) then
+		if not isRecurrent then
 			--if ((actionGroup.event == "conditionStart") or (actionGroup.event == "conditionEnd")) then
 			--	delay = 0
 			--else
@@ -3145,15 +3256,15 @@ ActionGroup = {
 			--end
 		end
 
-		if (isRecurrent) then
+		if ( isRecurrent ) then
 			-- Get recurrent delay
-			delay = _getIntervalInSeconds(actionGroup.recurrentInterval, actionGroup.unit)
-			if (delay < _minRecurrentInterval) then
+			delay = _getIntervalInSeconds( actionGroup.recurrentInterval, actionGroup.unit )
+			if ( delay < _minRecurrentInterval ) then
 				-- Security on minimal interval time for recurrent actions
-				log("Reminder recurrent interval is set to min interval " .. tostring(_minRecurrentInterval), "ActionGroup.getDelay", 2)
+				log( "Reminder recurrent interval is set to min interval " .. tostring( _minRecurrentInterval ), "ActionGroup.getDelay", 2 )
 				delay = _minRecurrentInterval
 			end
-			log("Recurrent delay: " .. tostring(delay), "ActionGroup.getDelay", 3)
+			log( "Recurrent delay: " .. tostring( delay ), "ActionGroup.getDelay", 3 )
 			--[[
 			log("Reminder recurrent interval: " .. tostring(recurrentInterval), 4, "getDelay")
 			log("DEBUG - (elapsedTime - delayInterval): " .. tostring((elapsedTime - delayInterval)), 4, "getDelay")
@@ -3222,14 +3333,14 @@ log("DEBUG params:" .. json.encode(params), "ActionGroup.execute", 5)
 		end
 
 		-- Check if a hook prevents to do the actions
-		if not Hooks.execute("beforeDoingAction", rule, actionGroup.id) then
-			log(msg .. " - A hook prevent from doing these actions", "ActionGroup.execute", 3)
+		if not Hooks.execute( "beforeDoingAction", rule, actionGroup.id ) then
+			log( msg .. " - A hook prevent from doing these actions", "ActionGroup.execute", 3 )
 		-- Check if the rule is disarmed
 		-- TODO : use Rule.isArmed()
-		elseif (not rule._context.isArmed and (actionGroup.event ~= "end")) then
+		elseif ( not rule._context.isArmed and ( actionGroup.event ~= "end" ) ) then
 			log(msg .. " - Don't do actions - Rule is disarmed and event is not 'end'", "ActionGroup.execute")
 		-- Check if the rule is acknowledged
-		elseif (rule._context.isAcknowledged and (actionGroup.event == "reminder")) then
+		elseif ( rule._context.isAcknowledged and ( actionGroup.event == "reminder" ) ) then
 			log(msg .. " - Don't do reminder actions - Rule is acknowledged", "ActionGroup.execute")
 
 		--[[
@@ -3243,15 +3354,15 @@ log("DEBUG params:" .. json.encode(params), "ActionGroup.execute", 5)
 		--]]
 
 		-- Check if the condition of the group of actions is still respected
-		elseif ((actionGroup.condition ~= nil) and (Condition.getStatus(actionGroup.condition) == 0)) then
+		elseif ( ( actionGroup.condition ~= nil ) and ( Condition.getStatus( actionGroup.condition ) == 0 ) ) then
 			log(msg .. " - Don't do anything - Rule is still active but the condition of the group of actions is no more respected", "ActionGroup.execute", 3)
 		-- Check if the level is still respected (TODO : est-ce nécessaire puisque au changement, les schedule sont enlevés)
 		elseif not ActionGroup.isMatchingLevel( actionGroup, level ) then
 			log(msg .. " - Don't do anything - Level doesn't match the requested level " .. tostring( level ), "ActionGroup.execute", 3)
 		else
 			--log(msg .. " - Do actions", "ActionGroup.execute", 3)
-			if (params.idx ~= nil) then
-				log(msg .. " - Resume from action #" .. tostring( params.idx ), "ActionGroup.execute", 3)
+			if ( params.idx ~= nil ) then
+				log( msg .. " - Resume from action #" .. tostring( params.idx ), "ActionGroup.execute", 3 )
 			end
 			for i = ( params.idx or 1 ), #actionGroup["do"] do
 				local action = actionGroup["do"][i]
@@ -3294,10 +3405,10 @@ log("DEBUG params:" .. json.encode(params), "ActionGroup.execute", 5)
 			end
 		end
 
-		if (actionGroup.event == "reminder") then
+		if ( actionGroup.event == "reminder" ) then
 			-- Relaunching of the surveillance of the status of the rule
-			local delay = ActionGroup.getDelay(rule, actionGroup, nil, true)
-			log(msg .. " - Do recurrent group of actions in " .. tostring(delay) .. " seconds", "ActionGroup.execute", 2)
+			local delay = ActionGroup.getDelay( rule, actionGroup, nil, true )
+			log( msg .. " - Do recurrent group of actions in " .. tostring( delay ) .. " seconds", "ActionGroup.execute", 2 )
 			ScheduledTasks.add(
 				{ ruleId = rule.id, event = "reminder", level = level, actionGroupId = actionGroup.id, isCritical = actionGroup.modifiers.isCritical },
 				ActionGroup.execute, delay, { actionGroup, level }
@@ -3359,40 +3470,40 @@ ActionGroups = {
 
 	-- Execute groups of actions matching an event and optionally a level
 	execute = function( actionGroups, ruleId, event, level, params )
-		if (actionGroups == nil) then
+		if ( actionGroups == nil ) then
 			return
 		end
-		local rule = Rules.get(ruleId)
+		local rule = Rules.get( ruleId )
 		if (rule == nil) then
-			log("Rule #" .. tostring(ruleId) .. " do not exist", "ActionGroups.execute")
+			log( "Rule #" .. tostring(ruleId) .. " do not exist", "ActionGroups.execute" )
 			return false
 		end
 log("DEBUG params:" .. json.encode(params), "ActionGroups.execute", 5)
 		-- Check if engine is enabled
-		if (not isEnabled()) then
-			log("Rules engine is not enabled - Do nothing", "ActionGroups.execute")
+		if not isEnabled() then
+			log( "Rules engine is not enabled - Do nothing", "ActionGroups.execute" )
 			return false
 		end
 
 		-- Check if rule is disarmed
-		if (not rule._context.isArmed and (event ~= "end")) then
-			log("Rule #" .. tostring(rule.id) .. " is disarmed and event is not 'end' - Do nothing", "ActionGroups.execute")
+		if ( not rule._context.isArmed and ( event ~= "end" ) ) then
+			log( "Rule #" .. tostring( rule.id ) .. " is disarmed and event is not 'end' - Do nothing", "ActionGroups.execute" )
 			return false
 		end
 
 		-- Check if a group of action is matching the event
-		if not table.contains(actionGroups.events, event) then
-			log("Rule #" .. tostring(rule.id) .. " has no group of actions for event '" .. event .. "' - Do nothing", "ActionGroups.execute")
+		if not table.contains( actionGroups.events, event ) then
+			log( "Rule #" .. tostring( rule.id ) .. " has no group of actions for event '" .. event .. "' - Do nothing", "ActionGroups.execute" )
 			return false
 		end
 		
 		-- Announce what will be done
 		if ( level ~= nil ) then
-			log("*** Rule #" .. tostring(rule.id) .. " - Do group of actions for event '" .. event .. "' with explicit level '" .. tostring(level) .. "'", "ActionGroups.execute")
+			log( "*** Rule #" .. tostring( rule.id ) .. " - Do group of actions for event '" .. event .. "' with explicit level '" .. tostring( level ) .. "'", "ActionGroups.execute" )
 		--elseif (rule._context.level > 0) then
 		--	log("*** " .. Rule.getSummary(rule) .. " - Do group of actions for event '" .. event .. "' matching rule level '" .. tostring(rule._context.level) .. "'", "ActionGroups.execute")
 		else
-			log("*** Rule #" .. tostring(rule.id) .. " - Do group of actions for event '" .. event .. "'", "ActionGroups.execute")
+			log( "*** Rule #" .. tostring(rule.id) .. " - Do group of actions for event '" .. event .. "'", "ActionGroups.execute" )
 		end
 
 		local params = params or {}
@@ -3410,17 +3521,17 @@ log("DEBUG params:" .. json.encode(params), "ActionGroups.execute", 5)
 			elseif ((actionGroup.condition ~= nil) and (Condition.getStatus(actionGroup.condition) == 0)) then
 				log(msg .. " - Don't do anything - Rule is still active but the condition of the group of actions is not respected", "ActionGroup.execute", 3)
 			else
-				local delay = ActionGroup.getDelay(rule, actionGroup, params)
+				local delay = ActionGroup.getDelay( rule, actionGroup, params )
 				if (delay == nil) then
 					-- Delay is passed (the action has already been done)
 					log(msg .. " - Don't do because it already has been done", "ActionGroups.execute", 3)
 				else
 					-- Execute the action
 					isAtLeastOneToExecute = true
-					if (delay > 0) then
-						log(msg .. " - Do in " .. tostring(delay) .. " second(s)", "ActionGroups.execute", 2)
+					if ( delay > 0 ) then
+						log( msg .. " - Do in " .. tostring( delay ) .. " second(s)", "ActionGroups.execute", 2 )
 					else
-						log(msg .. " - Do immediately", "ActionGroups.execute", 2)
+						log( msg .. " - Do immediately", "ActionGroups.execute", 2 )
 					end
 					-- The calls are made all in asynchronous to avoid the blockings
 					ScheduledTasks.add(
@@ -3431,11 +3542,11 @@ log("DEBUG params:" .. json.encode(params), "ActionGroups.execute", 5)
 			end
 		end
 		if not isAtLeastOneToExecute then
-			local msg = Rule.getSummary(rule) .. " - No action to do for event '" .. tostring(event) .. "'"
+			local msg = Rule.getSummary( rule ) .. " - No action to do for event '" .. tostring( event ) .. "'"
 			if ( level ~= nil ) then
-				msg = msg .. " and level '" .. tostring(level) .. "'"
+				msg = msg .. " and level '" .. tostring( level ) .. "'"
 			end
-			log(msg, "ActionGroups.execute", 2)
+			log( msg, "ActionGroups.execute", 2 )
 		end
 	end
 }
@@ -3481,7 +3592,7 @@ RulesInfos = {
 		log( "Save rules infos in file '" .. _path .. _fileName .. "'", "RulesInfos.save" )
 		local file = io.open( _path .. _fileName, "w" )
 		if ( file == nil ) then
-			log( "File '" .. _path .. _fileName .. "' can not be written or created", "RulesInfos.save" )
+			error( "File '" .. _path .. _fileName .. "' can not be written or created", "RulesInfos.save" )
 			return
 		end
 		local rulesInfos = {}
@@ -3492,6 +3603,7 @@ RulesInfos = {
 		file:close()
 
 		-- Notify a change to the client
+		-- TODO : à remplacer par polling ?
 		Variable.set( g_deviceId, VARIABLE.LAST_UPDATE, tostring( os.time() ) )
 		if ( modifiedRuleIds ) then
 			Variable.set( g_deviceId, VARIABLE.LAST_MODIFIED_RULES, table.concat( modifiedRuleIds, "," ) )
@@ -3914,12 +4026,12 @@ Rule = {
 	end,
 
 	-- Set the status of the rule and start linked actions
-	setStatus = function (ruleId, status, level)
-		local rule, err = Rules.get(ruleId)
-		if (rule == nil) then
+	setStatus = function( ruleId, status, level )
+		local rule, err = Rules.get( ruleId )
+		if ( rule == nil ) then
 			return false, err
 		end
-		local msg = Rule.getSummary(rule)
+		local msg = Rule.getSummary( rule )
 
 		-- Update rule active level
 		local hasRuleLevelChanged = false
@@ -4221,38 +4333,40 @@ Rules = {
 	end,
 
 	-- Remove a rule
-	remove = function (fileName, ruleIdx, ruleId, updateOtherRuleIdxes)
-		ruleIdx, ruleId = tonumber(ruleIdx), tonumber(ruleId)
-		if ((fileName == nil) or (ruleIdx == nil) or (ruleId == nil)) then
+	remove = function( fileName, ruleIdx, ruleId, updateOtherRuleIdxes )
+		ruleIdx, ruleId = tonumber( ruleIdx ), tonumber( ruleId )
+		if ( ( fileName == nil ) or ( ruleIdx == nil ) or ( ruleId == nil ) ) then
 			error( "fileName(" .. tostring( fileName ) .. "), ruleIdx(" .. tostring( ruleIdx ) .. ") and ruleId(" .. tostring( ruleId ) .. ") are mandatory", "Rules.remove" )
 			return
 		end
-		local rule = Rules.get(ruleId)
-		if ((rule ~= nil) and (rule.fileName == fileName) and (rule.idx == ruleIdx)) then
-			log("Remove rule #" .. rule.id .. "(" .. rule.name .. ")", "Rules.remove")
+		local rule = Rules.get( ruleId )
+		if ( ( rule ~= nil ) and ( rule.fileName == fileName ) and ( rule.idx == ruleIdx ) ) then
+			log( "Remove rule #" .. rule.id .. "(" .. rule.name .. ")", "Rules.remove" )
 			-- Remove events on the rule
-			Events.removeRule(rule.id)
+			Events.removeRule( rule.id )
 			-- Remove scheduled tasks of the rule
-			if (Rule.isStarted(rule)) then
+			if Rule.isStarted( rule ) then
 				ScheduledTasks.remove({ ruleId = rule.id })
 			end
+			-- Remove conditions of the rule
+			Conditions.removeRule( rule.id )
 			-- Remove informations of the rule
-			RulesInfos.remove(rule)
+			RulesInfos.remove( rule )
 			-- Remove rule from indexes
 			_indexRulesById[tostring(rule.id)] = nil
 			_indexRulesByName[rule.name] = nil
 			-- Remove rule
 			for i = #_rules, 1, -1 do
-				if (_rules[i] == rule) then
-					table.remove(_rules, i)
+				if ( _rules[i] == rule ) then
+					table.remove( _rules, i )
 					break
 				end
 			end
 			rule = nil
 
-			if (updateOtherRuleIdxes == true) then
-				for _, rule in ipairs(_rules) do
-					if ((rule.fileName == fileName) and (rule.idx > ruleIdx)) then
+			if ( updateOtherRuleIdxes == true ) then
+				for _, rule in ipairs( _rules ) do
+					if ( ( rule.fileName == fileName ) and ( rule.idx > ruleIdx ) ) then
 						rule.idx = rule.idx - 1
 						rule._context.idx = rule.idx
 					end
@@ -4757,17 +4871,17 @@ function disable()
 end
 
 -- Sets the verbosity level
-function setVerbosity (level)
-	_verbosity = tonumber(level) or 0
-	log("Set verbosity to " .. tostring(_verbosity), "setVerbosity")
+function setVerbosity( level )
+	_verbosity = tonumber( level ) or 0
+	log( "Set verbosity to " .. tostring( _verbosity ), "setVerbosity" )
 end
 
 function getVerbosity()
 	return _verbosity
 end
 
-function setMinRecurrentInterval (minInterval)
-	_minRecurrentInterval = tonumber(minInterval) or _minRecurrentInterval
+function setMinRecurrentInterval( minInterval )
+	_minRecurrentInterval = tonumber( minInterval ) or _minRecurrentInterval
 end
 
 
@@ -4961,6 +5075,7 @@ local _handlerCommands = {
 		return tostring(json.encode(result)), "application/json"
 	end,
 
+	-- Get the last engine's errors
 	["getErrors"] = function( params, outputFormat )
 		local errors
 		local ruleId = tonumber( params["ruleId"] )
@@ -5009,6 +5124,7 @@ local function _initPluginInstance()
 	Variable.getOrInit( g_deviceId, VARIABLE.LAST_MAIN_UPDATE, "" )
 	_params = {
 		deviceId = g_deviceId,
+		--options = Variable.getOrInit( g_deviceId, VARIABLE.PLUGIN_OPTIONS, "" ) or "",
 		modules = Variable.getOrInit( g_deviceId, VARIABLE.MODULES, "" ) or "",
 		toolboxConfig = Variable.getOrInit( g_deviceId, VARIABLE.TOOLBOX_CONFIG, "" ) or "",
 		startupFiles = Variable.getOrInit( g_deviceId, VARIABLE.STARTUP_FILES, "C_RulesEngine_Startup.lua" ) or "",
@@ -5080,10 +5196,16 @@ end
 function startup( lul_device )
 	log( "Start plugin '" .. _NAME .. "' (v" .. _VERSION .. ")", "startup" )
 
-	g_deviceId = lul_device
+	if lul_device then
+		g_deviceId = tonumber( lul_device )
+	end
+	if ( g_deviceId == nil ) then
+		error( "deviceId is empty", "startup" )
+		return
+	end
 
 	-- Update static JSON file
-	if _updateStaticJSONFile( lul_device, _NAME .. "1" ) then
+	if _updateStaticJSONFile( g_deviceId, _NAME .. "1" ) then
 		warning( "'device_json' has been updated : reload LUUP engine", "startup" )
 		if ( ( luup.version_branch == 1 ) and ( luup.version_major > 5 ) ) then
 			luup.reload()
@@ -5096,7 +5218,7 @@ function startup( lul_device )
 	Sun.update()
 
 	-- Watch setting changes
-	--luup.variable_watch( "RulesEngine.initPluginInstance", SID.RulesEngine, "Options", lul_device )
+	--Variable.watch( g_deviceId, VARIABLE.PLUGIN_OPTIONS, "RulesEngine.initPluginInstance" )
 	Variable.watch( g_deviceId, VARIABLE.DEBUG_MODE, "RulesEngine.Event.onDebugValueIsUpdated" )
 
 	-- Handlers
@@ -5118,10 +5240,9 @@ ScheduledTasks.createIndexFunctionNames()
 
 local RulesEngine = {
 	log = log,
-	--
-	Rule = Rule,
-	Rules = Rules,
-	RulesFile = RulesFile,
+	debug = debug,
+	warning = warning,
+	error = error,
 	--
 	start = start,
 	stop = stop,
@@ -5129,18 +5250,30 @@ local RulesEngine = {
 	disable = disable,
 	isEnabled = isEnabled,
 	isStarted = isStarted,
+	setVerbosity = setVerbosity,
+	setMinRecurrentInterval = setMinRecurrentInterval,
 	--
-	getEnhancedMessage = getEnhancedMessage,
+	Condition = Condition,
+	Conditions = Conditions,
+	ActionTypes = ActionTypes,
+	ActionGroups = ActionGroups,
+	Rule = Rule,
+	Rules = Rules,
+	RulesFile = RulesFile,
+	UI = UI,
+	Hooks = Hooks,
+	Tools = Tools,
+	--
+	getEnhancedMessage = Tools.format,
 	setLabels = setLabels,
 	getDeviceIdByName = _getDeviceIdByName,
 	addHook = Hooks.add,
 	doHook = Hooks.execute,
 	addActionType = ActionTypes.add,
-	ActionTypes = ActionTypes,
-	ActionGroups = ActionGroups,
+
+	--
 	doRuleActions = ActionGroups.execute,
-	setVerbosity = setVerbosity,
-	setMinRecurrentInterval = setMinRecurrentInterval,
+
 	--
 	startup = startup,
 	--
@@ -5163,9 +5296,6 @@ RulesEngine.setLabels( {
 	["seconds"] = "secondes"
 } )
 
-_G["RulesEngine.Tools"] = {
-	formatMessage = getEnhancedMessage
-}
 -- Promote the functions used by Vera's luup.xxx functions to the Global Name Space
 _G["RulesEngine.Event.onDeviceVariableIsUpdated"] = Event.onDeviceVariableIsUpdated
 _G["RulesEngine.Event.onTimerIsTriggered"] = Event.onTimerIsTriggered
