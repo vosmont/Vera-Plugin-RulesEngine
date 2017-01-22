@@ -1998,7 +1998,7 @@ Blockly.Msg.CONDITION_TIME_TOOLTIP = "Condition on time.";
 Blockly.Msg.CONDITION_TIME_BETWEEN_TOOLTIP = "Condition on time between two boundaries.";
 Blockly.Msg.CONDITION_RULE_TOOLTIP = "Condition on the status of another rule.";
 Blockly.Msg.CONDITION_INVERTER_TOOLTIP = "Inverts the linked condition (NOT).";
-Blockly.Msg.CONDITION_FUNCTION_TOOLTIP = "Execute LUA code and use the result as a condition.";
+Blockly.Msg.CONDITION_FUNCTION_TOOLTIP = "Execute LUA code and use the result (boolean) as a condition.";
 Blockly.Msg.CONDITION_MQTT_TOOLTIP = "(TODO)Condition on a received message from MQTT broker.";
 
 Blockly.Msg.CONTROLS_CONDITION_TITLE = "condition";
@@ -2820,7 +2820,7 @@ Blockly.Blocks[ "condition_function" ] = {
 		}
 
 		this.appendDummyInput()
-			.appendField( "LUA function" );
+			.appendField( "LUA script" );
 		this.appendDummyInput()
 			.appendField( new Blockly.FieldCodeArea( "" ), "functionContent" );
 
@@ -3355,7 +3355,7 @@ Blockly.Blocks['action_function'] = {
 		this.setColour( Blockly.Blocks.actions.HUE2 );
 
 		this.appendDummyInput()
-			.appendField( "LUA function" );
+			.appendField( "LUA script" );
 		this.appendDummyInput()
 			.appendField( new Blockly.FieldCodeArea( "" ), "functionContent" );
 

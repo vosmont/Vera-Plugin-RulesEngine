@@ -75,7 +75,12 @@
 			<name>SetConditionStatus</name>
 			<job>
 				if (RulesEngine ~= nil) then
-					RulesEngine.Condition.updateStatus( lul_settings.conditionId, { isForced = true, status = lul_settings.status, level = lul_settings.level, lastUpdateTime = os.time() } )
+					RulesEngine.Condition.updateStatus( lul_settings.conditionId, {
+						isForced = true,
+						status = lul_settings.status,
+						level = lul_settings.level,
+						lastUpdateTime = os.time()
+					} )
 				end
 				return 4, nil
 			</job>

@@ -682,7 +682,8 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 
 		$.when( _loadResourcesAsync( [ "https://cdnjs.cloudflare.com/ajax/libs/ace/1.2.5/ace.js" ] ) )
 			.done( function() {
-				var html = '<div id="rulesengine-lua-editor">' + code + '</div>'; // TODO : escape
+				var html = '<div>LUA script is invoked with "RulesEngine" and "context" variables</div>' 
+					+	'<div id="rulesengine-lua-editor">' + code + '</div>'; // TODO : escape
 				$( dialog ).find( ".row-fluid" ).append( html );
 				// ACE - https://ace.c9.io/
 				var editor = ace.edit( "rulesengine-lua-editor" );
@@ -1787,25 +1788,27 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 				var ruleInfos = $.grep( rulesInfos, function( infos ) {
 					return infos.id === ruleId;
 				} )[ 0 ];
+				var requestInterval = _requestInterval * 1000;
 				if ( !ruleInfos ) {
 					_lastRuleInfos = {};
-					return;
-				}
-				_lastRuleInfos = ruleInfos;
-				var engineStatus = _getEngineStatus();
-				_changeSvgBlocks( _getBlocklyConditionBlocks( ruleInfos.id ), ruleInfos.id, ruleInfos, engineStatus );
-				$.each( ruleInfos.conditions, function( conditionId, conditionInfos) {
-					_changeSvgBlocks( _getBlocklyConditionBlocks( conditionId ), conditionId, conditionInfos, engineStatus );
-				} );
-				// 
-				var requestInterval = _requestInterval * 1000;
-				var processTime = new Date().getTime() - requestTime;
-				if ( processTime > 20 ) {
-					requestInterval += Math.min( processTime * 2, _requestMaxInterval * 1000 );
-					_debug( "The request has been too long (" +  processTime + "ms), next poll in " + requestInterval + "ms" );
+					requestInterval = _requestMaxInterval * 1000
+					_debug( "The request is in error, next poll in " + requestInterval + "ms" );
+				} else {
+					_lastRuleInfos = ruleInfos;
+					var engineStatus = _getEngineStatus();
+					_changeSvgBlocks( _getBlocklyConditionBlocks( ruleInfos.id ), ruleInfos.id, ruleInfos, engineStatus );
+					$.each( ruleInfos.conditions, function( conditionId, conditionInfos) {
+						_changeSvgBlocks( _getBlocklyConditionBlocks( conditionId ), conditionId, conditionInfos, engineStatus );
+					} );
+					// 
+					
+					var processTime = new Date().getTime() - requestTime;
+					if ( processTime > 20 ) {
+						requestInterval = Math.min( requestInterval + processTime * 2, _requestMaxInterval * 1000 );
+						_debug( "The request has been too long (" +  processTime + "ms), next poll in " + requestInterval + "ms" );
+					}
 				}
 				setTimeout( _updateViewPageRule, requestInterval, ruleId );
-				//_updateViewPageRule( rulesInfos, ruleId );
 			} );
 	}
 

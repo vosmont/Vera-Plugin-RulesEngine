@@ -22,7 +22,7 @@ end
 
 _NAME = "RulesEngine"
 _DESCRIPTION = "Rules Engine for the Vera with visual editor"
-_VERSION = "0.17"
+_VERSION = "0.17.1"
 _AUTHOR = "vosmont"
 
 -- **************************************************
@@ -821,40 +821,48 @@ Tools = {
 		if ( context == nil ) then
 			return text
 		end
-		log( "DEBUG context:" .. json.encode(context), "Tools.format", 5 )
+		log( "DEBUG context:" .. json.encode( context ), "Tools.format", 5 )
 		local mainConditionContext
 		if ( context.conditions and context.conditions[ tostring( context.id ) .. ".1" ] ) then
 			mainConditionContext = context.conditions[ tostring( context.id ) .. ".1" ]
 		else
 			mainConditionContext = context
 		end
-		if ( string.find( text, "#duration#" ) ) then
+		if string.find( text, "#duration#" ) then
 			text = string.gsub( text, "#duration#", _getTimeAgo( context.lastStatusUpdateTime ) )
 		end
-		if (string.find(text, "#durationfull#")) then
+		if string.find( text, "#durationfull#" ) then
 			text = string.gsub( text, "#durationfull#", _getTimeAgoFull( context.lastStatusUpdateTime ) )
 		end
-		if (string.find(text, "#leveldurationfull#")) then
+		if string.find( text, "#levelduration#" ) then
+			text = string.gsub( text, "#levelduration#", _getTimeAgo( context.lastLevelUpdateTime ) )
+		end
+		if string.find( text, "#leveldurationfull#" ) then
 			text = string.gsub( text, "#leveldurationfull#", _getTimeAgoFull( context.lastLevelUpdateTime ) )
 		end
-		if (string.find(text, "#value#")) then
+		if string.find( text, "#value#" ) then
 			-- Most recent value from conditions
-			text = string.gsub( text, "#value#", tostring(mainConditionContext.value ) )
+			text = string.gsub( text, "#value#", tostring( mainConditionContext.value ) )
 		end
-		if ( string.find( text, "#devicename#" ) ) then
+		if string.find( text, "#devicename#" ) then
+			local isDeviceFound = false
 			local deviceId = tonumber( mainConditionContext.deviceId or "0" ) or 0
 			if (deviceId > 0) then
 				local device = luup.devices[deviceId]
-				if (device) then
-					text = string.gsub(text, "#devicename#", device.description)
+				if device then
+					isDeviceFound = true
+					text = string.gsub( text, "#devicename#", device.description )
 				end
 			end
+			if not isDeviceFound then
+				text = string.gsub(text, "#devicename#", "unknown")
+			end
 		end
-		if (string.find(text, "#lastupdate#")) then
-			text = string.gsub(text, "#lastupdate#", _getTimeAgo(mainConditionContext.lastUpdateTime))
+		if string.find( text, "#lastupdate#" ) then
+			text = string.gsub( text, "#lastupdate#", _getTimeAgo( mainConditionContext.lastUpdateTime ) )
 		end
-		if (string.find(text, "#lastupdatefull#")) then
-			text = string.gsub(text, "#lastupdatefull#", _getTimeAgoFull(mainConditionContext.lastUpdateTime))
+		if string.find( text, "#lastupdatefull#" ) then
+			text = string.gsub( text, "#lastupdatefull#", _getTimeAgoFull( mainConditionContext.lastUpdateTime ) )
 		end
 		return text
 	end
@@ -1624,7 +1632,7 @@ log( "DEBUG service:" .. tostring(condition.service) .. ", variable:" .. tostrin
 					condition.type = "list_with_operator_condition"
 					condition.operator = "OR"
 					condition.items = {}
-					condition.isMainConditionValue = true
+					condition.isMainCondition = true
 					-- Create the conditions of the group from the template
 					for i, deviceId in ipairs( deviceIds ) do
 						local newCondition = table.extend( {}, newConditionTemplate )
@@ -1639,7 +1647,7 @@ log( "DEBUG service:" .. tostring(condition.service) .. ", variable:" .. tostrin
 						else
 							newCondition.deviceId = deviceId
 						end
-						newCondition.isChildConditionValue = true
+						newCondition.isChildCondition = true
 						if newCondition.deviceIds then
 							log( "Create " .. _getItemSummary( newCondition ) .. " for devices " .. json.encode( newCondition.deviceIds ), "ConditionValue.init", 4 )
 						else
@@ -1665,7 +1673,7 @@ log( "DEBUG service:" .. tostring(condition.service) .. ", variable:" .. tostrin
 				condition.type = "list_with_operator_condition"
 				condition.operator = "AND"
 				condition.items = {}
-				condition.isMainConditionValue = true
+				condition.isMainCondition = true
 				-- Create the conditions of the group from the template
 				for i, state in ipairs( condition.states ) do
 					local newCondition = table.extend( {}, newConditionTemplate )
@@ -1675,7 +1683,7 @@ log( "DEBUG service:" .. tostring(condition.service) .. ", variable:" .. tostrin
 					newCondition.variable = state.variable
 					newCondition.operator = state.operator
 					newCondition.value    = state.value
-					newCondition.isChildConditionValue = true
+					newCondition.isChildCondition = true
 					log( "Create " .. _getItemSummary( newCondition ) .. " for variable '" .. newCondition.variable .. "'", "ConditionValue.init", 4 )
 					table.insert( condition.items, newCondition )
 				end
@@ -2540,7 +2548,8 @@ Condition = {
 		local status, level
 		local params = params or {}
 		if params.isForced then
-			status, level = params.status, params.level
+			msg = msg .. " (FORCED) "
+			status, level = tonumber( params.status ) or 0, tonumber( params.level ) or Condition.getLevel( condition )
 		else
 			status, level = ConditionTypes[condition.type].computeStatus( condition, params )
 		end
@@ -2564,7 +2573,7 @@ Condition = {
 		local isConditionActionToDo = false
 		if (
 			hasStatusChanged
-			and condition.isChildConditionValue and condition._parent.isMainConditionValue
+			and condition.isChildCondition and condition._parent.isMainCondition
 			and ( condition._parent.actions ~= nil )
 		) then
 			if ( ( status == 1 ) and ActionGroups.isMatchingEvent( condition._parent.actions, "conditionStart" ) ) then
@@ -2630,8 +2639,8 @@ log( _getItemSummary( condition ) .. " " .. json.encode( params ), "Condition.up
 			condition._context.status = 1
 			condition._context.lastStatusUpdateTime = os.time()
 			hasStatusChanged = true
-			--if ( condition.actions and not ( condition.isMainConditionValue == true ) ) then
-			if ( condition.actions and not condition.isMainConditionValue ) then
+			--if ( condition.actions and not ( condition.isMainCondition == true ) ) then
+			if ( condition.actions and not condition.isMainCondition ) then
 				--ActionGroups.execute(condition.actions, condition._ruleId, "conditionStart", condition.level, params )
 				ActionGroups.execute( condition.actions, condition._ruleId, "conditionStart", nil, params )
 			end
@@ -2641,8 +2650,8 @@ log( _getItemSummary( condition ) .. " " .. json.encode( params ), "Condition.up
 			condition._context.status = 0
 			condition._context.lastStatusUpdateTime = os.time()
 			hasStatusChanged = true
-			--if ( condition.actions and not ( condition.isMainConditionValue == true ) ) then
-			if ( condition.actions and not condition.isMainConditionValue ) then
+			--if ( condition.actions and not ( condition.isMainCondition == true ) ) then
+			if ( condition.actions and not condition.isMainCondition ) then
 				--ActionGroups.execute(condition.actions, condition._ruleId, "conditionEnd", condition.level, params )
 				ActionGroups.execute( condition.actions, condition._ruleId, "conditionEnd", nil, params )
 			end
