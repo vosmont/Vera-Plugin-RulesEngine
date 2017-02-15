@@ -22,7 +22,7 @@ end
 
 _NAME = "RulesEngine"
 _DESCRIPTION = "Rules Engine for the Vera with visual editor"
-_VERSION = "0.17.1"
+_VERSION = "0.17.2"
 _AUTHOR = "vosmont"
 
 -- **************************************************
@@ -941,6 +941,7 @@ Event = {
 		-- Update status of the linked conditions for this event
 		local context = {
 			deviceId = lul_device,
+			oldValue = lul_value_old,
 			value = lul_value_new,
 			lastUpdateTime = os.time()
 		}
@@ -2438,8 +2439,9 @@ log( "DEBUG " .. _getItemSummary( condition ) .. " - Actions: "..tostring(json.e
 			local status = 0
 			if ( type( condition.callback ) == "function" ) then
 				-- Execute function
-				log( _getItemSummary( condition ) .. " - Do custom function with context :" .. tostring( json.encode( condition._context ) ), "ConditionFunction.computeStatus", 3 )
-				local ok, result = pcall( condition.callback, condition._context )
+				local parent = condition._parent
+				log( _getItemSummary( condition ) .. " - Do custom function with context :" .. tostring( json.encode( parent._context ) ), "ConditionFunction.computeStatus", 3 )
+				local ok, result = pcall( condition.callback, parent._context )
 				if not ok then
 					Rule.addError( condition._ruleId, "RuleCondition", _getItemSummary( condition ) .. " - " .. tostring( result ) )
 				end
