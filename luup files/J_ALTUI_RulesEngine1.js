@@ -1273,7 +1273,7 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 			if ( item.eventType === "ERROR" ) {
 				item.eventType = '<font color="red">' + item.eventType + '</font>';
 			}
-			$(".altui-mainpanel .timeline").append( '<div>' + _convertTimestampToLocaleString( item.timestamp ) + ( item.ruleId ? ' - Rule #' + item.ruleId : '' ) + ' - ' + item.eventType + ' - ' + item.event + '</div>' );
+			$(".altui-mainpanel .timeline").append( '<div>' + _convertTimestampToLocaleString( item.timestamp ) + ( item.ruleId > -1 ? ' - Rule #' + item.ruleId : '' ) + ' - ' + item.eventType + ' - ' + item.event + '</div>' );
 		} );
 		$(".altui-mainpanel .timeline").append( '<div> Schedule: </div>' );
 		$.each( timeline.scheduled, function( idx, item ) {
@@ -1535,7 +1535,7 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 		var eventList = {};
 		var devicetypesDB = MultiBox.getDeviceTypesDB( "0" ); // TODO : controller_id
 		var dt = devicetypesDB[ deviceType ];
-		if ( dt.ui_static_data && dt.ui_static_data.eventList2 ) {
+		if ( dt && dt.ui_static_data && dt.ui_static_data.eventList2 ) {
 			for ( var i = 0; i < dt.ui_static_data.eventList2.length; i++ ) {
 				var event = dt.ui_static_data.eventList2[ i ];
 				eventList[ event.id.toString() ] = event;

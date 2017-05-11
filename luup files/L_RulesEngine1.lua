@@ -22,7 +22,7 @@ end
 
 _NAME = "RulesEngine"
 _DESCRIPTION = "Rules Engine for the Vera with visual editor"
-_VERSION = "0.17.2"
+_VERSION = "0.17.3"
 _AUTHOR = "vosmont"
 
 -- **************************************************
@@ -3103,7 +3103,7 @@ History = {
 	add = function( ruleId, eventType, event )
 		local entry = {
 			timestamp = os.time(),
-			ruleId = ( ruleId or "" ),
+			ruleId = ( ruleId or -1 ),
 			eventType = ( eventType or "UNKNOWN" ),
 			event = ( event or "UNKNOWN" )
 		}
@@ -4453,7 +4453,7 @@ Rules = {
 	showSummary = function()
 		local nbArmedRules, nbActiveRules, nbAcknowledgedRules = 0, 0, 0, 0
 		for _, rule in ipairs( _rules ) do
-			if ( rule._context.isArmed == 1 ) then
+			if rule._context.isArmed then
 				nbArmedRules = nbArmedRules + 1
 			end
 			if ( rule._context.status == 1 ) then
