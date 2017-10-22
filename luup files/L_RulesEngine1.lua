@@ -22,7 +22,7 @@ end
 
 _NAME = "RulesEngine"
 _DESCRIPTION = "Rules Engine for the Vera with visual editor"
-_VERSION = "0.17.3"
+_VERSION = "0.18"
 _AUTHOR = "vosmont"
 
 -- **************************************************
@@ -360,6 +360,8 @@ end
 
 local function warning( msg, methodName )
 	luup.log( getFormatedMethodName( methodName ) .. " WARNING: " .. msg, 2 )
+	-- Add to known warnings (but without linked rule)
+	--History.add( nil, "Warning", msg )
 end
 
 local function error( msg, methodName )
@@ -1239,12 +1241,12 @@ ScheduledTasks = {
 -- RulesEngine.Modifiers (rule condition, action condition)
 -- **************************************************
 
-local function _getIntervalInSeconds (interval, unit)
+local function _getIntervalInSeconds( interval, unit )
 	local interval = tonumber(interval) or 0
 	local unit = unit or "S"
-	if (unit == "M") then
+	if ( unit == "M" ) then
 		interval = interval * 60
-	elseif (unit == "H") then
+	elseif ( unit == "H" ) then
 		interval = interval * 3600
 	end
 	return interval
@@ -2844,6 +2846,22 @@ do
 		end
 	}
 
+	_actionTypes["action_wait_randomly"] = {
+		init = function( action )
+			action.delayInterval1 = _getIntervalInSeconds( action.delayInterval1, action.unit )
+			action.delayInterval2 = _getIntervalInSeconds( action.delayInterval2, action.unit )
+			if ( action.delayInterval1 > action.delayInterval2 ) then
+				local tmpDelayInterval = action.delayInterval1
+				action.delayInterval1 = action.delayInterval2
+				action.delayInterval2 = tmpDelayInterval
+			end
+			action.delayInterval = function()
+				math.randomseed( os.time() )
+				return math.random( action.delayInterval1, action.delayInterval2 )
+			end
+		end
+	}
+
 	_actionTypes["action_device"] = {
 		init = function( action )
 			--action.deviceId = tonumber( action.deviceId )
@@ -3222,12 +3240,7 @@ ActionGroup = {
 		local delayInterval
 		if not isRecurrent then
 			-- Get first delay
-			if ( type( actionGroup.delayInterval ) == "function" ) then
-				-- Deprecated
-				delayInterval = tonumber( actionGroup.delayInterval() ) or 0
-			else
-				delayInterval = tonumber( actionGroup.modifiers.delayInterval ) or 0
-			end
+			delayInterval = tonumber( actionGroup.modifiers.delayInterval ) or 0
 			if ( ( delayInterval == 0 ) and ( actionGroup.event == "reminder" ) and ( actionGroup.recurrentImmediate ~= "TRUE" ) ) then
 				isRecurrent = true
 			end
@@ -3377,9 +3390,11 @@ log("DEBUG params:" .. json.encode(params), "ActionGroup.execute", 5)
 			end
 			for i = ( params.idx or 1 ), #actionGroup["do"] do
 				local action = actionGroup["do"][i]
-				if ( action.type == "action_wait" ) then
+				if string.match( action.type, "^action_wait.*" ) then
 					-- Wait and resume
-					log( msg .. " - Do action #" .. tostring( action.id ) ..  " - Wait " .. tostring( action.delayInterval ) .. " seconds", "ActionGroup.execute", 3 )
+					local delayInterval = ( type( action.delayInterval ) == "function" ) and action.delayInterval() or action.delayInterval
+					delayInterval = tonumber(delayInterval) or 0
+					log( msg .. " - Do action #" .. tostring( action.id ) ..  " - Wait " .. tostring(delayInterval) .. " seconds", "ActionGroup.execute", 3 )
 					params.idx = i + 1
 					--[[
 					ScheduledTasks.add(
@@ -3389,7 +3404,7 @@ log("DEBUG params:" .. json.encode(params), "ActionGroup.execute", 5)
 					--]]
 					ScheduledTasks.add(
 						{ ruleId = rule.id, event = actionGroup.event, level = level, actionGroupId = actionGroup.id, isCritical = actionGroup.modifiers.isCritical },
-						ActionGroup.execute, action.delayInterval, { actionGroup, level, params }
+						ActionGroup.execute, delayInterval, { actionGroup, level, params }
 					)
 					return
 				else
@@ -4393,7 +4408,8 @@ Rules = {
 	get = function( ruleId )
 		local rule
 		if ( ruleId == nil ) then
-			error( "Parameter #1 is nil", "Rules.get" )
+			--error( "Parameter #1 is nil", "Rules.get" )
+			return nil
 		elseif ( ( type( ruleId ) == "string" ) or ( type( ruleId ) == "number" ) ) then
 			ruleId = tostring( ruleId )
 			if ( tonumber( ruleId ) ~= nil ) then
@@ -4603,9 +4619,9 @@ RulesFile = {
 						--table.insert(a, 1, item)
 					end
 	--print("item", json.encode(item))
-					if (item.type ~= nil) then
+					if ( item.type ~= nil ) then
 						-- Specific post-processing
-						if (string.match(item.type, "^list_with_operator_.*")) then
+						if string.match( item.type, "^list_with_operator_.*" ) then
 							-- List with operator
 							local items = {}
 							for i = 0, (tonumber(item.mutation.items) - 1) do
@@ -5096,6 +5112,10 @@ local _handlerCommands = {
 				eventType = params["type"] or "Error",
 				ruleId = ruleId,
 				minTimestamp = rule._context.lastCheckTime
+			} )
+		else
+			errors = History.get( {
+				eventType = params["type"] or "Error"
 			} )
 		end
 		return tostring( json.encode( errors or {} ) ), "application/json"

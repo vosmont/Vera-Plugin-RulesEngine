@@ -104,6 +104,7 @@ var ALTUI_RulesEngine = ( function( window, undefined ) {
 	</category>\
 	<category name="Type">\
 		<block type="action_wait"></block>\
+		<block type="action_wait_randomly"></block>\
 		<block type="action_function"></block>\
 		<block type="action_device"><mutation input_service=""></mutation></block>\
 		<category name="Templates">\
@@ -136,6 +137,8 @@ var ALTUI_RulesEngine = ( function( window, undefined ) {
 	// return styles needed by this plugin module
 	function _getStyle() {
 		var style = '\
+div.altui-rule { margin-bottom: 6px; }\
+div.altui-rule-body { padding: 0.25em; }\
 div.altui-rule-icon { width: 60px; height: 60px; }\
 div.altui-rule-disabled { cursor: auto; background: url("http://vosmont.github.io/icons/virtual_alarm_panel_disabled.png")}\
 div.altui-rule-ko { cursor: auto; background: url("http://vosmont.github.io/icons/virtual_alarm_panel_ko.png")}\
@@ -674,8 +677,9 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 			defaultDialogModalTemplate.format( 
 				"luaCodeEditorModal",
 				_T( "Lua Editor" ),
-				"",				// body
-				"modal-lg"		// size
+				"",
+				"modal-lg",
+				'<i class="fa fa-edit" aria-hidden="true"></i>'
 			)
 		);
 		dialog.modal();
@@ -684,7 +688,7 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 			.done( function() {
 				var html = '<div>LUA script is invoked with "RulesEngine" and "context" variables</div>' 
 					+	'<div id="rulesengine-lua-editor">' + code + '</div>'; // TODO : escape
-				$( dialog ).find( ".row-fluid" ).append( html );
+				$( dialog ).find( ".altui-dialog-row" ).append( html );
 				// ACE - https://ace.c9.io/
 				var editor = ace.edit( "rulesengine-lua-editor" );
 				//editor.setTheme( "ace/theme/monokai" );
@@ -848,7 +852,7 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 			};
 			var html = "";
 			if ( ruleInfos.hasError ) {
-				html += '<span class="glyphicon glyphicon-alert altui-rule-errors" aria-hidden="true" title="' + _T( "See rule's errors") + '"></span> ';
+				html += '<i class="fa fa-exclamation-triangle altui-rule-errors" aria-hidden="true" title="' + _T( "See rule's errors") + '"></i> ';
 			}
 			html += ( status == "0" ? "engine stopped" : statusText[ ruleInfos.status.toString() ] || "UNKNOWN" ) 
 				+ ( ruleInfos.lastStatusUpdate > 0 ? _T( " since " ) + _convertTimestampToLocaleString( ruleInfos.lastStatusUpdate ) : "");
@@ -876,7 +880,8 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 				"ruleErrorsModal",
 				_T( "Rule" ) + " #" + params.ruleId + "(" + params.ruleName + ")",
 				"",
-				"modal-lg"
+				"modal-lg",
+				'<i class="fa fa-exclamation-triangle" aria-hidden="true"></i>'
 			)
 		);
 		$.ajax( {
@@ -897,7 +902,7 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 				html +=				'</tbody>'
 					+			'</table></small>'
 					+		'</div>';
-				dialog.find( ".row-fluid" ).append(html);
+				dialog.find( ".altui-dialog-row" ).append(html);
 				dialog.modal();
 			}
 		} );
@@ -912,7 +917,8 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 				"ruleTimelineModal",
 				_T( "Rule" ) + " #" + params.ruleId + "(" + params.ruleName + ")",
 				"",
-				"modal-lg"
+				"modal-lg",
+				'<i class="fa fa-calendar" aria-hidden="true"></i>'
 			)
 		);
 		$.when( _getTimelineAsync( params ) )
@@ -945,7 +951,7 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 
 				html +=		'</div>';
 				
-				dialog.find( ".row-fluid" ).append(html);
+				dialog.find( ".altui-dialog-row" ).append(html);
 				dialog.modal();
 			} );
 	}
@@ -994,32 +1000,32 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 					}
 					return 0;
 				} );
-				$(".altui-mainpanel .altui-rules").empty();
+				$( ".altui-rules" ).empty();
 				$.each( rulesInfos, function( idx, ruleInfos) {
 					if ( !_isRuleMatching( ruleInfos, filters ) ) {
 						return;
 					}
 					var infoVersion = ( !ruleInfos.version ? "EDIT THIS RULE" : ( ruleInfos.version !== _version ? " (v" + ruleInfos.version + ")": "") );
-					$(".altui-mainpanel .altui-rules").append(
+					$( ".altui-rules" ).append(
 							'<div class="col-sm-6 col-md-4 col-lg-3">'
-						+		'<div class="panel panel-default altui-rule" data-altuiid="' + device.altuiid + '"'
+						+		'<div class="card altui-rule" data-altuiid="' + device.altuiid + '"'
 						+				' data-ruleid="' + ruleInfos.id + '"'
 						+				' data-ruleidx="' + ruleInfos.idx + '"'
 						+				' data-rulefilename="' + ruleInfos.fileName + '"'
 						+				' data-ruleacknowledgeable="' + ruleInfos.isAcknowledgeable + '"'
 						+				' data-ruleacknowledged="0"'
 						+			'>'
-						+			'<div class="panel-heading altui-device-heading">'
-						+				'<button type="button" class="altui-rule-remove pull-right btn btn-default btn-xs" title="' + _T( "Remove" ) + '">'
-						+					'<span class="glyphicon glyphicon-trash text-danger"></span>'
+						+			'<div class="card-header altui-device-heading">'
+						+				'<button type="button" class="altui-rule-remove pull-right btn btn-light btn-sm" title="' + _T( "Remove" ) + '">'
+						+					'<i class="fa fa-trash-o text-danger"></i>'
 						+				'</button>'
 						+				'<div class="pull-right text-muted"><small>#' + ruleInfos.id + '</small></div>'
-						+				'<div class="panel-title altui-device-title" data-toggle="tooltip" data-placement="left">'
-						+					'<span class="altui-rule-arm glyphicon glyphicon-off" aria-hidden="true"></span>'
+						+				'<div class="card-title altui-device-title" data-toggle="tooltip" data-placement="left">'
+						+					'<i class="altui-rule-arm fa fa-power-off" aria-hidden="true"></i>'
 						+					'<small class="altui-rule-title-name">' + ruleInfos.name.replace( /_/g, "-" ) + '</small>'
 						+				'</div>'
 						+			'</div>'
-						+			'<div class="panel-body altui-rule-body" title="' + _T( "View rule" ) + '">'
+						+			'<div class="card-body altui-rule-body" title="' + _T( "View rule" ) + '">'
 						
 						+				'<table height="70px">'
 						+					'<tr>'
@@ -1027,16 +1033,16 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 						+							'<div class="altui-device-icon altui-rule-icon pull-left img-rounded"></div>'
 						+						'</td>'
 						+						'<td width="25px">'
-						+							'<button type="button" class="altui-rule-edit pull-left btn btn-xs btn-default" style="width: 25px;" title="' + _T( "Edit" ) + '">'
-						+								'<span class="glyphicon glyphicon-pencil" aria-hidden="true"></span>'
+						+							'<button type="button" class="altui-rule-edit pull-left btn btn-sm btn-light" title="' + _T( "Edit" ) + '">'
+						+								'<i class="fa fa-pencil" aria-hidden="true"></i>'
 						+							'</button>'
-						+							'<button type="button" class="altui-rule-timeline pull-left btn btn-xs btn-default" style="width: 25px;" title="' + _T( "Timeline" ) + '">'
-						+								'<span class="glyphicon glyphicon-calendar" aria-hidden="true"></span>'
+						+							'<button type="button" class="altui-rule-timeline pull-left btn btn-sm btn-light" title="' + _T( "Timeline" ) + '">'
+						+								'<i class="fa fa-calendar" aria-hidden="true"></i>'
 						+							'</button>'
 
 						+							( ruleInfos.isAcknowledgeable ?
-													'<button type="button" class="altui-rule-ack pull-left btn btn-xs btn-default" style="width: 25px;">'
-						+								'<span class="glyphicon glyphicon glyphicon-ok" aria-hidden="true"></span>'
+													'<button type="button" class="altui-rule-ack pull-left btn btn-sm btn-light">'
+						+								'<i class="fa fa-thumbs-o-up" aria-hidden="true"></i>'
 						+							'</button>' : '' )
 
 						+						'</td>'
@@ -1122,7 +1128,7 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 
 		// Page preparation
 		if ( UIControler && UIControler.addPage ) {
-			UIManager.clearPage( "Rules", "Rules - {0} <small>#{1}</small>".format( device.name , altuiid ), null, [ altuiid ], ALTUI_RulesEngine.pageRules, ALTUI_RulesEngine );
+			UIManager.clearPage( "Rules", "Rules - {0} <small>#{1}</small>".format( device.name , altuiid ), UIManager.twoColumnLayout, [ altuiid ], ALTUI_RulesEngine.pageRules, ALTUI_RulesEngine );
 		} else {
 			UIManager.clearPage( "Control Panel", "Rules - {0} <small>#{1}</small>".format( device.name , altuiid ), null, [ altuiid ], ALTUI_RulesEngine.pageRules, ALTUI_RulesEngine );
 		}
@@ -1151,18 +1157,18 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 		var fileName = ( fileNames.length > 0 ) ? fileNames[ 0 ] : "C_RulesEngine_Rules.xml";
 
 		// Draw the panel
-		var html = '<div class="altui-rule-toolbar">'
-			+			'<button class="btn btn-default altui-rule-create">'
-			+				'<span class="glyphicon glyphicon-plus" aria-hidden="true" data-toggle="tooltip" data-placement="bottom" title="Add"></span>'
-			+				_T( "Create" )
-			+			'</button>'
-			+	'</div>';
+		$(".altui-device-toolbar")
+			.append( '<div class="altui-rule-toolbar">'
+				+			'<button class="btn btn-light altui-rule-create">'
+				+				'<i class="fa fa-plus" aria-hidden="true" data-toggle="tooltip" data-placement="bottom" title="Add"></i>'
+				+				"&nbsp" + _T( "Create" )
+				+			'</button>'
+				+	'</div>'
+			).on( "click", ".altui-rule-create", function() {
+				_pageRuleEdit( altuiid, fileName );
+			} );
 		// Manage the UI events
 		$(".altui-mainpanel")
-			.append( html )
-			.on( "click", ".altui-rule-create", function() {
-				_pageRuleEdit( altuiid, fileName );
-			} )
 			.on( "click", ".altui-rule-icon", function() {
 				var params = _getRuleParamsFromObject( this );
 				_pageRuleEdit( params.altuiid, params.fileName, params.ruleIdx, params.ruleId, true );
@@ -1198,7 +1204,7 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 			.on( "click", ".altui-rule-timeline", _showRuleTimeline );
 
 		// Draw the rules
-		$(".altui-mainpanel").append( '<div class="altui-rules"></div>' );
+		$(".altui-mainpanel").addClass( "altui-rules" );
 		if ( $( "div.altui-leftnav:visible" ).length === 1 ) {
 			_drawRules( device, filters );
 		} else {
@@ -1574,24 +1580,24 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 		var _currentXmlRules = [];
 
 		// Draw the panel
-		var html = '<div class="altui-rule-toolbar">'
+		var html = '<div class="altui-rule-toolbar col-12">'
 			+		'<div class="btn-group" role="group" aria-label="...">'
 			+			'<button class="btn btn-default altui-rule-cancel" title="' + _T( "Cancel" ) + '">'
-			+				'<span class="glyphicon glyphicon-remove" aria-hidden="true"></span>'
+			+				'<i class="fa fa-remove" aria-hidden="true"></i>'
 			+			'</button>'
 			+			( readOnly ? '' :
-						'<button class="btn btn-default disabled altui-rule-confirm" title="' + _T( "Save Changes" ) + '">'
-			+				'<span class="glyphicon glyphicon-cloud-upload" aria-hidden="true"></span>'
+						'<button class="btn btn-light disabled altui-rule-confirm" title="' + _T( "Save Changes" ) + '">'
+			+				'<i class="fa fa-cloud-upload" aria-hidden="true"></i>'
 			+			'</button>'
 						)
 			+		'</div>'
 			+		( readOnly ? '' :
 					'<div class="btn-group pull-right" role="group" aria-label="...">'
-			+			'<button class="btn btn-default altui-rule-import" title="' + _T( "Import XML" ) + '">'
-			+				'<span class="glyphicon glyphicon-log-in" aria-hidden="true"></span>'
+			+			'<button class="btn btn-light altui-rule-import" title="' + _T( "Import XML" ) + '">'
+			+				'<i class="fa fa-sign-in" aria-hidden="true"></i>'
 			+			'</button>'
-			+			'<button class="btn btn-default altui-rule-export" title="' + _T( "Export XML" ) + '">'
-			+				'<span class="glyphicon glyphicon-log-out" aria-hidden="true"></span>'
+			+			'<button class="btn btn-light altui-rule-export" title="' + _T( "Export XML" ) + '">'
+			+				'<i class="fa fa-sign-out" aria-hidden="true"></i>'
 			+			'</button>'
 			+		'</div>'
 					)
@@ -1601,11 +1607,11 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 			+			'<textarea id="altui-rule-xml-import" class="altui-rule-xml-content"></textarea>'
 			+		'</div>'
 			+		'<div class="panel-footer">'
-			+			'<button class="btn-xs btn btn-default pull-right altui-toggle-panel" title="' + _T( "Close" ) + '">'
-			+				'<span class="glyphicon glyphicon-chevron-up" aria-hidden="true"></span>'
+			+			'<button class="btn-sm btn btn-light pull-right altui-toggle-panel" title="' + _T( "Close" ) + '">'
+			+				'<i class="fa fa-chevron-up" aria-hidden="true"></i>'
 			+			'</button>'
-			+			'<button class="btn-xs btn btn-default pull-right altui-rule-import-ok" title="' + _T( "Import" ) + '">'
-			+				'<span class="glyphicon glyphicon-ok" aria-hidden="true"></span>'
+			+			'<button class="btn-sm btn btn-light pull-right altui-rule-import-ok" title="' + _T( "Import" ) + '">'
+			+				'<i class="fa fa-thumbs-o-up" aria-hidden="true"></i>'
 			+			'</button>'
 			+			'XML import'
 			+		'</div>'
@@ -1615,13 +1621,13 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 			+			'<textarea id="altui-rule-xml-export" class="altui-rule-xml-content"></textarea>'
 			+		'</div>'
 			+		'<div class="panel-footer">'
-			+			'<button class="btn-xs btn btn-default pull-right altui-toggle-panel" title="' + _T( "Close" ) + '">'
-			+				'<span class="glyphicon glyphicon-chevron-up" aria-hidden="true"></span>'
+			+			'<button class="btn-sm btn btn-light pull-right altui-toggle-panel" title="' + _T( "Close" ) + '">'
+			+				'<i class="fa fa-chevron-up" aria-hidden="true"></i>'
 			+			'</button>'
 			+			'XML export'
 			+		'</div>'
 			+	'</div>'
-			+	'<div class="col-xs-12">' + htmlControlPanel + '</div>';
+			+	'<div class="col-12">' + htmlControlPanel + '</div>';
 		// Manage the UI events
 		$(".altui-mainpanel")
 			.append(  html )
@@ -1865,18 +1871,20 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 			_init( device );
 
 			return '<div class="panel-content">'
-				+		ALTUI_PluginDisplays.createOnOffButton( status, "altui-rulesengine-" + _altuiid, _T( "OFF,ON" ), "pull-right" )
-				+		'<div class="btn-group" role="group" aria-label="...">'
-				+			'<button class="btn btn-default pull-left" onclick="javascript:ALTUI_RulesEngine.pageRules(\'' + _altuiid + '\');">'
-				+				'<span class="glyphicon glyphicon-th" title="' + _T( "Rules" ) + '"></span>'
+				+		'<div class="btn-group pull-right" role="group" aria-label="...">'
+				+			'<button class="btn btn-light btn-sm pull-left" onclick="javascript:ALTUI_RulesEngine.pageRules(\'' + _altuiid + '\');">'
+				+				'<i class="fa fa-th" title="' + _T( "Rules" ) + '"></i>'
 				+			'</button>'
-				+			'<button class="btn btn-default pull-left" onclick="javascript:ALTUI_RulesEngine.pageTimeline(\'' + _altuiid + '\');">'
-				+				'<span class="glyphicon glyphicon-calendar" title="' + _T( "Timeline" ) + '"></span>'
+				+			'<button class="btn btn-light btn-sm pull-left" onclick="javascript:ALTUI_RulesEngine.pageTimeline(\'' + _altuiid + '\');">'
+				+				'<i class="fa fa-calendar" title="' + _T( "Timeline" ) + '"></i>'
 				+			'</button>'
-				+			'&nbsp;v' + _version
 				+		'</div>'
 				+		'<div class="info">'
-				+			( _debugMode > 0 ? '<small>Debug ON</small>' : '' )
+				+			'<div>'
+				+				'v' + _version
+				+			'</div>'
+				+				( _debugMode > 0 ? '<small>Debug ON</small>' : '' )
+				+			'</div>'
 				+		'</div>'
 				+	'</div>'
 				+	'<script type="text/javascript">'

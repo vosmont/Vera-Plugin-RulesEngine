@@ -1,15 +1,5 @@
 {
 	"flashicon": "http://vosmont.github.io/icons/rules_engine.png",
-	"state_icons": [
-		"rules_engine_0.png",
-		"rules_engine_100.png"
-	],
-	"DisplayStatus": {
-		"Service": "urn:upnp-org:serviceId:SwitchPower1",
-		"Variable": "Status",
-		"MinValue": "0",
-		"MaxValue": "1"
-	},
 	"inScene": 1,
 	"doc_url":{
 		"doc_forced_url":{
@@ -36,66 +26,6 @@
 				}
 			],
 			"Control": [
-				{
-					"ControlGroup": 1,
-					"ControlType": "button",
-					"top": 1.5,
-					"left": 0,
-					"Label": {
-						"lang_tag": "cmd_off",
-						"text": "OFF"
-					},
-					"Display": {
-						"Service": "urn:upnp-org:serviceId:SwitchPower1",
-						"Variable": "Status",
-						"Value": "0",
-						"Top": 75,
-						"Left": 50,
-						"Width": 75,
-						"Height": 20
-					},
-					"Command": {
-						"Service": "urn:upnp-org:serviceId:SwitchPower1",
-						"Action": "SetTarget",
-						"Parameters": [
-							{
-								"Name": "newTargetValue",
-								"Value": "0"
-							}
-						]
-					},
-					"ControlCode": "rulesengine_off"
-				},
-				{
-					"ControlGroup": 1,
-					"ControlType": "button",
-					"top": 1.5,
-					"left": 1,
-					"Label": {
-						"lang_tag": "cmd_on",
-						"text": "ON"
-					},
-					"Display": {
-						"Service": "urn:upnp-org:serviceId:SwitchPower1",
-						"Variable": "Status",
-						"Value": "1",
-						"Top": 75,
-						"Left": 145,
-						"Width": 75,
-						"Height": 20
-					},
-					"Command": {
-						"Service": "urn:upnp-org:serviceId:SwitchPower1",
-						"Action": "SetTarget",
-						"Parameters": [
-							{
-								"Name": "newTargetValue",
-								"Value": "1"
-							}
-						]
-					},
-					"ControlCode": "rulesengine_on"
-				},
 				{
 					"ControlGroup": 1,
 					"ControlType": "label",

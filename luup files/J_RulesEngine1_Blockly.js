@@ -3350,6 +3350,23 @@ Blockly.Blocks['action_wait'] = {
 	}
 };
 
+Blockly.Blocks['action_wait_randomly'] = {
+	init: function () {
+		this.setColour( Blockly.Blocks.actions.HUE2 );
+
+		this.appendDummyInput( "delayInterval" )
+			.appendField( "wait randomly between" )
+			.appendField( new Blockly.FieldTextInput( "0", Blockly.FieldTextInput.numberValidator ), "delayInterval1" )
+			.appendField( "and" )
+			.appendField( new Blockly.FieldTextInput( "0", Blockly.FieldTextInput.numberValidator ), "delayInterval2" )
+			.appendField( new Blockly.FieldDropdown( [ [ "seconds", "S" ], [ "minutes", "M" ], [ "hours", "H" ] ] ), "unit" );
+
+		this.setPreviousStatement( true, "ActionType" );
+		this.setNextStatement( true, "ActionType" );
+		this.setTooltip( Blockly.Msg.ACTION_WAIT_TOOLTIP );
+	}
+};
+
 Blockly.Blocks['action_function'] = {
 	init: function () {
 		this.setColour( Blockly.Blocks.actions.HUE2 );
