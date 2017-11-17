@@ -553,6 +553,18 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 	// Blockly UI
 	// *************************************************************************************************
 
+	function _loadBlocklyAsync() {
+		var d = $.Deferred();
+		if ( $.isFunction( UIManager.initBlockly ) ) {
+			UIManager.initBlockly( function() {
+				d.resolve();
+			});
+		} else {
+			d.resolve();
+		}
+		return d.promise();
+	}
+
 	function _loadBlocklyResourcesAsync( device ) {
 		// Get the names of the resource files
 		var fileNames = [
@@ -1007,7 +1019,8 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 					}
 					var infoVersion = ( !ruleInfos.version ? "EDIT THIS RULE" : ( ruleInfos.version !== _version ? " (v" + ruleInfos.version + ")": "") );
 					$( ".altui-rules" ).append(
-							'<div class="col-sm-6 col-md-4 col-lg-3">'
+						//	'<div class="col-sm-6 col-md-4 col-lg-3">'
+							'<div class="col-sm-6 col-md-4 col-lg-4">'
 						+		'<div class="card altui-rule" data-altuiid="' + device.altuiid + '"'
 						+				' data-ruleid="' + ruleInfos.id + '"'
 						+				' data-ruleidx="' + ruleInfos.idx + '"'
@@ -1668,10 +1681,9 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 			;
 		// Draw the rule editor after having loaded all the xml rules 
 		// and eventually show the rule to edit
-		$.when( 
-			_loadDevicesInfos(),
-			_loadBlocklyResourcesAsync( device )
-		)
+		_loadBlocklyAsync().then( function() {
+			return $.when( _loadDevicesInfos(), _loadBlocklyResourcesAsync( device ) )
+		})
 			.done( function() {
 				_drawBlocklyPanel( device, readOnly );
 				if ( readOnly !== true ) {
