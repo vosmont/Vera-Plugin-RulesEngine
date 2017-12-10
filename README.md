@@ -4,7 +4,7 @@ A rules engine for [Vera Control, Ltd.](http://getvera.com/) Home Controllers
 
 <br/>
 
-<img align="left" src="media/rulesengine_example.png">
+<img src="media/rulesengine_example.png">
 
 **Compatible with UI5 & UI7 / VeraPlus, VeraEdge, Vera3, VeraLite / [openLuup](https://github.com/akbooer/openLuup)**
 
