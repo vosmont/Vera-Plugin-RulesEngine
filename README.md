@@ -67,13 +67,14 @@ You will find the plugin by different ways :
   
   Create a new device in "Apps-->Develop Apps-->Create device", and set "Upnp Device Filename" to "D_RulesEngine1.xml".
 
-**Just UI5**: There's no JSON decoder installed by default.
-If you have the error "No JSON decoder", you have to upload the library in "/usr/lib/lua". You can take "json.lua" or "dkjson.lua".
-You will find "json.lua" here : http://code.mios.com/trac/mios_genericutils/export/20/json.lua
-
-This code can be executed in "Apps->Develop apps->Test Luup code (Lua)"
-
-    os.execute("wget -q -O /usr/lib/lua/json.lua http://code.mios.com/trac/mios_genericutils/export/20/json.lua")
+> **Just UI5**: There's no JSON decoder installed by default.
+> If you have the error "No JSON decoder", you have to upload the library in "/usr/lib/lua". You can take "json.lua" or "dkjson.lua".
+> You will find "json.lua" here : http://code.mios.com/trac/mios_genericutils/export/20/json.lua
+>
+> This code can be executed in "Apps->Develop apps->Test Luup code (Lua)"
+> ```
+> os.execute("wget -q -O /usr/lib/lua/json.lua http://code.mios.com/trac/mios_genericutils/export/20/json.lua")
+> ```
 
 
 ## Usage
