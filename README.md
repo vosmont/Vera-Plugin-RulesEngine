@@ -6,27 +6,23 @@ A rules engine for [Vera Control, Ltd.](http://getvera.com/) Home Controllers
 
 <img align="left" src="media/rulesengine_example.png">
 
-- allows to create visually rules (with [Blockly](https://github.com/google/blockly))
-- management of complex conditions
-- customizable
-
-<br/>
-<br/>
-<br/>
-<br/>
-<br/>
-<br/>
-<br/>
-<br/>
-<br/>
-<br/>
-
 **Compatible with UI5 & UI7 / VeraPlus, VeraEdge, Vera3, VeraLite / [openLuup](https://github.com/akbooer/openLuup)**
 
 **Rules are editable only with [AltUI](https://github.com/amg0/ALTUI)**
 
 More informations here :
 - http://forum.micasaverde.com/index.php/topic,34489.0.html
+
+
+## Main benefits :
+- allows to create visually rules (with [Blockly](https://github.com/google/blockly))
+- management of complex conditions
+- no dependence with scenes (can work at the same time)
+- no longer need of LUUP reloading
+- customizable (actions with LUA code, custom modules, custom Blockly blocks, ...)
+- creation and edition made with a graphical editor
+- openLuup compliant
+
 
 ## Main notions :
 - a rule is active or not active.
@@ -41,14 +37,6 @@ More informations here :
 - create visually your rules
 - in conditions and actions, first select service/variable, and then the devices implied (by filters)
 - the shapes of the items in the editor can be modified with the gear icon
-
-## Main benefits :
-- no dependence with scenes (can work at the same time)
-- no longer need of LUUP reloading
-- management of complex conditions
-- customizable (actions with LUA code, custom modules, custom Blockly blocks, ...)
-- creation and edition made with a graphical editor
-- openLuup compliant
 
 
 ## Installation
