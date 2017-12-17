@@ -22,7 +22,7 @@ end
 
 _NAME = "RulesEngine"
 _DESCRIPTION = "Rules Engine for the Vera with visual editor"
-_VERSION = "0.19"
+_VERSION = "0.19.1"
 _AUTHOR = "vosmont"
 
 -- **************************************************
@@ -2146,7 +2146,7 @@ log( "DEBUG service:" .. tostring(condition.service) .. ", variable:" .. tostrin
 		end,
 
 		check = function( condition )
-			if not _checkParameters( condition, { "operator", "interval" } ) then
+			if not _checkParameters( condition, { "condition" } ) then
 				return false
 			end
 			if not Condition.checkSettings( condition.condition ) then
