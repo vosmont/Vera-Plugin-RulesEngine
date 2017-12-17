@@ -22,7 +22,7 @@ end
 
 _NAME = "RulesEngine"
 _DESCRIPTION = "Rules Engine for the Vera with visual editor"
-_VERSION = "0.18.1"
+_VERSION = "0.19"
 _AUTHOR = "vosmont"
 
 -- **************************************************
@@ -64,6 +64,17 @@ local DEVICE = {
 	MQTT = {
 		type = "urn:schemas-sensor-mqtt-se:device:SensorMqtt:1", file = "D_SensorMqtt1.xmll"
 	}
+}
+
+local OPERATOR = {
+	EQ = "==",
+	NEQ = "<>",
+	LT = "<",
+	LTE = "<=",
+	GT = ">",
+	GTE = ">=",
+	LIKE = "like",
+	NOTLIKE = "not like"
 }
 
 -- **************************************************
@@ -296,24 +307,14 @@ local function _isLogLevel( level )
 end
 
 local function getFormatedMethodName( methodName )
-	if ( methodName == nil ) then
-		methodName = "UNKNOWN"
-	else
-		methodName = "(" .. _NAME .. "::" .. tostring( methodName ) .. ")"
-	end
-	return string.rpad( methodName, 45 )
+	return string.rpad( "(" .. _NAME .. "::" .. tostring(methodName or "log") .. ")", 48 )
 end
 
 function log( msg, methodName, level )
 	level = tonumber( level ) or 1
-	if not _isLogLevel( level )then
+	if not _isLogLevel( level ) then
 		return
 	end
-	--[[
-	if (_verbosity > 2) then
-		methodName = "(" .. tostring(level or 1) .. ")" .. methodName
-	end
-	--]]
 	luup.log( getFormatedMethodName( methodName ) .. " " .. msg, 50 )
 end
 
@@ -1763,36 +1764,26 @@ log( "DEBUG service:" .. tostring(condition.service) .. ", variable:" .. tostrin
 
 			-- Status update
 			local status = 1
-			local OPERATORS = {
-				EQ = "==",
-				NEQ = "<>",
-				LT = "<",
-				LTE = "<=",
-				GT = ">",
-				GTE = ">=",
-				LIKE = "like",
-				NOTLIKE = "not like"
-			}
 			if ( condition.value ~= nil ) then
 				-- a threshold or a pattern is defined
 				local conditionValue = tonumber( condition.value ) or condition.value
 				local contextValue   = tonumber( context.value )   or context.value
 				log( "condition.operator:" .. tostring( condition.operator ) .. ", conditionValue:" .. tostring( conditionValue ) .. ", contextValue:" .. tostring( contextValue ), "ConditionValue.computeStatus", 3 )
-				if ((context.value == nil)
-					or (OPERATORS[condition.operator] == nil)
-					or (type(contextValue) ~= type(conditionValue))
-					or ((condition.operator == "EQ") and (contextValue ~= conditionValue))
-					or (((condition.operator == "LT") or (condition.operator == "LTE")) and (contextValue > conditionValue))
-					or (((condition.operator == "GT") or (condition.operator == "GTE")) and (contextValue < conditionValue))
-					or (((condition.operator == "NEQ") or (condition.operator == "LT") or (condition.operator == "GT")) and (contextValue == conditionValue))
-					or ((condition.operator == "LIKE") and (string.match(context.value, condition.value) == nil))
-					or ((condition.operator == "NOTLIKE") and (string.match(context.value, condition.value) ~= nil))
+				if ( ( context.value == nil )
+					or ( OPERATOR[condition.operator] == nil )
+					or ( type(contextValue) ~= type(conditionValue) )
+					or ( ( condition.operator == "EQ" ) and ( contextValue ~= conditionValue ) )
+					or ( ( ( condition.operator == "LT" ) or ( condition.operator == "LTE" ) ) and ( contextValue > conditionValue ) )
+					or ( ( ( condition.operator == "GT" ) or ( condition.operator == "GTE" ) ) and ( contextValue < conditionValue ) )
+					or ( ( ( condition.operator == "NEQ" ) or ( condition.operator == "LT" ) or ( condition.operator == "GT" ) ) and ( contextValue == conditionValue ) )
+					or ( ( condition.operator == "LIKE" ) and ( string.match(context.value, condition.value) == nil ) )
+					or ( ( condition.operator == "NOTLIKE" ) and ( string.match(context.value, condition.value) ~= nil ) )
 				) then
 					-- Threshold is not respected
-					msg = msg .. " - Does not respect the condition '{value:" .. tostring(context.value) .. "} " .. OPERATORS[condition.operator] .. " " .. tostring(condition.value) .. "'"
+					msg = msg .. " - Does not respect the condition '{value:" .. tostring(context.value) .. "} " .. tostring(OPERATOR[condition.operator]) .. " " .. tostring(condition.value) .. "'"
 					status = 0
 				else
-					msg = msg .. " - Respects the condition '{value:" .. tostring(context.value) .. "} " .. OPERATORS[condition.operator] .. " " .. tostring(condition.value) .. "'"
+					msg = msg .. " - Respects the condition '{value:" .. tostring(context.value) .. "} " .. OPERATOR[condition.operator] .. " " .. tostring(condition.value) .. "'"
 				end
 			else
 				-- No specific value condition on that condition
@@ -2155,7 +2146,7 @@ log( "DEBUG service:" .. tostring(condition.service) .. ", variable:" .. tostrin
 		end,
 
 		check = function( condition )
-			if not _checkParameters( condition, { "condition" } ) then
+			if not _checkParameters( condition, { "operator", "interval" } ) then
 				return false
 			end
 			if not Condition.checkSettings( condition.condition ) then
@@ -2171,7 +2162,7 @@ log( "DEBUG service:" .. tostring(condition.service) .. ", variable:" .. tostrin
 		computeStatus = function( condition, params )
 			local status = Condition.getStatus( condition.condition )
 			local level = 0
-			log( _getItemSummary( condition ) .. " for rule #" .. tostring( condition.ruleId ) .. " - Invert condition " .. _getItemSummary( condition.condition ) .. " (status:" .. tostring( status ) .. ")", "ConditionInverter.computeStatus", 3 )
+			log( _getItemSummary( condition ) .. " - Invert condition " .. _getItemSummary( condition.condition ) .. " (status:" .. tostring( status ) .. ")", "ConditionInverter.computeStatus", 3 )
 			if ( status == 1 ) then
 				status = 0
 			else
@@ -2452,6 +2443,54 @@ log( "DEBUG " .. _getItemSummary( condition ) .. " - Actions: "..tostring(json.e
 				end
 			end
 			return status
+		end
+	}
+
+	-- Condition of type 'last_update'
+	ConditionTypes["condition_last_update"] = {
+		init = function( condition, ruleContext )
+			condition.mainType = "Function"
+			condition.interval = _getIntervalInSeconds( condition.interval, condition.unit )
+		end,
+
+		check = function( condition )
+			if not _checkParameters( condition, { "operator", "interval" } ) then
+				return false
+			end
+			return true
+		end,
+
+		start = function( condition )
+		end,
+
+		computeStatus = function( condition, params )
+			local parent = condition._parent
+			local context = parent._context
+			local elapsedTime = os.difftime( os.time(), ( context.lastStatusUpdateTime or context.lastUpdateTime or 0 ) )
+			local msg = _getItemSummary( condition ) .. " - " .. _getItemSummary( parent )
+			local status = 1
+			if (
+				( OPERATOR[condition.operator] == nil )
+				or ( ( ( condition.operator == "LT" ) or ( condition.operator == "LTE" ) ) and ( contextValue > conditionValue ) )
+				or ( ( condition.operator == "LTE" ) and ( elapsedTime > condition.interval ) )
+				or ( ( condition.operator == "GTE" ) and ( elapsedTime < condition.interval ) )
+			) then
+				-- Interval is not respected
+				msg = msg .. " - Does not respect the condition '{last update:" .. tostring(elapsedTime) .. "s} " .. tostring(OPERATOR[condition.operator]) .. " " .. tostring(condition.interval) .. "'"
+				status = 0
+			else
+				msg = msg .. " - Respects the condition '{last update:" .. tostring(elapsedTime) .. "s} " .. OPERATOR[condition.operator] .. " " .. tostring(condition.interval) .. "'"
+			end
+
+			local level = 0
+			if ( status == 1 ) then
+				if ( condition.modifiers and condition.modifiers.level ) then
+					level = condition.modifiers.level or 0
+				end
+			end
+
+			log( msg, "ConditionLastUpdate.computeStatus", 3 )
+			return status, level
 		end
 	}
 
@@ -3233,7 +3272,7 @@ ActionGroup = {
 		return isOk
 	end,
 
-	getDelay = function (rule, actionGroup, params, isRecurrent)
+	getDelay = function( rule, actionGroup, params, isRecurrent )
 		local delay = nil
 		local params = params or {}
 
@@ -3303,9 +3342,9 @@ ActionGroup = {
 		return delay
 	end,
 
-	isMatchingEvent = function (actionGroup, event)
-		if ((event ~= nil) and ((actionGroup.event == nil) or (actionGroup.event ~= event))) then
-			log(_getItemSummary(actionGroup) .. " - The requested event '" .. tostring(event) .. "' is not respected", "ActionGroup.isMatchingEvent", 4)
+	isMatchingEvent = function( actionGroup, event )
+		if ( ( event ~= nil ) and ( ( actionGroup.event == nil ) or ( actionGroup.event ~= event ) ) ) then
+			log( _getItemSummary(actionGroup) .. " - The requested event '" .. tostring(event) .. "' is not respected", "ActionGroup.isMatchingEvent", 4 )
 			return false
 		end
 		return true
@@ -3343,8 +3382,8 @@ ActionGroup = {
 		--local level = params.level
 log("DEBUG params:" .. json.encode(params), "ActionGroup.execute", 5)
 		-- Check if engine is enabled
-		if (not isEnabled()) then
-			log("Rules engine is not enabled - Do nothing", "ActionGroup.execute")
+		if not isEnabled() then
+			log( "Rules engine is not enabled - Do nothing", "ActionGroup.execute" )
 			return false
 		end
 
@@ -3429,6 +3468,7 @@ log("DEBUG params:" .. json.encode(params), "ActionGroup.execute", 5)
 					end
 				end
 			end
+			actionGroup._context.lastUpdateTime = os.time()
 		end
 
 		if ( actionGroup.event == "reminder" ) then
@@ -3450,46 +3490,46 @@ log("DEBUG params:" .. json.encode(params), "ActionGroup.execute", 5)
 -- **************************************************
 
 ActionGroups = {
-	init = function (actionGroups, ruleId, parent)
-		if (actionGroups == nil) then
+	init = function( actionGroups, ruleId, parent )
+		if ( actionGroups == nil ) then
 			return
 		end
 		actionGroups.events = {}
-		for i, actionGroup in ipairs(actionGroups) do
-			ActionGroup.init(actionGroup, ruleId, parent, i)
-			if not table.contains(actionGroups.events, actionGroup.event) then
-				table.insert(actionGroups.events, actionGroup.event)
+		for i, actionGroup in ipairs( actionGroups ) do
+			ActionGroup.init( actionGroup, ruleId, parent, i )
+			if not table.contains( actionGroups.events, actionGroup.event ) then
+				table.insert( actionGroups.events, actionGroup.event )
 			end
 		end
 	end,
 
-	checkSettings = function (actionGroups)
-		if (actionGroups == nil) then
+	checkSettings = function( actionGroups )
+		if ( actionGroups == nil ) then
 			return true
 		end
 		local isOk = true
-		for i, actionGroup in ipairs(actionGroups) do
-			if not ActionGroup.checkSettings(actionGroup) then
+		for i, actionGroup in ipairs( actionGroups ) do
+			if not ActionGroup.checkSettings( actionGroup ) then
 				isOk = false
 			end
 		end
 		return isOk
 	end,
 
-	isMatchingEvent = function (actionGroups, event)
-		if (actionGroups == nil) then
+	isMatchingEvent = function( actionGroups, event )
+		if ( actionGroups == nil ) then
 			return
 		end
-		return table.contains(actionGroups.events, event)
+		return table.contains( actionGroups.events, event )
 	end,
 
-	startConditions = function (actionGroups)
-		if (actionGroups == nil) then
+	startConditions = function( actionGroups )
+		if ( actionGroups == nil ) then
 			return
 		end
-		for i, actionGroup in ipairs(actionGroups) do
-			if (actionGroup.condition ~= nil) then
-				Condition.start(actionGroup.condition)
+		for i, actionGroup in ipairs( actionGroups ) do
+			if ( actionGroup.condition ~= nil ) then
+				Condition.start( actionGroup.condition )
 			end
 		end
 	end,
@@ -3522,7 +3562,7 @@ log("DEBUG params:" .. json.encode(params), "ActionGroups.execute", 5)
 			log( "Rule #" .. tostring( rule.id ) .. " has no group of actions for event '" .. event .. "' - Do nothing", "ActionGroups.execute" )
 			return false
 		end
-		
+
 		-- Announce what will be done
 		if ( level ~= nil ) then
 			log( "*** Rule #" .. tostring( rule.id ) .. " - Do group of actions for event '" .. event .. "' with explicit level '" .. tostring( level ) .. "'", "ActionGroups.execute" )
@@ -3535,22 +3575,22 @@ log("DEBUG params:" .. json.encode(params), "ActionGroups.execute", 5)
 		local params = params or {}
 		-- Search group of actions, linked to the event
 		local isAtLeastOneToExecute = false
-		for _, actionGroup in ipairs(actionGroups) do
-			local msg = "**  " .. _getItemSummary(actionGroup)
+		for _, actionGroup in ipairs( actionGroups ) do
+			local msg = "**  " .. _getItemSummary( actionGroup )
 			-- Check if the event is respected
-			if not ActionGroup.isMatchingEvent(actionGroup, event) then
-				log(msg .. " - Don't do because event '" .. tostring(event) .. "' is not respected", "ActionGroups.execute", 3)
+			if not ActionGroup.isMatchingEvent( actionGroup, event ) then
+				log( msg .. " - Don't do because event '" .. tostring(event) .. "' is not respected", "ActionGroups.execute", 3 )
 			-- Check if the level is respected
 			elseif not ActionGroup.isMatchingLevel( actionGroup, level ) then
-				log(msg .. " - Don't do because level '" .. tostring(level) .. "' is not respected", "ActionGroups.execute", 3)
+				log( msg .. " - Don't do because level '" .. tostring(level) .. "' is not respected", "ActionGroups.execute", 3 )
 			-- Check if the specific condition of the group of rule actions is respected
-			elseif ((actionGroup.condition ~= nil) and (Condition.getStatus(actionGroup.condition) == 0)) then
-				log(msg .. " - Don't do anything - Rule is still active but the condition of the group of actions is not respected", "ActionGroup.execute", 3)
+			elseif ( ( actionGroup.condition ~= nil ) and ( Condition.getStatus( actionGroup.condition ) == 0 ) ) then
+				log( msg .. " - Don't do anything - Rule is still active but the condition of the group of actions is not respected", "ActionGroup.execute", 3 )
 			else
 				local delay = ActionGroup.getDelay( rule, actionGroup, params )
 				if (delay == nil) then
 					-- Delay is passed (the action has already been done)
-					log(msg .. " - Don't do because it already has been done", "ActionGroups.execute", 3)
+					log( msg .. " - Don't do because it already has been done", "ActionGroups.execute", 3 )
 				else
 					-- Execute the action
 					isAtLeastOneToExecute = true
@@ -3827,12 +3867,12 @@ Rule = {
 		local msg = Rule.getSummary( rule )
 
 		-- Init the status of the rule
-		if ( not rule.areSettingsOk ) then
+		if not rule.areSettingsOk then
 			log( msg .. " - Can not start the rule - Settings are not correct", "Rule.start", 1 )
 			debugLogEnd( "Rule.start" )
 			return
 		end
-		log(msg .. " - Init rule status", "Rule.start", 2)
+		log( msg .. " - Init rule status", "Rule.start", 2 )
 
 		-- Check if rule is acknowledgeable
 		if ( rule.properties["property_is_acknowledgeable"] ~= nil ) then
@@ -3843,44 +3883,44 @@ Rule = {
 			rule._context.roomId = rule.properties["property_room"].roomId or "0"
 		end
 
-		Hooks.execute("onRuleStatusInit", rule)
+		Hooks.execute( "onRuleStatusInit", rule )
 		if (rule._context.status > -1) then
 			-- Status of the rule has already been initialized (by a hook or already started)
 			-- Update statuses of the conditions
-			Rule.computeStatus(rule)
+			Rule.computeStatus( rule )
 		else
 			-- Compute the status of the rule
-			rule._context.status, rule._context.level = Rule.computeStatus(rule)
+			rule._context.status, rule._context.level = Rule.computeStatus( rule )
 		end
-		if (rule._context.status == 1) then
-			log(msg .. " is active on start", "Rule.start", 2)
+		if ( rule._context.status == 1 ) then
+			log( msg .. " is active on start", "Rule.start", 2 )
 		else
-			log(msg .. " is not active on start", "Rule.start", 2)
+			log( msg .. " is not active on start", "Rule.start", 2 )
 		end
 
 		-- Start condition
 		if (rule.condition ~= nil) then
-			log(msg .. " - Start condition", "Rule.start", 3)
-			Condition.start(rule.condition)
+			log( msg .. " - Start condition", "Rule.start", 3 )
+			Condition.start( rule.condition )
 		end
 
-		if (rule.actions ~= nil) then
-			log(msg .. " - Start conditions of group of actions", "Rule.start", 3)
-			ActionGroups.startConditions(rule.actions)
+		if ( rule.actions ~= nil ) then
+			log( msg .. " - Start conditions of group of actions", "Rule.start", 3 )
+			ActionGroups.startConditions( rule.actions )
 		end
 
 		-- Exécution si possible des actions liées à l'activation
 		-- Actions avec délai (non faites si redémarrage Luup) ou de rappel
-		if (rule._context.status == 1) then
-			if Hooks.execute("beforeDoingActionsOnRuleIsActivated", rule) then
-				ActionGroups.execute(rule.actions, rule, "start")
-				ActionGroups.execute(rule.actions, rule, "reminder")
-				if (rule._context.level > 0) then
-					ActionGroups.execute(rule.actions, rule, "start", rule._context.level)
-					ActionGroups.execute(rule.actions, rule, "reminder", rule._context.level)
+		if ( rule._context.status == 1 ) then
+			if Hooks.execute( "beforeDoingActionsOnRuleIsActivated", rule ) then
+				ActionGroups.execute( rule.actions, rule, "start" )
+				ActionGroups.execute( rule.actions, rule, "reminder" )
+				if ( rule._context.level > 0 ) then
+					ActionGroups.execute( rule.actions, rule, "start", rule._context.level )
+					ActionGroups.execute( rule.actions, rule, "reminder", rule._context.level )
 				end
 			else
-				log(msg .. " is now active, but a hook prevents from doing actions", 1, "Rule.start")
+				log( msg .. " is now active, but a hook prevents from doing actions", 1, "Rule.start" )
 			end
 		end
 
@@ -3888,9 +3928,9 @@ Rule = {
 
 		-- Update rule status
 		-- Start actions won't be done again if status is still activated (no change)
-		Event.onRuleStatusIsUpdated(rule.id, rule._context.status)
+		Event.onRuleStatusIsUpdated( rule.id, rule._context.status )
 
-		debugLogEnd("Rule.start")
+		debugLogEnd( "Rule.start" )
 	end,
 
 	-- Stop a rule (without doing "end" events)
@@ -4019,32 +4059,32 @@ Rule = {
 	end,
 
 	-- Rule acknowledgement
-	setAcknowledgement = function (ruleId, acknowledgement)
-		local rule, err = Rules.get(ruleId)
-		if (rule == nil) then
+	setAcknowledgement = function( ruleId, acknowledgement )
+		local rule, err = Rules.get( ruleId )
+		if ( rule == nil ) then
 			return false, err
 		end
-		local msg = Rule.getSummary(rule)
-		if ((acknowledgement == "1") or (acknowledgement == true)) then
-			if (rule._context.isAcknowledgeable and not rule._context.isAcknowledged) then
+		local msg = Rule.getSummary( rule )
+		if ( ( acknowledgement == "1" ) or ( acknowledgement == true ) ) then
+			if ( rule._context.isAcknowledgeable and not rule._context.isAcknowledged ) then
 				rule._context.isAcknowledged = true
-				log(msg .. " is now acknowledged", "Rule.Acknowledgement")
-				Hooks.execute("onRuleIsAcknowledged", rule)
+				log( msg .. " is now acknowledged", "Rule.Acknowledgement" )
+				Hooks.execute( "onRuleIsAcknowledged", rule )
 				RulesInfos.save()
 			else
 				msg = msg .. " was already acknowledged"
-				log(msg, "Rule.Acknowledgement")
+				log( msg, "Rule.Acknowledgement" )
 				return false, msg
 			end
 		else
 			if rule._context.isAcknowledged then
 				rule._context.isAcknowledged = false
-				log(msg .. " is now not acknowledged", "Rule.Acknowledgement")
-				Hooks.execute("onRuleIsUnacknowledged", rule)
+				log( msg .. " is now not acknowledged", "Rule.Acknowledgement" )
+				Hooks.execute( "onRuleIsUnacknowledged", rule )
 				RulesInfos.save()
 			else
 				msg = msg .. " was already not acknowledged"
-				log(msg, "Rule.Acknowledgement")
+				log( msg, "Rule.Acknowledgement" )
 				return false, msg
 			end
 		end
@@ -4127,38 +4167,38 @@ Rule = {
 			ScheduledTasks.remove({ ruleId = rule.id, event = "startCondition" })
 			ScheduledTasks.remove({ ruleId = rule.id, event = "reminder" })
 			-- Execute actions linked to deactivation, if possible
-			if Hooks.execute("beforeDoingActionsOnRuleIsDeactivated", rule) then
-				if (hasRuleLevelChanged) then
-					ActionGroups.execute(rule.actions, rule, "end", oldLevel)
-					if (level or 0 > 0) then
-						ActionGroups.execute(rule.actions, rule, "end", level)
+			if Hooks.execute( "beforeDoingActionsOnRuleIsDeactivated", rule ) then
+				if hasRuleLevelChanged then
+					ActionGroups.execute( rule.actions, rule, "end", oldLevel )
+					if ( level or 0 > 0 ) then
+						ActionGroups.execute( rule.actions, rule, "end", level )
 					end
 				end
-				ActionGroups.execute(rule.actions, rule, "end")
+				ActionGroups.execute( rule.actions, rule, "end" )
 				History.add( rule.id, "RuleStatus", "Rule is now inactive" )
 			else
 				History.add( rule.id, "RuleStatus", "Rule is now inactive, but a hook prevents from doing actions" )
 			end
 
-		elseif (rule._context.status == 1) then
+		elseif ( rule._context.status == 1 ) then
 			-- The rule is still active
-			if (hasRuleLevelChanged) then
-				log(msg .. " is still active but its level has changed", "Rule.setStatus")
+			if hasRuleLevelChanged then
+				log( msg .. " is still active but its level has changed", "Rule.setStatus" )
 				-- Cancel scheduled actions for this rule and for old level
-				ScheduledTasks.remove({ ruleId = rule.id, event = "start", level = oldLevel })
-				ScheduledTasks.remove({ ruleId = rule.id, event = "reminder", level = oldLevel })
+				ScheduledTasks.remove( { ruleId = rule.id, event = "start", level = oldLevel } )
+				ScheduledTasks.remove( { ruleId = rule.id, event = "reminder", level = oldLevel } )
 				-- Execute actions linked to level change
-				ActionGroups.execute(rule.actions, rule, "end", oldLevel)
-				ActionGroups.execute(rule.actions, rule, "start", level)
-				ActionGroups.execute(rule.actions, rule, "reminder", level)
+				ActionGroups.execute( rule.actions, rule, "end", oldLevel )
+				ActionGroups.execute( rule.actions, rule, "start", level )
+				ActionGroups.execute( rule.actions, rule, "reminder", level )
 			else
-				log(msg .. " is still active (do nothing)", "Rule.setStatus")
+				log( msg .. " is still active (do nothing)", "Rule.setStatus" )
 			end
 
 		--elseif (rule._context.status == 0) then
 		else
 			-- The rule is still inactive
-			log("Rule '" .. rule.name .. "' is still inactive (do nothing)", "Rule.setStatus")
+			log( "Rule '" .. rule.name .. "' is still inactive (do nothing)", "Rule.setStatus" )
 		end
 
 		if ( hasRuleStatusChanged or hasRuleLevelChanged ) then
@@ -4173,12 +4213,12 @@ Rule = {
 	end,
 
 	-- Save compute id in the xml file
-	saveId = function (rule)
-		log(Rule.getSummary(rule) .. " - Save rule id at position " .. tostring(rule.idx) .. " in file '" .. rule.fileName .. "'", "Rule.saveId")
+	saveId = function( rule )
+		log( Rule.getSummary(rule) .. " - Save rule id at position " .. tostring(rule.idx) .. " in file '" .. rule.fileName .. "'", "Rule.saveId" )
 
 		-- save id of the rule in its file (and compress if needed)
-		local content, path, wasCompressed = RulesFile.getContent(rule.fileName)
-		if (content == nil) then
+		local content, path, wasCompressed = RulesFile.getContent( rule.fileName )
+		if ( content == nil ) then
 			return
 		end
 

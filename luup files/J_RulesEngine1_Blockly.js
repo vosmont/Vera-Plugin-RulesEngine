@@ -1999,6 +1999,7 @@ Blockly.Msg.CONDITION_TIME_BETWEEN_TOOLTIP = "Condition on time between two boun
 Blockly.Msg.CONDITION_RULE_TOOLTIP = "Condition on the status of another rule.";
 Blockly.Msg.CONDITION_INVERTER_TOOLTIP = "Inverts the linked condition (NOT).";
 Blockly.Msg.CONDITION_FUNCTION_TOOLTIP = "Execute LUA code and use the result (boolean) as a condition.";
+Blockly.Msg.CONDITION_LAST_UPDATE_TOOLTIP = "Condition on the last update or execution.";
 Blockly.Msg.CONDITION_MQTT_TOOLTIP = "(TODO)Condition on a received message from MQTT broker.";
 
 Blockly.Msg.CONTROLS_CONDITION_TITLE = "condition";
@@ -2831,6 +2832,54 @@ Blockly.Blocks[ "condition_function" ] = {
 
 	showInfos: function( infos1, infos2 ) {
 		_showInfos.call( this, infos1, infos2 );
+	}
+};
+
+Blockly.Blocks[ "condition_last_update" ] = {
+	init: function() {
+		this.setColour( Blockly.Blocks.conditions.HUE1 );
+		this.prefix_ = "condition";
+		this.inputs_ = [ "params", "actions" ];
+
+		if ( Blockly.mainWorkspace.options.readOnly ) {
+			this.appendDummyInput( "infos1" );
+			this.appendDummyInput( "infos2" );
+		}
+
+		this.appendDummyInput()
+			.appendField( "last update is" )
+			.appendField( new Blockly.FieldDropdown( [ [ "less", "LTE" ], [ "more", "GTE" ] ] ), "operator" )
+			.appendField( "than" )
+			.appendField(new Blockly.FieldTextInput( "0", Blockly.FieldTextInput.numberValidator ), "interval" )
+			.appendField(new Blockly.FieldDropdown( [ [ "seconds", "S" ], [ "minutes", "M" ], [ "hours", "H" ] ] ), "unit" );
+
+		_setMutator.call( this );
+
+		this.setInputsInline( !Blockly.mainWorkspace.options.readOnly );
+		this.setOutput( true, "Boolean" );
+		this.setTooltip( Blockly.Msg.CONDITION_LAST_UPDATE_TOOLTIP );
+	},
+
+	showInfos: function( infos1, infos2 ) {
+		_showInfos.call( this, infos1, infos2 );
+	},
+
+	mutationToDom: function() {
+		var container = document.createElement( "mutation" );
+		_updateMutationWithRemovableInputs.call( this, container );
+		return container;
+	},
+
+	domToMutation: function( xmlElement ) {
+		_createInputsFromMutation.call( this, xmlElement );
+	},
+
+	decompose: function( workspace ) {
+		return _decompose.call( this, workspace );
+	},
+
+	compose: function( containerBlock ) {
+		_compose.call( this, containerBlock );
 	}
 };
 

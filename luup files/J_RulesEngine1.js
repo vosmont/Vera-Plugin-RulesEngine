@@ -27,7 +27,7 @@
 		return dataRequestURL;
 	};
 	Utils.injectCustomCSS = function( nameSpace, css ) {
-		if ( $( "#custom-css-" + nameSpace ).size() === 0 ) {
+		if ( $( "#custom-css-" + nameSpace ).length === 0 ) {
 			Utils.logDebug( "Injects custom CSS for " + nameSpace );
 			var pluginStyle = $( '<style id="custom-css-' + nameSpace + '">' );
 			pluginStyle

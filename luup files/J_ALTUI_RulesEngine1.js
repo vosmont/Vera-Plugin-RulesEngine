@@ -88,6 +88,7 @@ var ALTUI_RulesEngine = ( function( window, undefined ) {
 		<block type="condition_rule"></block>\
 		<block type="condition_inverter"></block>\
 		<block type="condition_function"><field name="functionContent">return true</field></block>\
+		<block type="condition_last_update"></block>\
 	</category>\
 	<category name="Param">\
 		<block type="list_condition_param"></block>\
@@ -658,7 +659,7 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 		var _isFirstCall = true;
 		$( workspace.getCanvas() ).on( "blocklyWorkspaceChange", function( event ) {
 			if (!_isFirstCall) {
-				$( ".altui-rule-confirm" ).removeClass( "btn-default" ).removeClass( "disabled" ).addClass( "btn-danger" );
+				$( ".altui-rule-confirm" ).removeClass( "btn-light" ).removeClass( "disabled" ).addClass( "btn-danger" );
 				$( workspace.getCanvas() ).off( "blocklyWorkspaceChange" );
 			}
 			_isFirstCall = false;
@@ -1595,7 +1596,7 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 		// Draw the panel
 		var html = '<div class="altui-rule-toolbar col-12">'
 			+		'<div class="btn-group" role="group" aria-label="...">'
-			+			'<button class="btn btn-default altui-rule-cancel" title="' + _T( "Cancel" ) + '">'
+			+			'<button class="btn btn-light altui-rule-cancel" title="' + _T( "Cancel" ) + '">'
 			+				'<i class="fa fa-remove" aria-hidden="true"></i>'
 			+			'</button>'
 			+			( readOnly ? '' :
@@ -1615,7 +1616,7 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 			+		'</div>'
 					)
 			+	'</div>'
-			+	'<div id="altui-rule-import" class="panel panel-default altui-rule-xml collapse">'
+			+	'<div id="altui-rule-import" class="panel panel-default altui-rule-xml collapse col-12">'
 			+		'<div class="panel-body">'
 			+			'<textarea id="altui-rule-xml-import" class="altui-rule-xml-content"></textarea>'
 			+		'</div>'
@@ -1629,7 +1630,7 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 			+			'XML import'
 			+		'</div>'
 			+	'</div>'
-			+	'<div id="altui-rule-export" class="panel panel-default altui-rule-xml collapse">'
+			+	'<div id="altui-rule-export" class="panel panel-default altui-rule-xml collapse col-12">'
 			+		'<div class="panel-body">'
 			+			'<textarea id="altui-rule-xml-export" class="altui-rule-xml-content"></textarea>'
 			+		'</div>'

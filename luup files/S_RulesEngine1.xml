@@ -60,6 +60,14 @@
 			<sendEventsAttribute>no</sendEventsAttribute>
 			<dataType>ui1</dataType>
 		</stateVariable>
+		<stateVariable>
+			<name>A_ARG_TYPE_UI4</name>
+			<dataType>ui4</dataType>
+		</stateVariable>
+		<stateVariable>
+			<name>A_ARG_TYPE_STRING</name>
+			<dataType>string</dataType>
+		</stateVariable>
 	</serviceStateTable>
 	<actionList>
 		<action>
@@ -108,7 +116,7 @@
 				<argument>
 					<name>arming</name>
 					<direction>in</direction>
-					<relatedStateVariable>A_ARG_TYPE_Arming</relatedStateVariable>
+					<relatedStateVariable>A_ARG_TYPE_STRING</relatedStateVariable>
 				</argument>
 			</argumentList>
 		</action>
