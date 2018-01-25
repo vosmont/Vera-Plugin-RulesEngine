@@ -22,7 +22,7 @@ end
 
 _NAME = "RulesEngine"
 _DESCRIPTION = "Rules Engine for the Vera with visual editor"
-_VERSION = "0.19.1"
+_VERSION = "0.19.2"
 _AUTHOR = "vosmont"
 
 -- **************************************************
@@ -84,9 +84,8 @@ local OPERATOR = {
 local g_deviceId
 local _params = {}
 local _isInitialized = false
-local _isEnabled = false
 local _isStarted = false
-local _verbosity = 0
+local _verbosity = 1
 local _minRecurrentInterval = 60
 local _maxHistoryInterval = 30 * 24 * 60 * 60 -- One month
 
@@ -931,14 +930,14 @@ Event = {
 	-- Callback on device variable update (mios call)
 	onDeviceVariableIsUpdated = function( lul_device, lul_service, lul_variable, lul_value_old, lul_value_new )
 		local eventName = lul_service .. "-" .. lul_variable .. "-" .. tostring(lul_device)
-		log("Event '" .. eventName .. "'(" .. luup.devices[lul_device].description .. ") - New value:'" .. tostring(lul_value_new) .. "'", "Event.onDeviceVariableIsUpdated")
+		log( "Event '" .. eventName .. "'(" .. luup.devices[lul_device].description .. ") - New value:'" .. tostring(lul_value_new) .. "'", "Event.onDeviceVariableIsUpdated" )
 		-- Check if engine is enabled
-		if (not isEnabled()) then
+		if not isEnabled() then
 			log("Engine is not enabled - Do nothing", "Event.onDeviceVariableIsUpdated")
 			return false
 		end
 		local linkedConditions = Events.getRegisteredItems(eventName)
-		if (linkedConditions == nil) then
+		if ( linkedConditions == nil ) then
 			return false
 		end
 		-- Update status of the linked conditions for this event
@@ -949,7 +948,7 @@ Event = {
 			lastUpdateTime = os.time()
 		}
 		local conditionIds = {}
-		for _, condition in ipairs(linkedConditions) do
+		for _, condition in ipairs( linkedConditions ) do
 			log( "This event is linked to rule #" .. tostring( condition._ruleId ) .. " and condition #" .. tostring( condition.id ), "Event.onDeviceVariableIsUpdated", 2 )
 			table.insert( conditionIds, condition.id )
 		end
@@ -4846,7 +4845,7 @@ function loadRulesFiles()
 end
 
 function isEnabled()
-	return ( _isEnabled == true )
+	return ( tostring( luup.attr_get( "disabled", g_deviceId ) ) == "0" )
 end
 
 function isStarted()
@@ -4909,31 +4908,29 @@ end
 -- Enable engine
 function enable( hasToLoadRules )
 	log( "Enable RulesEngine", "enable" )
-	if (_isEnabled) then
+	if isEnabled() then
 		log( "RulesEngine is already enabled", "enable" )
 		return
 	end
-	_isEnabled = true
 	History.add( nil, "General", "Enable engine" )
 	if not _isInitialized then
 		initialize( hasToLoadRules )
 	end
 	start()
-	Variable.set( g_deviceId, VARIABLE.SWITCH_POWER, "1" )
+	luup.attr_set( "disabled", g_deviceId, "0" )
 	Variable.set( g_deviceId, VARIABLE.LAST_MAIN_UPDATE, tostring( os.time() ) )
 end
 
 -- Disable engine
 function disable()
 	log( "Disable RulesEngine", "disable" )
-	if not _isEnabled then
+	if not isEnabled() then
 		log( "RulesEngine is already disabled", "disable" )
 		return
 	end
-	_isEnabled = false
 	History.add( nil, "General", "Disable engine" )
 	stop()
-	Variable.set( g_deviceId, VARIABLE.SWITCH_POWER, "0" )
+	luup.attr_set( "disabled", g_deviceId, "1" )
 	Variable.set( g_deviceId, VARIABLE.LAST_MAIN_UPDATE, tostring( os.time() ) )
 end
 
@@ -5189,7 +5186,6 @@ local function _initPluginInstance()
 
 	-- Get plugin params for this device
 	Variable.set( g_deviceId, VARIABLE.PLUGIN_VERSION, _VERSION )
-	_isEnabled = ( Variable.getOrInit( g_deviceId, VARIABLE.SWITCH_POWER, "0" ) == "1" )
 	Variable.getOrInit( g_deviceId, VARIABLE.LAST_MESSAGE, "" )
 	Variable.getOrInit( g_deviceId, VARIABLE.LAST_UPDATE, "" )
 	Variable.getOrInit( g_deviceId, VARIABLE.LAST_MAIN_UPDATE, "" )

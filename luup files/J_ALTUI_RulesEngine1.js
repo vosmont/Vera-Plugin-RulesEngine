@@ -224,9 +224,9 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 	// Load informations from Backend
 	// *************************************************************************************************
 
-	function _getEngineStatus() {
+	function _isEngineDisabled() {
 		var device = MultiBox.getDeviceByAltuiID( _altuiid );
-		return parseInt( MultiBox.getStatus( device, "urn:upnp-org:serviceId:SwitchPower1", "Status" ), 10 );
+		return ( device.disabled == "1" );
 	}
 
 	function _getTimelineAsync( params ) {
@@ -833,7 +833,6 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 		if ( $( ".altui-rules" ).length === 0 ) {
 			return;
 		}
-		var status = MultiBox.getStatus( device, "urn:upnp-org:serviceId:SwitchPower1", "Status" );
 		$.each( rulesInfos, function( i, ruleInfos ) {
 			//var $rule = $( '.altui-mainpanel .altui-rule[data-ruleid="' + ruleInfos.id + '"][data-ruleidx="' + ruleInfos.idx + '"]' );
 			var $rule = $( '.altui-mainpanel .altui-rule[data-rulefileName="' + ruleInfos.fileName + '"][data-ruleid="' + ruleInfos.id + '"][data-ruleidx="' + ruleInfos.idx + '"]' );
@@ -867,7 +866,7 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 			if ( ruleInfos.hasError ) {
 				html += '<i class="fa fa-exclamation-triangle altui-rule-errors" aria-hidden="true" title="' + _T( "See rule's errors") + '"></i> ';
 			}
-			html += ( status == "0" ? "engine stopped" : statusText[ ruleInfos.status.toString() ] || "UNKNOWN" ) 
+			html += ( _isEngineDisabled() ? "engine stopped" : statusText[ ruleInfos.status.toString() ] || "UNKNOWN" ) 
 				+ ( ruleInfos.lastStatusUpdate > 0 ? _T( " since " ) + _convertTimestampToLocaleString( ruleInfos.lastStatusUpdate ) : "");
 			$rule.find( ".altui-rule-infos" ).html( html );
 		} );
@@ -1739,13 +1738,13 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 			} );
 	}
 
-	function _changeSvgBlocks( blocks, id, infos, engineStatus ) {
+	function _changeSvgBlocks( blocks, id, infos, isEngineDisabled ) {
 		if ( !blocks ) {
 			return;
 		}
 		$.each( blocks, function( i, block ) {
 			var style = block.svgPath_.style;
-			if ( engineStatus === 0 ) {
+			if ( isEngineDisabled ) {
 				if ( block.showInfos ) {
 					block.showInfos( id, "Engine stopped" );
 				}
@@ -1814,10 +1813,10 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 					_debug( "The request is in error, next poll in " + requestInterval + "ms" );
 				} else {
 					_lastRuleInfos = ruleInfos;
-					var engineStatus = _getEngineStatus();
-					_changeSvgBlocks( _getBlocklyConditionBlocks( ruleInfos.id ), ruleInfos.id, ruleInfos, engineStatus );
+					var isEngineDisabled = _isEngineDisabled();
+					_changeSvgBlocks( _getBlocklyConditionBlocks( ruleInfos.id ), ruleInfos.id, ruleInfos, isEngineDisabled );
 					$.each( ruleInfos.conditions, function( conditionId, conditionInfos) {
-						_changeSvgBlocks( _getBlocklyConditionBlocks( conditionId ), conditionId, conditionInfos, engineStatus );
+						_changeSvgBlocks( _getBlocklyConditionBlocks( conditionId ), conditionId, conditionInfos, isEngineDisabled );
 					} );
 					// 
 					
@@ -1925,8 +1924,7 @@ div.blocklyWidgetDiv { z-index: 1050; }\
 		getDeviceTypeEventList: _getDeviceTypeEventList,
 		getRoomList: _getRoomList,
 		getRuleList: _getRuleList,
-		getSceneList: _getSceneList,
-		getEngineStatus: _getEngineStatus
+		getSceneList: _getSceneList
 	};
 
 	// Add page in breadcrumbs
