@@ -22,7 +22,7 @@ end
 
 _NAME = "RulesEngine"
 _DESCRIPTION = "Rules Engine for the Vera with visual editor"
-_VERSION = "0.19.2"
+_VERSION = "0.19.3"
 _AUTHOR = "vosmont"
 
 -- **************************************************
@@ -1383,7 +1383,7 @@ local function _getDeviceIdsFromCriterias( criterias )
 		-- Filter on action
 		-- TODO : how ?
 		-- Filter on room
-		if ( isMatching and tonumber( criterias.roomId ) and ( device.room_num ~= tonumber( criterias.roomId ) ) ) then
+		if ( isMatching and tonumber( criterias.roomId ) and ( tonumber( device.room_num ) ~= tonumber( criterias.roomId ) ) ) then -- bug with openLuup 2018.06.27
 			isMatching = false
 		end
 		-- Filter on type
