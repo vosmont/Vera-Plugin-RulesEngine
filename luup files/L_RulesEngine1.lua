@@ -22,7 +22,7 @@ end
 
 _NAME = "RulesEngine"
 _DESCRIPTION = "Rules Engine for the Vera with visual editor"
-_VERSION = "0.19.3"
+_VERSION = "0.19.4"
 _AUTHOR = "vosmont"
 
 -- **************************************************
@@ -140,13 +140,13 @@ local function table_extend( t1, t2, excludedKeys )
 				else
 					-- Try to keep the former type
 					if ( type( t1[key] ) == "number" ) then
-						luup.log( "table_extend : convert '" .. key .. "' to number " , 2 )
+						--luup.log( "table_extend : convert '" .. key .. "' to number " , 2 )
 						t1[key] = tonumber( value )
 					elseif ( type( t1[key] ) == "boolean" ) then
-						luup.log( "table_extend : convert '" .. key .. "' to boolean" , 2 )
+						--luup.log( "table_extend : convert '" .. key .. "' to boolean" , 2 )
 						t1[key] = ( value == true )
 					elseif ( type( t1[key] ) == "string" ) then
-						luup.log( "table_extend : convert '" .. key .. "' to string" , 2 )
+						--luup.log( "table_extend : convert '" .. key .. "' to string" , 2 )
 						t1[key] = tostring( value )
 					else
 						t1[key] = value
@@ -4369,7 +4369,8 @@ Rules = {
 		RulesInfos.add( rule._context )
 
 		-- Check settings
-		if Rule.checkSettings( rule ) then
+		ok, result = pcall( Rule.checkSettings, rule )
+		if ( ok and result ) then
 			if isStarted() then
 				-- If the RulesEngine is already started, then start the rule just after adding
 				Rule.start( rule )
