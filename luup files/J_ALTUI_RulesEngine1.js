@@ -4,7 +4,7 @@
 /**
  * This file is part of the plugin RulesEngine.
  * https://github.com/vosmont/Vera-Plugin-RulesEngine
- * Copyright (c) 2016 Vincent OSMONT
+ * Copyright (c) 2019 Vincent OSMONT
  * This code is released under the MIT License, see LICENSE.
  */
 
@@ -107,6 +107,7 @@ var ALTUI_RulesEngine = ( function( window, undefined ) {
 		<block type="action_wait"></block>\
 		<block type="action_wait_randomly"></block>\
 		<block type="action_function"></block>\
+		<block type="action_value"></block>\
 		<block type="action_device"><mutation input_service=""></mutation></block>\
 		<category name="Templates">\
 			<block type="action_device"><mutation action_type="switch"></mutation></block>\

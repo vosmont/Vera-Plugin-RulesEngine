@@ -1,7 +1,7 @@
 --[[
   This file is part of the plugin RulesEngine.
   https://github.com/vosmont/Vera-Plugin-RulesEngine
-  Copyright (c) 2016 Vincent OSMONT
+  Copyright (c) 2019 Vincent OSMONT
   This code is released under the MIT License, see LICENSE.
 --]]
 
@@ -22,7 +22,7 @@ end
 
 _NAME = "RulesEngine"
 _DESCRIPTION = "Rules Engine for the Vera with visual editor"
-_VERSION = "0.19.4"
+_VERSION = "0.20"
 _AUTHOR = "vosmont"
 
 -- **************************************************
@@ -2900,6 +2900,31 @@ do
 		end
 	}
 
+	_actionTypes["action_value"] = {
+		init = function( action )
+			-- Get device ids
+			action.deviceIds = _getDeviceIds( action )
+			action.device = nil
+			log( "Action " .. tostring( json.encode( action ) ), "ActionType.action_value.init", 4 )
+		end,
+		check = function( action )
+			if not _checkParameters( action, { "deviceIds", "service", "variable" } ) then
+				return false
+			end
+			return true
+		end,
+		execute = function( action, context )
+			for _, deviceId in ipairs( action.deviceIds ) do
+				-- Replace current device if needed
+				if ( deviceId == "#deviceid#" ) then
+					deviceId = context.deviceId
+				end
+				History.add( action._ruleId, "RuleAction", _getItemSummary( action ) .. " - Set variable '" .. action.service .. ";" .. action.variable .. "=" .. tostring(action.value) .. "' on device #" .. tostring( deviceId ) .. "(" .. luup.devices[deviceId].description .. ")" )
+				luup.variable_set( action.service, action.variable, action.value, deviceId )
+			end
+		end
+	}
+
 	_actionTypes["action_device"] = {
 		init = function( action )
 			--action.deviceId = tonumber( action.deviceId )
@@ -2951,7 +2976,7 @@ do
 				if ( deviceId == "#deviceid#" ) then
 					deviceId = context.deviceId
 				end
-				-- Check first device com status
+				-- First check the device comm status
 				if ( not luup.is_ready( deviceId ) or ( Variable.get( deviceId, VARIABLE.COMM_FAILURE ) == "1" ) ) then
 					Rule.addError( action._ruleId, "Execute rule actions", "Device #" .. tostring( deviceId ) .. " is not ready or has a com failure" )
 				end
