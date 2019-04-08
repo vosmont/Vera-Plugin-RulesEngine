@@ -3,7 +3,7 @@
 /**
  * This file is part of the plugin RulesEngine.
  * https://github.com/vosmont/Vera-Plugin-RulesEngine
- * Copyright (c) 2019 Vincent OSMONT
+ * Copyright (c) 2016 Vincent OSMONT
  * This code is released under the MIT License, see LICENSE.
  */
 
