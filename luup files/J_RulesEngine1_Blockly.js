@@ -4,7 +4,7 @@
 /**
  * This file is part of the plugin RulesEngine.
  * https://github.com/vosmont/Vera-Plugin-RulesEngine
- * Copyright (c) 2016 Vincent OSMONT
+ * Copyright (c) 2019 Vincent OSMONT
  * This code is released under the MIT License, see LICENSE.
  */
 
@@ -628,10 +628,10 @@ var _OPERATORS = {
 
 var _INPUTS = {
 	"device": {
-		"id"      : { "type": "deviceFilter", "isRemovable": true, "isMainField": true, "field": "deviceId", "label": "name", "before": [ "room", "type", "category" ] },
-		"room"    : { "type": "deviceFilter", "isRemovable": true, "isMainField": true, "field": "roomId", "label": "in room", "before": [ "type", "category" ] },
-		"type"    : { "type": "deviceFilter", "isRemovable": true, "isMainField": true, "field": "deviceType", "label": "type", "before": [ "category" ] },
-		"category": { "type": "deviceFilter", "isRemovable": true, "isMainField": true, "field": "category", "label": "category" }
+		"id"      : { "type": "deviceFilter", "isRemovable": true, "isMainField": true, "field": "deviceId",   "label": "name",    "before": [ "room", "type", "category" ] },
+		"room"    : { "type": "deviceFilter", "isRemovable": true, "isMainField": true, "field": "roomId",     "label": "in room", "before": [ "type", "category" ] },
+		"type"    : { "type": "deviceFilter", "isRemovable": true, "isMainField": true, "field": "deviceType", "label": "type",    "before": [ "category" ] },
+		"category": { "type": "deviceFilter", "isRemovable": true, "isMainField": true, "field": "category",   "label": "category" }
 	},
 	"condition": {
 		"ADD"           : { "type": "value",        "autoCreate": false, "isRemovable": true, "isMultiple": true, "counter": "items", "label": "", "align": "ALIGN_RIGHT", "check": [ "Boolean" ], "before": [ "actions" ] },
@@ -647,14 +647,18 @@ var _INPUTS = {
 		"timer_relative": { "type": "dropdown",     "isMainField": true, "isRemovable": true, "field": "timerRelative", "options": [ [ "before sunrise", "1" ], [ "after sunrise", "2" ], [ "before sunset", "3" ], [ "after sunset", "4" ] ], "label": "", "before": [ "params" ] }
 	},
 	"action": {
-		"service": { "type": "deviceFilter", "isMainField": true, "field": "service", "label": "service", "before": [ "action", "action_params", "device" ] },
-		"action" : { "type": "deviceFilter", "isMainField": true, "field": "action", "label": "action", "before":[ "action_auto_params", "params", "device" ] },
-		"params" : { "type": "deviceFilter", "isRemovable": true, "field": "params", "label": "with params" }
+		"value_service" : { "type": "deviceFilter", "isMainField": true, "field": "service",  "label": "service",  "before": [ "value_variable", "value", "device" ] },
+		"value_variable": { "type": "deviceFilter", "isMainField": true, "field": "variable", "label": "variable", "before": [ "value", "device" ] },
+		"value"         : { "type": "value",        "isMainField": true, "field": "value",    "label": "value",    "before": [ "device" ] },
+		"service" : { "type": "deviceFilter", "isMainField": true, "field": "service",  "label": "service",  "before": [ "variable", "action", "action_params", "device" ] },
+		"variable": { "type": "deviceFilter", "isMainField": true, "field": "variable", "label": "variable", "before": [ "value", "device" ] },
+		"action"  : { "type": "deviceFilter", "isMainField": true, "field": "action",   "label": "action",   "before": [ "action_auto_params", "params", "device" ] },
+		"params"  : { "type": "deviceFilter", "isRemovable": true, "field": "params",   "label": "with params" }
 	},
 	"action_group": {
-		"description": { "type": "value", "isRemovable": true, "label": "description", "align": "ALIGN_RIGHT", "check": [ "String" ], "before": [ "params", "conditions", "do" ] },
+		"description": { "type": "value", "isRemovable": true, "label": "description", "align": "ALIGN_RIGHT", "check": [ "String" ],                      "before": [ "params", "conditions", "do" ] },
 		"params"     : { "type": "value", "isRemovable": true, "label": "with params", "align": "ALIGN_RIGHT", "check": [ "ActionParams", "ActionParam" ], "before": [ "conditions", "do" ] },
-		"condition"  : { "type": "value", "isRemovable": true, "label": "if", "align": "ALIGN_RIGHT", "check": "Boolean", "before": [ "do" ] }
+		"condition"  : { "type": "value", "isRemovable": true, "label": "if",          "align": "ALIGN_RIGHT", "check": "Boolean",                         "before": [ "do" ] }
 	}
 };
 
@@ -843,7 +847,7 @@ function _createDeviceFilterInput( inputName, params, onChange ) {
 					onChange.call( thatBlock, inputName, newValue );
 				}
 				//_setDeviceExternalFilters.call( thatBlock, thatBlock.filters_ );
-			} ),
+			}),
 			fieldName
 		);
 	}
@@ -976,6 +980,39 @@ function _updateDeviceFilterInput( inputName, filters, filteredDevices ) {
 				$.each( devices, function( i, device ) {
 					$.each( device.states, function( j, state ) {
 						if ( !_isEmpty( filters.condition_variable ) && ( state.variable !== filters.condition_variable ) ) {
+							return;
+						}
+						if ( !indexValues[ state.service ] ) {
+							indexValues[ state.service ] = true;
+							options.push( [ state.service.substr( state.service.lastIndexOf( ":" ) + 1 ), state.service ] );
+							//options.push( [ state.service, state.service ] );
+						}
+					} );
+				} );
+			};
+			sortOptions = _sortOptionsByName;
+			break;
+		case "action_value_variable":
+			fillOptions = function( devices ) {
+				$.each( devices, function( i, device ) {
+					$.each( device.states, function( j, state ) {
+						if ( !_isEmpty( filters.action_value_service ) && ( state.service !== filters.action_value_service ) ) {
+							return;
+						}
+						if ( !indexValues[ state.variable ] ) {
+							indexValues[ state.variable ] = true;
+							options.push( [ state.variable, state.variable ] );
+						}
+					} );
+				} );
+			};
+			sortOptions = _sortOptionsByName;
+			break;
+		case "action_value_service":
+			fillOptions = function( devices ) {
+				$.each( devices, function( i, device ) {
+					$.each( device.states, function( j, state ) {
+						if ( !_isEmpty( filters.action_value_variable ) && ( state.variable !== filters.action_value_variable ) ) {
 							return;
 						}
 						if ( !indexValues[ state.service ] ) {
@@ -1292,10 +1329,6 @@ function _updateMutationWithRemovableInputs( container ) {
 	}
 }
 function _createInputsFromMutation( xmlElement, onChange ) {
-	// TODO : remove in 0.11
-	var pluginVersion = $( "#rulesengine-blockly-workspace" ).data( "plugin_version" );
-	var ruleVersion = $( "#rulesengine-blockly-workspace" ).data( "rule_version" );
-	var ruleId = $( "#rulesengine-blockly-workspace" ).data( "rule_id" );
 	var inputs = xmlElement.getAttribute( "inputs" );
 	if ( inputs ) {
 		inputs = inputs.split( "," );
@@ -1319,16 +1352,6 @@ function _createInputsFromMutation( xmlElement, onChange ) {
 				}
 			}
 		
-		}
-	} else if ( ruleId && ( pluginVersion === "0.10" ) && ( ruleVersion !== "0.10" ) && ( inputs !== "" ) ) {
-		// TODO : temporary
-		// Compliance with older version (some inputs are constructed by mutator now)
-		for ( var i = 0; i < this.inputs_.length; i++ ) {
-			var inputName = this.inputs_[ i ];
-			var inputParams = _getInputParam.call( this, inputName );
-			if ( inputParams && inputParams.isRemovable ) {
-				_createInput.call( this, inputName, null, onChange );
-			}
 		}
 	}
 }
@@ -3380,6 +3403,7 @@ Blockly.Blocks[ "controls_action_group_condition" ] = {
 
 Blockly.Msg.ACTION_WAIT_TOOLTIP = "Wait a defined time.";
 Blockly.Msg.ACTION_FUNCTION_TOOLTIP = "Execute LUA code.";
+Blockly.Msg.ACTION_VALUE_TOOLTIP = "Set the value of a device variable.";
 Blockly.Msg.ACTION_DEVICE_TOOLTIP = "Execute an action of a device.";
 Blockly.Msg.ACTION_SCENE_TOOLTIP = "Execute a scene.";
 Blockly.Msg.ACTION_MQTT_TOOLTIP = "Publish an MQTT message.";
@@ -3428,6 +3452,61 @@ Blockly.Blocks['action_function'] = {
 		this.setPreviousStatement( true, "ActionType" );
 		this.setNextStatement( true, "ActionType" );
 		this.setTooltip( Blockly.Msg.ACTION_FUNCTION_TOOLTIP );
+	}
+};
+
+Blockly.Blocks['action_value'] = {
+	init: function () {
+		this.setColour( Blockly.Blocks.actions.HUE2 );
+		this.prefix_ = "action";
+		this.filters_ = {};
+		this.params_ = {};
+
+		this.inputs_ = [ "value_service", "value_variable", "value" ];
+
+		_createInput.call( this, "value_service", {}, this.setDeviceExternalFilters );
+		_createInput.call( this, "value_variable", {}, this.setDeviceExternalFilters );
+
+		this.appendDummyInput()
+			.appendField( "value" )
+			.appendField( new Blockly.FieldTextInput( "" ), "value" );
+
+		this.appendValueInput( "device" )
+			.appendField( "device", "actionDeviceLabel" )
+			.setAlign( Blockly.ALIGN_RIGHT )
+			.setCheck( [ "Devices", "Device" ] );
+
+		this.setInputsInline( false );
+		this.setPreviousStatement( true, "ActionType" );
+		this.setNextStatement( true, "ActionType" );
+		this.setTooltip( Blockly.Msg.ACTION_VALUE_TOOLTIP );
+	},
+
+	validate: function() {
+		if ( this.hasDeviceFilterInputs_ ) {
+			_updateDeviceFilterInputs.call( this,
+				{
+					"action_service": this.params_.input_service || this.params_.service,
+					"action_variable" : this.params_.input_variable || this.params_.variable
+				}
+			);
+		}
+		var thatBlock = this;
+		$.each( _getLinkedDeviceBlocks.call( this ), function( i, deviceBlock ) {
+			deviceBlock.parent_ = thatBlock;
+		} );
+		this.setDeviceExternalFilters();
+	},
+
+	getFilters: function() {
+		return {
+			"action_service": ( this.filters_.action_service || this.getFieldValue( "service" ) ),
+			"action_variable" : ( this.filters_.action_variable  || this.getFieldValue( "variable" ) )
+		}
+	},
+
+	setDeviceExternalFilters: function() {
+		_setDeviceExternalFilters.call( this, this.getFilters() );
 	}
 };
 
