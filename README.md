@@ -1,3 +1,6 @@
+**This plugin is no longer maintained**
+
+
 # <img align="left" src="media/rulesengine_logo.png"> Vera-Plugin-RulesEngine
 
 A rules engine for [Vera Control, Ltd.](http://getvera.com/) Home Controllers
